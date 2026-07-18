@@ -148,10 +148,11 @@ export class PenyaScreen {
     TabsBar.draw(this.game, 'penya');
     screen.textCenter(4, '═══ MI PEÑA ═══', '#ffb347');
 
-    // escudo + nombre del club, en la esquina libre de la cabecera (el
-    // escudo grande no cabe aquí: la caja de la tabla empieza en la fila
-    // 9 y ocupa casi todo el ancho — por eso el mini, ver CrestGenerator)
-    const crestX = screen.cols - 9, crestY = 3;
+    // escudo + nombre del club, en la esquina libre de la cabecera: la fila
+    // 8 la usa el texto de ayuda de cada sección y la 9 ya es la caja de la
+    // tabla, así que solo quedan las filas 3-7 para el mini (5x9, ver
+    // CrestGenerator) — el escudo grande no cabría de ninguna manera aquí
+    const crestX = screen.cols - 11, crestY = 3;
     screen.drawPortrait(CrestGenerator.generateMini(this.game.player.clubName), crestX, crestY);
     const clubLabel = truncate(this.game.player.clubName, 30);
     screen.text(crestX - 1 - clubLabel.length, crestY + 2, clubLabel, '#ffb347');

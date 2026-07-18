@@ -298,10 +298,10 @@ export class LeagueMapScreen {
       }
     }
 
-    const crestW = 9, textX = crestW + 2;
+    const crestW = 13, textX = crestW + 2;
     const maxLineLen = Math.max(...lines.map((l) => l[0].length));
-    const tw = Math.min(78, textX + maxLineLen + 4);
-    const th = Math.max(9, lines.length) + 2;
+    const tw = Math.min(82, textX + maxLineLen + 4);
+    const th = Math.max(13, lines.length) + 2;
     const tx = Math.min(mx + 2, screen.cols - tw - 1);
     const ty = Math.min(my + 1, screen.rows - th - 1);
     this._fillBlack(tx, ty, tw, th);

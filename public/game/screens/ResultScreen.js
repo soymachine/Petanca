@@ -37,23 +37,23 @@ export class ResultScreen {
     const myCrest = CrestGenerator.generate(player.clubName);
     const oppCrest = CrestGenerator.generate(opponent.name);
     const cx = Math.floor(screen.cols / 2);
-    const crestY = 2, half = 22;
+    const crestY = 2, half = 22, crestHalfW = 6; // el escudo es 13x13, ver CrestGenerator
     const leftCx = cx - half, rightCx = cx + half;
-    screen.drawPortrait(myCrest, leftCx - 4, crestY);
-    screen.drawPortrait(oppCrest, rightCx - 4, crestY);
+    screen.drawPortrait(myCrest, leftCx - crestHalfW, crestY);
+    screen.drawPortrait(oppCrest, rightCx - crestHalfW, crestY);
     const myName = truncate(player.clubName, 24), oppName = truncate(opponent.name, 24);
     const myNameCol = o.won ? '#7CFC00' : '#c9c2a8', oppNameCol = o.won ? '#c9c2a8' : '#ff5c5c';
-    screen.text(leftCx - Math.floor(myName.length / 2), crestY + 10, myName, myNameCol);
-    screen.text(rightCx - Math.floor(oppName.length / 2), crestY + 10, oppName, oppNameCol);
-    screen.textCenter(crestY + 3, 'VS', '#8a7f66');
-    if (res) screen.textCenter(crestY + 5, `${res.scoreP} - ${res.scoreA}`, o.won ? '#7CFC00' : '#ff5c5c');
+    screen.text(leftCx - Math.floor(myName.length / 2), crestY + 14, myName, myNameCol);
+    screen.text(rightCx - Math.floor(oppName.length / 2), crestY + 14, oppName, oppNameCol);
+    screen.textCenter(crestY + 5, 'VS', '#8a7f66');
+    if (res) screen.textCenter(crestY + 7, `${res.scoreP} - ${res.scoreA}`, o.won ? '#7CFC00' : '#ff5c5c');
 
-    screen.textCenter(crestY + 12, o.won ? '¡VICTORIA!' : 'DERROTA', o.won ? '#7CFC00' : '#ff5c5c');
+    screen.textCenter(crestY + 16, o.won ? '¡VICTORIA!' : 'DERROTA', o.won ? '#7CFC00' : '#ff5c5c');
     if (!o.won) {
-      screen.textCenter(crestY + 14, `${player.clubName} vuelve al pueblo con la cabeza gacha. Queda apuntado. Habrá revancha.`, '#c9b98a');
+      screen.textCenter(crestY + 18, `${player.clubName} vuelve al pueblo con la cabeza gacha. Queda apuntado. Habrá revancha.`, '#c9b98a');
     }
 
-    let yy = 18;
+    let yy = 22;
     if (res) {
       // el marcador y el rival ya se ven en la cabecera de escudos de
       // arriba: aquí solo hace falta decir quién jugó la mano

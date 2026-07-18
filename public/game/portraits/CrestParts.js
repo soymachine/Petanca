@@ -1,42 +1,160 @@
 // Piezas para escudos de club procedurales (ver CrestGenerator.js).
-// Cada "forma" es una silueta fija (9x9 en SHAPES, 5x7 en MINI_SHAPES):
+// Cada "forma" es una silueta fija (13x13 en SHAPES, 8x11 en MINI_SHAPES):
 // 'X' = celda rellena, ' ' = fuera de la forma. El generador combina esa
-// silueta con colores y un emblema para dar variedad, igual que
-// PortraitParts.js hace con caras. Varias formas (no solo el escudo
-// heráldico clásico) para que no todos los clubes lean igual de "medieval".
+// silueta con un degradado de color y un emblema para dar variedad, igual
+// que PortraitParts.js hace con caras. SHAPES y MINI_SHAPES van en el
+// MISMO orden (mismo índice = misma silueta a las dos escalas), para que
+// un mismo club se vea "igual de familia" tanto en el escudo grande como
+// en el mini. Variedad a propósito más allá del escudo heráldico clásico:
+// círculo, diamante, cuadrado, banderín, estrella, hexágono y cruz.
 
 export const SHAPES = [
   [ // escudo
-    '  XXXXX  ',
+    '   XXXXXXX   ',
+    '  XXXXXXXXX  ',
+    ' XXXXXXXXXXX ',
+    'XXXXXXXXXXXXX',
+    'XXXXXXXXXXXXX',
+    'XXXXXXXXXXXXX',
+    ' XXXXXXXXXXX ',
+    ' XXXXXXXXXXX ',
+    '  XXXXXXXXX  ',
+    '  XXXXXXXXX  ',
+    '   XXXXXXX   ',
+    '    XXXXX    ',
+    '      X      ',
+  ],
+  [ // círculo
+    '     XXX     ',
+    '   XXXXXXX   ',
+    '  XXXXXXXXX  ',
+    ' XXXXXXXXXXX ',
+    'XXXXXXXXXXXXX',
+    'XXXXXXXXXXXXX',
+    'XXXXXXXXXXXXX',
+    'XXXXXXXXXXXXX',
+    'XXXXXXXXXXXXX',
+    ' XXXXXXXXXXX ',
+    '  XXXXXXXXX  ',
+    '   XXXXXXX   ',
+    '     XXX     ',
+  ],
+  [ // diamante
+    '      X      ',
+    '     XXX     ',
+    '    XXXXX    ',
+    '   XXXXXXX   ',
+    '  XXXXXXXXX  ',
+    ' XXXXXXXXXXX ',
+    'XXXXXXXXXXXXX',
+    ' XXXXXXXXXXX ',
+    '  XXXXXXXXX  ',
+    '   XXXXXXX   ',
+    '    XXXXX    ',
+    '     XXX     ',
+    '      X      ',
+  ],
+  [ // cuadrado redondeado
+    '  XXXXXXXXX  ',
+    ' XXXXXXXXXXX ',
+    'XXXXXXXXXXXXX',
+    'XXXXXXXXXXXXX',
+    'XXXXXXXXXXXXX',
+    'XXXXXXXXXXXXX',
+    'XXXXXXXXXXXXX',
+    'XXXXXXXXXXXXX',
+    'XXXXXXXXXXXXX',
+    'XXXXXXXXXXXXX',
+    'XXXXXXXXXXXXX',
+    ' XXXXXXXXXXX ',
+    '  XXXXXXXXX  ',
+  ],
+  [ // banderín (con muesca de golondrina)
+    ' XXXXXXXXXXX ',
+    'XXXXXXXXXXXXX',
+    'XXXXXXXXXXXXX',
+    'XXXXXXXXXXXXX',
+    'XXXXXXXXXXXXX',
+    'XXXXXXXXXXXXX',
+    'XXXXXXXXXXXXX',
+    'XXXXXXXXXXXXX',
+    'XXXXX   XXXXX',
+    'XXXX     XXXX',
+    'XXX       XXX',
+    'XX         XX',
+    'X           X',
+  ],
+  [ // estrella de 4 puntas (a lo brújula)
+    '      X      ',
+    '     XXX     ',
+    '    XXXXX    ',
+    '   XXXXXXX   ',
+    'X  XXXXXXX  X',
+    'XX XXXXXXX XX',
+    'XXXXXXXXXXXXX',
+    'XX XXXXXXX XX',
+    'X  XXXXXXX  X',
+    '   XXXXXXX   ',
+    '    XXXXX    ',
+    '     XXX     ',
+    '      X      ',
+  ],
+  [ // hexágono (lados rectos largos, a diferencia del círculo)
+    '   XXXXXXX   ',
+    '  XXXXXXXXX  ',
+    ' XXXXXXXXXXX ',
+    'XXXXXXXXXXXXX',
+    'XXXXXXXXXXXXX',
+    'XXXXXXXXXXXXX',
+    'XXXXXXXXXXXXX',
+    'XXXXXXXXXXXXX',
+    'XXXXXXXXXXXXX',
+    'XXXXXXXXXXXXX',
+    ' XXXXXXXXXXX ',
+    '  XXXXXXXXX  ',
+    '   XXXXXXX   ',
+  ],
+  [ // cruz
+    '    XXXXX    ',
+    '    XXXXX    ',
+    '    XXXXX    ',
+    '    XXXXX    ',
+    'XXXXXXXXXXXXX',
+    'XXXXXXXXXXXXX',
+    'XXXXXXXXXXXXX',
+    'XXXXXXXXXXXXX',
+    'XXXXXXXXXXXXX',
+    '    XXXXX    ',
+    '    XXXXX    ',
+    '    XXXXX    ',
+    '    XXXXX    ',
+  ],
+];
+
+// versión compacta (5x9) de las mismas 8 formas, mismo orden, para sitios
+// sin espacio para el escudo grande (p.ej. la cabecera de Mi Peña: la fila
+// 8 ya la usa el texto de ayuda de cada sección — screen.textCenter(8,
+// ...) — así que el mini no puede pasar de 5 filas o se lo comería)
+export const MINI_SHAPES = [
+  [ // escudo
     ' XXXXXXX ',
     'XXXXXXXXX',
     'XXXXXXXXX',
     ' XXXXXXX ',
-    ' XXXXXXX ',
-    '  XXXXX  ',
-    '   XXX   ',
     '    X    ',
   ],
   [ // círculo
     '  XXXXX  ',
-    ' XXXXXXX ',
     'XXXXXXXXX',
     'XXXXXXXXX',
     'XXXXXXXXX',
-    'XXXXXXXXX',
-    'XXXXXXXXX',
-    ' XXXXXXX ',
     '  XXXXX  ',
   ],
   [ // diamante
     '    X    ',
-    '   XXX   ',
     '  XXXXX  ',
-    ' XXXXXXX ',
     'XXXXXXXXX',
-    ' XXXXXXX ',
     '  XXXXX  ',
-    '   XXX   ',
     '    X    ',
   ],
   [ // cuadrado redondeado
@@ -44,41 +162,47 @@ export const SHAPES = [
     'XXXXXXXXX',
     'XXXXXXXXX',
     'XXXXXXXXX',
-    'XXXXXXXXX',
-    'XXXXXXXXX',
-    'XXXXXXXXX',
-    'XXXXXXXXX',
     ' XXXXXXX ',
   ],
-  [ // banderín (banda con muesca de golondrina)
-    ' XXXXXXX ',
+  [ // banderín
     'XXXXXXXXX',
     'XXXXXXXXX',
-    'XXXXXXXXX',
-    'XXXXXXXXX',
-    'XXXXXXXXX',
+    'XXXX XXXX',
     'XXX   XXX',
     'XX     XX',
-    'X       X',
   ],
-];
-
-// versión compacta (5x7) de las mismas 5 formas, para sitios sin espacio
-// para el escudo grande (p.ej. la cabecera de Mi Peña)
-export const MINI_SHAPES = [
-  [' XXXXX ', 'XXXXXXX', 'XXXXXXX', ' XXXXX ', '  XXX  '], // escudo
-  [' XXXXX ', 'XXXXXXX', 'XXXXXXX', 'XXXXXXX', ' XXXXX '], // círculo
-  ['   X   ', '  XXX  ', ' XXXXX ', '  XXX  ', '   X   '], // diamante
-  ['XXXXXXX', 'XXXXXXX', 'XXXXXXX', 'XXXXXXX', 'XXXXXXX'], // cuadrado
-  ['XXXXXXX', 'XXXXXXX', 'XXXXXXX', 'XX   XX', 'X     X'], // banderín
+  [ // estrella
+    '    X    ',
+    '  XXXXX  ',
+    'X XXXXX X',
+    '  XXXXX  ',
+    '    X    ',
+  ],
+  [ // hexágono
+    '   XXX   ',
+    'XXXXXXXXX',
+    'XXXXXXXXX',
+    'XXXXXXXXX',
+    '   XXX   ',
+  ],
+  [ // cruz
+    '    X    ',
+    'XXXXXXXXX',
+    'XXXXXXXXX',
+    'XXXXXXXXX',
+    '    X    ',
+  ],
 ];
 
 // colores base del escudo: saturados y distinguibles a simple vista, en la
 // línea del resto de la paleta del juego (nada de tonos pastel que se
-// pierdan en el fondo oscuro del tablero)
+// pierdan en el fondo oscuro del tablero). Se combinan de 2 en 2 como los
+// extremos de un degradado (ver CrestGenerator), así que conviene variedad
+// de tono Y de luminosidad entre ellos.
 export const CREST_COLORS = [
   '#b83a3a', '#3a5fb8', '#3a8a4a', '#c9a13a', '#7a3ab8', '#3a8a8a',
   '#b83a7a', '#5a4530', '#2a2a2a', '#c9c9c9', '#b8703a', '#3a3a6a',
+  '#e8b83a', '#5a9fd8', '#d8664a', '#4ad89a',
 ];
 
 // el emblema siempre en metal (oro/plata) o esmalte neutro (blanco/negro),
