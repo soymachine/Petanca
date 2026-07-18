@@ -526,11 +526,13 @@ export class Game {
     const p = this.player;
     const cup = p.cup;
     const opponent = cup.playerOpponent();
+    const roundName = cup.roundName;
     cup.resolvePlayerPairing(won);
     this._grantMatchXp(this.weeklyMatch, won, 10, 15);
     this.career.settleDebts(p, this.weeklyMatch.usados, opponent.id, won);
     this.career.trackChemistry(p, this.weeklyMatch.usados, won);
     if (won) this._maybeRecordMargin(scoreP - scoreA, opponent.name, p.league.cityName);
+    p.matchResults[p.seasonClock.day] = { kind: 'cup', scoreP, scoreA, won, oppName: opponent.name, roundName };
 
     const promiseBroken = !!(p.pressPromise && p.pressPromise.opponentId === opponent.id && !won && p.pressPromise.loseBonus < 0);
     if (p.pressPromise && p.pressPromise.opponentId === opponent.id) {
@@ -594,11 +596,13 @@ export class Game {
     const cup = p.euroCup;
     const opponent = cup.playerOpponent();
     const rivalTag = countryTag(opponent.country);
+    const roundName = cup.roundName;
     cup.resolvePlayerPairing(won);
     this._grantMatchXp(this.weeklyMatch, won, 15, 25);
     this.career.settleDebts(p, this.weeklyMatch.usados, opponent.id, won);
     this.career.trackChemistry(p, this.weeklyMatch.usados, won);
     if (won) this._maybeRecordMargin(scoreP - scoreA, `${opponent.name}${rivalTag}`, p.league.cityName);
+    p.matchResults[p.seasonClock.day] = { kind: 'eurocup', scoreP, scoreA, won, oppName: `${opponent.name}${rivalTag}`, roundName };
 
     // dar la campanada: ganar a un club de un país con más strength que el
     // tuyo (Francia/Italia/Bélgica) pesa más para el prestigio de mánager

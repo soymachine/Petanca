@@ -81,6 +81,12 @@ export class Player {
     // Player.addAnnal y la sección histórica de HemerotecaScreen.js.
     this.annals = [];
     this.reachedTopFlight = false; // ya se anotó el hito de llegar por primera vez a Madrid (nivel 8)
+    // resultados de partidos jugados, por día del calendario absoluto —
+    // para poder mostrar el marcador al hacer rollover sobre un día ya
+    // pasado en la Agenda. Solo hace falta guardar la temporada en curso
+    // (se vacía en Career.js cuando la liga cierra temporada), así que no
+    // crece sin límite como un histórico permanente de verdad.
+    this.matchResults = {};
     // compenetración de parejas: "idMenor-idMayor" -> partidos jugados
     // juntos (ver Roster.chemistryKey / Career.js)
     this.chemistry = {};
@@ -253,6 +259,7 @@ export class Player {
       friendliesLeft: this.friendliesLeft, cup: this.cup ? this.cup.toJSON() : null, cupTitles: this.cupTitles,
       bestMarginWin: this.bestMarginWin, chemistry: this.chemistry, seasonsPlayed: this.seasonsPlayed,
       publicImage: this.publicImage, annals: this.annals, reachedTopFlight: this.reachedTopFlight,
+      matchResults: this.matchResults,
       seenDecisions: this.seenDecisions, pendingDecisions: this.pendingDecisions,
       clubName: this.clubName, currentLeagueLevel: this.currentLeagueLevel,
       leagueWorld: this.leagueWorld.toJSON(),
@@ -320,6 +327,7 @@ export class Player {
     p.seasonsPlayed = json.seasonsPlayed ?? Math.max(1, json.currentLeagueLevel || 1);
     p.publicImage = json.publicImage ?? 0;
     p.annals = json.annals || [];
+    p.matchResults = json.matchResults || {};
     p.seenDecisions = json.seenDecisions || [];
     p.pendingDecisions = json.pendingDecisions || [];
     p.dailyBest = json.dailyBest || {};

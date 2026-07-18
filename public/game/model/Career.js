@@ -120,6 +120,9 @@ export class Career {
 
     p.club.recordResult(won);
     opponent.seenArchetype = true; // ya te has visto las caras: el estilo de juego queda a la vista para siempre
+    // marcador de hoy, para poder enseñarlo al hacer rollover sobre este
+    // día ya jugado en la Agenda (ver AgendaScreen._dayEntry)
+    p.matchResults[p.seasonClock.day] = { kind: 'league', scoreP: finalScoreP, scoreA: finalScoreA, won, oppName: opponent.name, isDerby };
     const resultNews = chronicleFacts
       ? Chronicle.compose(chronicleFacts, {
           won, scoreP: finalScoreP, scoreA: finalScoreA, rivalName: opponent.name,
@@ -314,6 +317,11 @@ export class Career {
       // arranca con matchday 0: hay que retomar el offset semana↔jornada
       // para que el calendario siga encontrando los domingos de partido
       p.seasonClock.markSeasonStart();
+      // la Agenda solo deja retroceder hasta la primera semana de la
+      // temporada EN CURSO: los resultados de la que se acaba de cerrar ya
+      // no se pueden consultar navegando hacia atrás, así que no hace
+      // falta arrastrarlos (evitaría crecer sin límite en el guardado)
+      p.matchResults = {};
       p.friendliesLeft = 3;
       if (!p.cup || p.cup.finished) {
         p.cup = Cup.generate(p.leagueWorld, p.club, p.club.avgSkill(p.roster));

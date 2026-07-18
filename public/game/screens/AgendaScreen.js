@@ -19,7 +19,17 @@ const MAX_PAGE_AHEAD = 12; // tope de semanas que se puede pasar hacia delante
 // páginas (◀/▶) permite ver semanas futuras sin tocar el avance real del
 // calendario — para planificar fichajes/entrenos con partidos ya a la vista.
 export class AgendaScreen {
-  constructor(game) { this.game = game; this.schedule = null; this.playing = null; this.pageOffset = 0; this.decisionCursor = 0; }
+  constructor(game) {
+    this.game = game; this.schedule = null; this.playing = null; this.pageOffset = 0; this.decisionCursor = 0;
+    // qué semana ocupa la página izquierda cuando pageOffset es 0 ("la
+    // pareja de semanas de casa"). Normalmente coincide con la semana de
+    // hoy, PERO durante el avance automático se mantiene fija hasta que
+    // las DOS semanas del libro (izquierda y derecha) quedan en el pasado
+    // — si no, cada vez que el reloj cruza a la semana siguiente el libro
+    // se desplazaría de una en una, y la derecha nunca llegaría a verse
+    // completa antes de desaparecer. Ver draw().
+    this.leftWeek = null;
+  }
 
   draw() {
     const { screen, input, player, frame } = this.game;
@@ -60,6 +70,18 @@ export class AgendaScreen {
     }
 
     const clock = player.seasonClock;
+    // this.leftWeek es la semana "de casa" (página izquierda cuando
+    // pageOffset=0): se inicializa a la semana de hoy, y solo salta hacia
+    // delante de dos en dos, en cuanto el reloj entra en la TERCERA semana
+    // — es decir, cuando tanto la izquierda como la derecha ya quedaron
+    // atrás. Se resincroniza cada frame (no solo durante el avance
+    // automático) por si el reloj avanza por otra vía (modo Debugger).
+    // si el ancla venía de una temporada ya cerrada (ascenso/descenso/fin
+    // de temporada corrido justo entre un frame y el siguiente), se
+    // resincroniza de golpe con la semana real en vez de arrastrar una
+    // pareja de semanas de una liga que ya no es la actual
+    if (this.leftWeek === null || this.leftWeek < clock.seasonWeekOffset) this.leftWeek = clock.weekIndex;
+    while (clock.weekIndex >= this.leftWeek + 2) this.leftWeek += 2;
     const bookW = PAGE_W * 2 + PAGE_GAP;
     const bx = Math.floor((screen.cols - bookW) / 2);
     screen.box(bx, AY - 3, bookW, 3, '#c9a35d', 'double');
@@ -67,16 +89,22 @@ export class AgendaScreen {
     screen.text(bx + Math.floor((bookW - todayLabel.length) / 2), AY - 2, todayLabel, '#ffe680');
 
     // pasador de páginas: qué par de semanas se ve ahora mismo, sin tocar
-    // el avance real del calendario (this.pageOffset es solo de cámara)
-    this.pageOffset = Math.max(0, Math.min(MAX_PAGE_AHEAD, this.pageOffset));
-    const baseWeek = clock.weekIndex + this.pageOffset;
+    // el avance real del calendario (this.pageOffset es solo de cámara).
+    // Hacia delante, tope de MAX_PAGE_AHEAD semanas; hacia atrás, se puede
+    // retroceder hasta la primera semana de la temporada EN CURSO (no
+    // tiene sentido ir más atrás: el calendario de una liga que ya cerró
+    // temporada no es el mismo, y matchdayForWeek daría jornadas que ya no
+    // corresponden a nada real de la liga actual).
+    const minPageOffset = Math.min(0, clock.seasonWeekOffset - this.leftWeek);
+    this.pageOffset = Math.max(minPageOffset, Math.min(MAX_PAGE_AHEAD, this.pageOffset));
+    const baseWeek = this.leftWeek + this.pageOffset;
     const week1 = clock.weekAt(baseWeek, player.league);
     const week2 = clock.weekAt(baseWeek + 1, player.league);
     screen.box(bx, AY, PAGE_W, PAGE_H, '#8a7f66', 'double');
     screen.box(bx + PAGE_W + PAGE_GAP, AY, PAGE_W, PAGE_H, '#8a7f66', 'double');
 
     // flechas de paginación, a los lados del libro
-    const canPagePrev = this.pageOffset > 0;
+    const canPagePrev = this.pageOffset > minPageOffset;
     const canPageNext = this.pageOffset < MAX_PAGE_AHEAD;
     screen.text(bx - 3, AY + PAGE_H / 2, canPagePrev ? '◀' : ' ', canPagePrev ? (frame % 20 < 14 ? '#ffe680' : '#a8901a') : '#3a352c');
     screen.text(bx + bookW + 1, AY + PAGE_H / 2, canPageNext ? '▶' : ' ', canPageNext ? (frame % 20 < 14 ? '#ffe680' : '#a8901a') : '#3a352c');
@@ -175,8 +203,14 @@ export class AgendaScreen {
     } else if (this.pageOffset > 0) {
       screen.textCenter(AY + PAGE_H + 1, '[←/→] cambiar de semana    click en un día libre para agendar un entreno', '#c9c2a8');
       screen.textCenter(AY + PAGE_H + 2, `estás viendo por delante — [→ ${MAX_PAGE_AHEAD - this.pageOffset} más] · vuelve con [←] hasta la semana actual`, '#8a7f66');
+    } else if (this.pageOffset < 0) {
+      screen.textCenter(AY + PAGE_H + 1, '[←/→] cambiar de semana    pasa el ratón por un día jugado para ver el resultado', '#c9c2a8');
+      screen.textCenter(AY + PAGE_H + 2, canPagePrev
+        ? `estás viendo el pasado de esta temporada — vuelve con [→] hasta la semana actual`
+        : 'primera semana de la temporada — no se puede ir más atrás', '#8a7f66');
     } else {
-      const baseHelp = '[ENTER] avanzar día a día    [→] ver semanas futuras    click en un día libre para agendar un entreno';
+      const navHelp = canPagePrev ? '[←/→] ver semanas pasadas/futuras' : '[→] ver semanas futuras';
+      const baseHelp = `[ENTER] avanzar día a día    ${navHelp}    click en un día libre para agendar un entreno`;
       screen.textCenter(AY + PAGE_H + 1, canFriendly ? `${baseHelp}    [F] amistoso de pretemporada (quedan ${player.friendliesLeft})` : baseHelp, '#c9c2a8');
     }
 
@@ -213,6 +247,14 @@ export class AgendaScreen {
 
   _dayEntry(d) {
     const { player } = this.game;
+    // si este día ya se jugó de verdad, la entrada se reconstruye a partir
+    // del marcador guardado (player.matchResults) en vez de mirar el
+    // estado EN VIVO del cruce — para Copa/Copa de Europa ese cruce ya
+    // habrá avanzado de ronda (o hasta terminado del todo) para cuando se
+    // navega hacia atrás, así que "¿hay Copa hoy?" ya no valdría para
+    // reconstruir qué pasó ese día en concreto
+    const result = player.matchResults[d.day];
+    if (result) return this._entryFromResult(result);
     // el día de Copa agendado no cae necesariamente en domingo (se busca
     // con firstFreeDayFrom entre semana), así que se comprueba aparte y
     // antes que el resto — antes no se mostraba en la Agenda en absoluto
@@ -240,11 +282,37 @@ export class AgendaScreen {
     return { kind: 'free', text: '' };
   }
 
+  // entrada para un día ya jugado, a partir de player.matchResults[day] —
+  // ver _dayEntry. Guarda el marcador consigo (entry.result) para que la
+  // fila y el tooltip puedan enseñarlo sin tener que volver a mirar el
+  // estado (ya adelantado) de la liga/Copa/Copa de Europa.
+  _entryFromResult(r) {
+    const scoreTxt = `${r.scoreP}-${r.scoreA}`;
+    if (r.kind === 'league') {
+      return { kind: 'match', text: `    vs ${r.oppName}${r.isDerby ? ' ¡DERBI!' : ''}  (${scoreTxt})`, result: r };
+    }
+    const label = r.kind === 'eurocup' ? 'EUROPA' : 'COPA';
+    return { kind: 'cup', text: `    ${label}: ${r.roundName.toLowerCase()} vs ${r.oppName}  (${scoreTxt})`, result: r, european: r.kind === 'eurocup' };
+  }
+
   _drawDayTooltip(d, entry, mx, my, completed) {
     const { screen } = this.game;
     const lines = [];
     lines.push([`${d.weekdayName.toUpperCase()} · día ${d.day}`, '#ffe680']);
-    if (entry.kind === 'match') {
+    if (entry.result) {
+      const r = entry.result;
+      const wonCol = r.won ? '#7ec850' : '#ff8c5b';
+      if (r.kind === 'league') {
+        lines.push([`Partido de liga — ${r.won ? 'GANADO' : 'PERDIDO'}`, wonCol]);
+      } else {
+        lines.push([`${r.kind === 'eurocup' ? 'Copa de Europa' : 'Copa de España'} — ${r.roundName.toLowerCase()} — ${r.won ? 'GANADO' : 'PERDIDO'}`, wonCol]);
+      }
+      lines.push([`${this.game.player.clubName} ${r.scoreP} - ${r.scoreA} ${r.oppName}`, '#c9c2a8']);
+      if (r.isDerby) {
+        const h = this.game.player.derbyHistory;
+        lines.push([`¡EL DERBI DE SIEMPRE! historial: ${h.wins}-${h.losses}`, '#ffb347']);
+      }
+    } else if (entry.kind === 'match') {
       const aiLevel = entry.opp ? Math.round(entry.opp.avgSkill()) : '?';
       lines.push([`Partido de liga ${entry.home ? '(en casa)' : '(fuera)'}`, '#7ec850']);
       lines.push([`Rival: ${entry.opp ? entry.opp.name : '???'}`, '#c9c2a8']);
