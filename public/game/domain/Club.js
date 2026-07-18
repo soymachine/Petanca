@@ -74,6 +74,9 @@ export class Club {
     });
     this.money = isPlayer ? 0 : baseMoneyFor(levelAvg);
     this.pts = 0; this.played = 0; this.won = 0; this.lost = 0;
+    // arquetipo del capitán (ver data/rivalArchetypes.js): no se muestra de
+    // serie, se destapa jugando contra este club una vez (ver Career.js)
+    this.seenArchetype = false;
   }
 
   static randomName(usedNames, country = 'ES') {
@@ -113,7 +116,7 @@ export class Club {
   toJSON() {
     return {
       id: this.id, name: this.name, isPlayer: this.isPlayer, country: this.country,
-      money: this.money,
+      money: this.money, seenArchetype: this.seenArchetype,
       pts: this.pts, played: this.played, won: this.won, lost: this.lost,
       players: this.players.map((p) => ({
         id: p.id, name: p.name, nationality: p.nationality, stats: p.stats, age: p.age,
@@ -126,6 +129,7 @@ export class Club {
     const c = new Club(json.id, json.name, 5, json.isPlayer, json.country && json.country !== 'ES' ? json.country : null);
     c.pts = json.pts; c.played = json.played; c.won = json.won; c.lost = json.lost;
     c.money = json.money ?? baseMoneyFor(5);
+    c.seenArchetype = json.seenArchetype ?? false;
     c.players = (json.players || []).map((pd) => {
       const p = new RivalPlayer({
         id: pd.id, name: pd.name, nationality: pd.nationality, stats: pd.stats, age: pd.age,

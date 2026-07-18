@@ -296,7 +296,24 @@ export class MatchScreen {
     const { screen, frame, faces } = this.game;
     const py = COURT_Y + CH + 2;
     screen.box(2, py, screen.cols - 4, screen.rows - py - 1, '#8a7f66');
-    if (M.phase === 'aim') {
+    if (M.phase === 'placeJack') {
+      const jp = M.jackPlace;
+      if (jp.step === 'distance') {
+        screen.text(5, py + 1, 'EL BOLICHE ES TUYO — [↑/↓] elegir distancia   [ENTER] confirmar', '#ffe680');
+        const labels = [['CORTA', 'favorece el arrime'], ['MEDIA', 'terreno neutral'], ['LARGA', 'favorece el brazo']];
+        labels.forEach((l, i) => {
+          const sel = i === jp.distCursor;
+          screen.text(6 + i * 30, py + 2, `${sel ? '▶' : ' '} ${l[0]} — ${l[1]}`, sel ? '#ffe14d' : '#c9c2a8');
+        });
+      } else {
+        screen.text(5, py + 1, 'EL BOLICHE ES TUYO — [↑/↓] elegir banda   [ENTER] confirmar   [ESC] volver', '#ffe680');
+        const labels = ['ARRIBA', 'CENTRO', 'ABAJO'];
+        labels.forEach((l, i) => {
+          const sel = i === jp.bandCursor;
+          screen.text(6 + i * 20, py + 2, `${sel ? '▶' : ' '} ${l}`, sel ? '#ffe14d' : '#c9c2a8');
+        });
+      }
+    } else if (M.phase === 'aim') {
       screen.text(5, py + 1, 'PUNTERÍA  [↑/↓] ajustar ángulo   [R] cambiar rol   [ENTER] confirmar', '#e8e0c8');
       const deg = (-M.aimAngle * 57.3).toFixed(1);
       const roleTxt = M.role === 'tirar' ? 'TIRAR (más fuerza, más riesgo)'

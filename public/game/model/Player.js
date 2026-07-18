@@ -71,6 +71,17 @@ export class Player {
     this.friendliesLeft = 3; // amistosos de pretemporada disponibles esta temporada
     this.cupTitles = 0;
     this.dailyBest = {};
+    // libro de récords del Panteón: la mayor paliza dada, cualquiera que
+    // sea la competición — {margin, rival, cityName} o null hasta la primera
+    this.bestMarginWin = null;
+    // compenetración de parejas: "idMenor-idMayor" -> partidos jugados
+    // juntos (ver Roster.chemistryKey / Career.js)
+    this.chemistry = {};
+    // eventos de decisión del calendario: ids ya salidos (para no repetir
+    // hasta agotar el pool) y secuelas agendadas a futuro — ver
+    // data/decisionEvents.js y SeasonClock
+    this.seenDecisions = [];
+    this.pendingDecisions = []; // [{day, id, ctx}]
     this.boardGoal = boardObjectiveFor(1);
     this.weeklyGoal = rollWeeklyGoal();
 
@@ -207,6 +218,8 @@ export class Player {
       boardConfidence: this.boardConfidence, boardUltimatums: this.boardUltimatums, boardCrisis: this.boardCrisis,
       difficulty: this.difficulty, difficultyChosen: this.difficultyChosen, debugMode: this.debugMode, pressPromise: this.pressPromise,
       friendliesLeft: this.friendliesLeft, cup: this.cup ? this.cup.toJSON() : null, cupTitles: this.cupTitles,
+      bestMarginWin: this.bestMarginWin, chemistry: this.chemistry,
+      seenDecisions: this.seenDecisions, pendingDecisions: this.pendingDecisions,
       clubName: this.clubName, currentLeagueLevel: this.currentLeagueLevel,
       leagueWorld: this.leagueWorld.toJSON(),
       seasonClock: this.seasonClock.toJSON(),
@@ -265,6 +278,10 @@ export class Player {
     p.friendliesLeft = json.friendliesLeft ?? 3;
     p.cup = json.cup ? Cup.fromJSON(json.cup) : null;
     p.cupTitles = json.cupTitles || 0;
+    p.bestMarginWin = json.bestMarginWin || null;
+    p.chemistry = json.chemistry || {};
+    p.seenDecisions = json.seenDecisions || [];
+    p.pendingDecisions = json.pendingDecisions || [];
     p.dailyBest = json.dailyBest || {};
     p.boardGoal = json.boardGoal || boardObjectiveFor(1);
     p.weeklyGoal = weeklyGoalFromJSON(json.weeklyGoal);

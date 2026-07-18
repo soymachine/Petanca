@@ -1,5 +1,7 @@
 import { TabsBar } from './TabsBar.js';
 import { countryTag } from '../data/countries.js';
+import { wrapText } from '../core/utils.js';
+import { fillDecisionText } from '../data/decisionEvents.js';
 
 const WD_SHORT = { lunes: 'LUN', martes: 'MAR', miércoles: 'MIÉ', jueves: 'JUE', viernes: 'VIE', sábado: 'SÁB', domingo: 'DOM' };
 const AY = 10, PAGE_W = 55, PAGE_GAP = 5, PAGE_H = 33;
@@ -17,7 +19,7 @@ const MAX_PAGE_AHEAD = 12; // tope de semanas que se puede pasar hacia delante
 // páginas (◀/▶) permite ver semanas futuras sin tocar el avance real del
 // calendario — para planificar fichajes/entrenos con partidos ya a la vista.
 export class AgendaScreen {
-  constructor(game) { this.game = game; this.schedule = null; this.playing = null; this.pageOffset = 0; }
+  constructor(game) { this.game = game; this.schedule = null; this.playing = null; this.pageOffset = 0; this.decisionCursor = 0; }
 
   draw() {
     const { screen, input, player, frame } = this.game;
@@ -33,6 +35,10 @@ export class AgendaScreen {
       this.friendlyResult = { ...this.game.friendlyJustPlayed, frame: 0 };
       this.game.friendlyJustPlayed = null;
     }
+
+    // evento de decisión pendiente: pausa cualquier avance automático hasta
+    // que se elija una opción (ver core/Game.js._rollDecision/resolveDecision)
+    if (this.game.decisionEvent) { this._drawDecisionModal(); return; }
 
     // avance automático día a día: cada paso marca el día como completado;
     // si cae en un evento, se detiene un segundo y entra a él
@@ -266,6 +272,39 @@ export class AgendaScreen {
     for (let r = 0; r < h; r++) for (let c = 0; c < w; c++) screen.put(x + c, y + r, '█', '#000');
   }
 
+  // evento de decisión: 2-3 opciones, cada una con su efecto a la vista
+  // antes de elegir — nada de letra pequeña ni sorpresas.
+  _drawDecisionModal() {
+    const { screen, input } = this.game;
+    const { event, ctx } = this.game.decisionEvent;
+    const w = 76, h = 10 + event.options.length * 4;
+    const x = Math.floor((screen.cols - w) / 2), y = Math.floor((screen.rows - h) / 2);
+    this._fillBlack(x, y, w, h);
+    screen.box(x, y, w, h, '#c8a0e8', 'double');
+    screen.textCenter(y + 1, event.title, '#ffe680');
+    const bodyLines = wrapText(fillDecisionText(event.text, ctx, (id) => this.game.displayName(id)), w - 6);
+    bodyLines.forEach((l, i) => screen.text(x + 3, y + 3 + i, l, '#c9c2a8'));
+
+    const optY0 = y + 3 + bodyLines.length + 1;
+    this.decisionCursor = ((this.decisionCursor % event.options.length) + event.options.length) % event.options.length;
+    event.options.forEach((opt, i) => {
+      const sel = i === this.decisionCursor;
+      const oy = optY0 + i * 4;
+      screen.text(x + 3, oy, `${sel ? '▶' : ' '} ${opt.label}`, sel ? '#fff' : '#c9c2a8');
+      const effectLines = wrapText(describeDecisionEffects(opt.effects), w - 10);
+      effectLines.forEach((l, k) => screen.text(x + 5, oy + 1 + k, l, sel ? '#a8e8c8' : '#6a8a7a'));
+    });
+
+    screen.textCenter(y + h - 2, '[↑/↓] elegir   [ENTER] confirmar', '#c9c2a8');
+
+    if (input.hit('ArrowUp')) this.decisionCursor = (this.decisionCursor + event.options.length - 1) % event.options.length;
+    if (input.hit('ArrowDown')) this.decisionCursor = (this.decisionCursor + 1) % event.options.length;
+    if (input.hit('Enter') || input.hit(' ')) {
+      this.game.resolveDecision(this.decisionCursor);
+      this.decisionCursor = 0;
+    }
+  }
+
   _drawScheduleModal() {
     const { screen, input, player } = this.game;
     const w = 60, h = 22;
@@ -313,4 +352,18 @@ export class AgendaScreen {
       }
     }
   }
+}
+
+// resumen legible de lo que hace una opción de un evento de decisión, para
+// que el jugador vea el efecto ANTES de elegir (ver core/Game.js._applyDecisionEffects)
+function describeDecisionEffects(effects) {
+  if (!effects || !Object.keys(effects).length) return 'sin efecto directo';
+  const parts = [];
+  if (effects.money) parts.push(`${effects.money > 0 ? '+' : ''}${effects.money}€`);
+  if (effects.boardConfidence) parts.push(`${effects.boardConfidence > 0 ? '+' : ''}${effects.boardConfidence} confianza de la junta`);
+  if (effects.moral) parts.push(`${effects.moral.d > 0 ? '+' : ''}${effects.moral.d} moral (${effects.moral.target === 'all' ? 'toda la peña' : 'él'})`);
+  if (effects.stamina) parts.push(`${effects.stamina.d > 0 ? '+' : ''}${effects.stamina.d} STA (${effects.stamina.target === 'all' ? 'toda la peña' : 'él'})`);
+  if (effects.xp) parts.push(`+${effects.xp.amount} XP`);
+  if (effects.item) parts.push('amuleto nuevo');
+  return parts.join('  ·  ');
 }

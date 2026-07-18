@@ -10,6 +10,8 @@ import { advanceScoutingWeek, currentMarketSeedKeys } from '../domain/Scouting.j
 import { EuropeanCup } from '../domain/EuropeanCup.js';
 import { rivalPersonalityLine } from '../data/rivalPersonality.js';
 import { countryTag } from '../data/countries.js';
+import { chemistryKey, chemistryLevel, CHEMISTRY_LEVELS } from '../domain/Chemistry.js';
+import { Chronicle } from '../match/Chronicle.js';
 
 function maybeDropItem(roster, candidates) {
   const eligible = candidates.filter((i) => !roster.get(i).item);
@@ -37,7 +39,7 @@ export class Career {
 
   // Cierra el partido de liga de la jornada: premio, moral, patrocinio,
   // campaña, hemeroteca, y — si era la última jornada — ascenso/descenso.
-  finishWeeklyMatch(ctx, won, finalScoreP, finalScoreA) {
+  finishWeeklyMatch(ctx, won, finalScoreP, finalScoreA, chronicleFacts = null) {
     const p = this.player;
     const league = ctx.league;
     const opponent = ctx.opponentClub;
@@ -71,8 +73,9 @@ export class Career {
       if (opponent.captain) p.news.push(`DESDE ${opponent.name}: ${rivalPersonalityLine(opponent)}`);
     }
 
+    const promiseBroken = !!(p.pressPromise && p.pressPromise.opponentId === opponent.id && !won && p.pressPromise.loseBonus < 0);
     if (p.pressPromise && p.pressPromise.opponentId === opponent.id) {
-      if (!won && p.pressPromise.loseBonus < 0) {
+      if (promiseBroken) {
         for (const id of p.roster.ids) p.roster.get(id).addMoral(p.pressPromise.loseBonus);
         p.news.push(`LA PRENSA NO OLVIDA: tras lo dicho antes del partido, la derrota sienta especialmente mal.`);
       }
@@ -107,15 +110,28 @@ export class Career {
     }
 
     p.club.recordResult(won);
+    opponent.seenArchetype = true; // ya te has visto las caras: el estilo de juego queda a la vista para siempre
+    const resultNews = chronicleFacts
+      ? Chronicle.compose(chronicleFacts, {
+          won, scoreP: finalScoreP, scoreA: finalScoreA, rivalName: opponent.name,
+          clubName: p.clubName, venueLabel: `la liga de ${league.cityName}`, promiseBroken,
+        })
+      : (won
+          ? `${p.clubName} gana ${finalScoreP}-${finalScoreA} a ${opponent.name} en la liga de ${league.cityName}.`
+          : `${opponent.name} se lleva la jornada ${finalScoreA}-${finalScoreP} frente a ${p.clubName}.`);
     if (won) {
       p.wins++;
       if (!p.citiesWon.includes(league.cityName)) p.citiesWon.push(league.cityName);
       if (revenge) p.nemesisDefeats++;
-      p.news.push(`${p.clubName} gana ${finalScoreP}-${finalScoreA} a ${opponent.name} en la liga de ${league.cityName}.`);
+      p.news.push(resultNews);
+      const winMargin = finalScoreP - finalScoreA;
+      if (!p.bestMarginWin || winMargin > p.bestMarginWin.margin) {
+        p.bestMarginWin = { margin: winMargin, rival: opponent.name, cityName: league.cityName };
+      }
     } else {
       p.losses++;
       p.nemesis = { rival: opponent.name, rivalIdx: 0, city: opponent.id };
-      p.news.push(`${opponent.name} se lleva la jornada ${finalScoreA}-${finalScoreP} frente a ${p.clubName}.`);
+      p.news.push(resultNews);
     }
 
     for (const id of p.roster.ids) {
@@ -125,6 +141,8 @@ export class Career {
       }
       else p.roster.get(id).addMoral(-4);
     }
+    this.settleDebts(p, ctx.usados, opponent.id, won);
+    this.trackChemistry(p, ctx.usados, won);
     if (won) {
       for (const id of ctx.usados) {
         const streak = p.roster.get(id).formStreak;
@@ -318,6 +336,46 @@ export class Career {
     const ups = p.roster.get(id).addXp(amount);
     for (const up of ups) {
       p.news.push(`¡${this.nameOf(id)} sube a nivel ${up.level}! ${up.points} puntos por repartir en Mi Peña.`);
+    }
+  }
+
+  // liquida la deuda de sangre de cualquiera de los `usados` que arrastre
+  // una cuenta pendiente con el club rival de este partido (ver
+  // AbueloState.retireToGrandchild / Game.js._startWeeklyMatch) — solo si
+  // se ha ganado; el nieto la salda con moral, XP y una noticia con sabor.
+  settleDebts(p, usados, opponentId, won) {
+    if (!won) return;
+    for (const id of usados) {
+      const s = p.roster.get(id);
+      if (!s.debt || s.debt.clubId !== opponentId) continue;
+      const label = s.debt.label;
+      s.debt = null;
+      s.addMoral(10);
+      this._grantXp(p, id, 40);
+      p.news.push(`DEUDA SALDADA: ${this.nameOf(id)} por fin ajusta cuentas con ${label}. Su abuelo puede descansar tranquilo.`);
+    }
+  }
+
+  // suma un partido jugado juntos a cada pareja de `usados`; anuncia cada
+  // subida de nivel de vínculo con nombre, y da un pequeño extra de moral a
+  // la pareja de leyenda cada vez que gana junta (ver domain/Chemistry.js)
+  trackChemistry(p, usados, won) {
+    for (let i = 0; i < usados.length; i++) {
+      for (let j = i + 1; j < usados.length; j++) {
+        const a = usados[i], b = usados[j];
+        const key = chemistryKey(a, b);
+        const before = p.chemistry[key] || 0;
+        const after = before + 1;
+        p.chemistry[key] = after;
+        const lvlBefore = chemistryLevel(before), lvlAfter = chemistryLevel(after);
+        if (lvlAfter > lvlBefore && CHEMISTRY_LEVELS[lvlAfter].label) {
+          p.news.push(`COMPENETRACIÓN: ${this.nameOf(a)} y ${this.nameOf(b)} ${CHEMISTRY_LEVELS[lvlAfter].label}. Se les nota en la pista.`);
+        }
+        if (won && lvlAfter === CHEMISTRY_LEVELS.length - 1) {
+          p.roster.get(a).addMoral(1);
+          p.roster.get(b).addMoral(1);
+        }
+      }
     }
   }
 

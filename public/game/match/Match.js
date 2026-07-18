@@ -11,6 +11,8 @@ import { PhysicsWorld } from '../physics/PhysicsWorld.js';
 import { ThrowProfile } from './ThrowProfile.js';
 import { AIPlayer } from './AIPlayer.js';
 import { Narrator } from './Narrator.js';
+import { chemistryLevel, gamesFor } from '../domain/Chemistry.js';
+import { archetypeFor } from '../data/rivalArchetypes.js';
 
 const physicsWorld = new PhysicsWorld();
 
@@ -19,16 +21,27 @@ const physicsWorld = new PhysicsWorld();
 // clima, se fuerza igualmente de vez en cuando (ver _startRound más abajo)
 const FORCED_WIND_FEATURES = ['cierzo', 'fohn', 'atlantic'];
 
+// "El boliche es tuyo": quien gana la mano elige dónde se juega la
+// siguiente (ver _beginRound/_startRound). Rangos de x (distancia) e y
+// (banda) dentro del terreno (CW=132, CH=22) — la MEDIA reproduce el
+// sorteo puramente aleatorio de siempre.
+const JACK_DIST_RANGES = { corta: [70, 85], media: [85, 105], larga: [105, 120] };
+const JACK_BAND_RANGES = { arriba: [6, 9], centro: [9, 13], abajo: [13, 16] };
+const JACK_DIST_ORDER = ['corta', 'media', 'larga'];
+const JACK_BAND_ORDER = ['arriba', 'centro', 'abajo'];
+
 // Una partida: el estado-máquina de fases (puntería, efecto, elevación,
 // potencia, simulación...) más las reglas de puntuación de la petanca.
 // No dibuja nada: MatchScreen lee sus propiedades públicas para pintarlas.
 export class Match {
-  constructor({ tournament, roster, team, training = null, sweetBonus = 0, trainBonus = 1 }) {
+  constructor({ tournament, roster, team, training = null, sweetBonus = 0, trainBonus = 1, chemistry = {} }) {
     this.tournament = tournament;
     this.roster = roster;
     this.training = training; // null | 'ARRIME' | 'TIRO'
     this._sweetBonus = sweetBonus;
     this._trainBonus = trainBonus;
+    this.chemistry = chemistry; // Player.chemistry — ver domain/Chemistry.js
+    this.pairMoment = false; // extra puntual: el compañero ha dejado la bola a huevo
 
     if (training) {
       this.city = { name: 'EL DESCAMPADO', color: '#8a8', diff: 0 };
@@ -53,6 +66,7 @@ export class Match {
       this.rival = r.rivalName || RIVALS[r.rivalIdx];
       this.rivalPortrait = r.rivalPortrait || null; // retrato generado (liga) en vez de curado (RIVAL_FACES)
       this.rivalMini = r.rivalMini || null; // versión pequeña para el HUD ajustado del partido
+      this.rivalArchetype = archetypeFor(r.archetypeKey || this.rival).id;
       this.target = TARGET;
       this.teamP = team.slice();
       tournament.markUsed(team);
@@ -81,6 +95,13 @@ export class Match {
     this.score = 0; this.targetsHit = 0; this.success = false; // entrenamientos
     this.measured = false; this.measureBalls = null;
     this.xpGain = {}; // id de abuelo -> XP acumulado por calidad de tirada esta partida
+    this.jackChoice = null; // 'corta'|'media'|'larga' — distancia elegida para la mano en curso
+    this.jackPlace = null; // {step, distCursor, bandCursor} mientras se elige (fase 'placeJack')
+    this._pendingIsFirst = true;
+    this.aiMorale = 0; // -1..1, sube ganando manos y baja perdiéndolas — ver resolveMano/AIPlayer
+    this.chronicle = []; // hechos reales del partido para la crónica (ver match/Chronicle.js)
+    this._worstDeficit = -999; this._worstDeficitScores = null; // para detectar una remontada de verdad
+    this._maxStreakSeen = 0;
 
     this.court = new Court(this.feature);
     const forecastMain = training ? 'SOL' : tournament.currentRound.forecast.main;
@@ -100,7 +121,13 @@ export class Match {
       this.weather.type = 'VIENTO'; this.weather.roll(this.city.diff, this.feature);
     }
     if (training) this._setupTraining();
-    else this._startRound(true);
+    else {
+      // boliche provisional en el centro mientras se elige dónde jugar
+      // (fase 'placeJack'): MatchScreen ya pinta el terreno antes de que
+      // _startRound coloque el de verdad, y this.jack no puede quedar null
+      this.jack = new Ball({ x: CW / 2, y: CH / 2, owner: 'J' });
+      this._beginRound(true);
+    }
   }
 
   // el entrenamiento no pasa por el flujo de "mano" del torneo: se lanza
@@ -189,12 +216,57 @@ export class Match {
 
   throwProfile() { return ThrowProfile.compute(this); }
 
-  _startRound(isFirst) {
+  // decide QUIÉN elige dónde se juega la mano que empieza ahora: el
+  // ganador de la mano anterior (o sorteo en la primera) — si te toca a ti,
+  // se abre el selector interactivo (fase 'placeJack'); si le toca a la IA,
+  // elige sola y se pasa directo a _startRound con su elección.
+  _beginRound(isFirst) {
+    if (this.training) { this._startRound(isFirst); return; }
+    this._pendingIsFirst = isFirst;
+    let chooser;
+    if (isFirst) {
+      chooser = Math.random() < 0.5 ? 'P' : 'A';
+      this.narr = chooser === 'P'
+        ? 'Ganas el sorteo del boliche: eliges tú dónde se juega.'
+        : `${this.rival} gana el sorteo del boliche y elige el terreno.`;
+    } else {
+      chooser = this.lastWinner || 'P'; // mano nula: quien eligió la vez anterior sigue eligiendo
+    }
+    if (chooser === 'P') {
+      this.jackPlace = { step: 'distance', distCursor: 1, bandCursor: 1 };
+      this.phase = 'placeJack'; this.phaseT = 0;
+    } else {
+      const choice = { dist: this._aiJackChoice(), band: this._aiJackBand() };
+      this.narr = Narrator.jackPlaced(choice.dist, false, this.rival);
+      this._startRound(isFirst, choice);
+    }
+  }
+
+  // elección de distancia de la IA: si ya se conoce su arquetipo (ver
+  // data/rivalArchetypes.js / Mejora 2), sigue su preferencia; si no, usa
+  // el nivel como aproximación — un rival fuerte prefiere corto (arrima
+  // mejor), uno flojo busca el globo largo a ver si hay suerte
+  _aiJackChoice() {
+    if (this.rivalArchetype === 'arrimador') return 'corta';
+    if (this.rivalArchetype === 'tirador') return 'larga';
+    if (this.rivalArchetype === 'muro') return 'media';
+    return this.aiLevel >= 6 ? 'corta' : this.aiLevel <= 3 ? 'larga' : 'media';
+  }
+
+  _aiJackBand() {
+    const r = Math.random();
+    return r < 0.25 ? 'arriba' : r < 0.75 ? 'centro' : 'abajo';
+  }
+
+  _startRound(isFirst, choice = null) {
     this.balls = [];
     this.ballsLeftP = this.training ? this.ballsLeftP : 3 * this.teamP.length;
     this.ballsLeftA = this.training ? 0 : 3 * this.teamP.length;
     if (!this.training || this.training === 'ARRIME') {
-      this.jack = new Ball({ x: rnd(75, 115), y: rnd(6, CH - 6), owner: 'J' });
+      const distR = choice ? JACK_DIST_RANGES[choice.dist] : [75, 115];
+      const bandR = choice ? JACK_BAND_RANGES[choice.band] : [6, CH - 6];
+      this.jack = new Ball({ x: rnd(distR[0], distR[1]), y: rnd(bandR[0], bandR[1]), owner: 'J' });
+      this.jackChoice = choice ? choice.dist : null;
     }
     this.jack2 = null; this.twinJacks = false;
     if (!this.training && this.city.diff >= 6 && Math.random() < 0.35) {
@@ -212,6 +284,7 @@ export class Match {
         this.weather.type = this.weatherChange.to;
         this.weather.roll(this.city.diff, this.feature);
         this.narr = `¡${CLIMAS[this.weather.type].label}! ` + cambioClima(this.weather.type);
+        this.chronicle.push({ t: 'clima', data: { to: this.weather.type } });
         this.weatherChange = null;
       }
     }
@@ -264,6 +337,7 @@ export class Match {
     this.phase = 'sim';
     this.timeoutUsedThisThrow = false;
     this.lastWasFault = false;
+    this.pairMoment = false; // el extra de "momento de pareja" solo vale para este tiro
   }
 
   // XP por calidad de tirada: cada bola propia de la mano que se acaba de
@@ -306,14 +380,31 @@ export class Match {
       this.narr = Narrator.line('manoP', ctx);
       if (this.streak === 2) this.narr = '¡Racha! Dos manos seguidas. ' + this.narr;
       else if (this.streak >= 3) this.narr = `¡RACHA x${this.streak}! Está imparable. ` + this.narr;
+      this.aiMorale = clamp(this.aiMorale - 0.2 - (r.points >= 2 ? 0.15 : 0), -1, 1);
     } else if (r.winner === 'A') {
       this.scoreA += r.points; if (this.tournament) this.tournament.pointsAgainst += r.points; this.streak = 0;
       ctx.scoreA = this.scoreA;
       this.narr = Narrator.line('manoA', ctx);
+      this.aiMorale = clamp(this.aiMorale + 0.2 + (r.points >= 2 ? 0.15 : 0), -1, 1);
     } else this.narr = Narrator.line('nula', ctx);
+    if (!this.training && r.winner !== null) {
+      if (this.aiMorale <= -0.7) this.narr += ' El rival aprieta los dientes: se le nota el nervio.';
+      else if (this.aiMorale >= 0.7) this.narr += ` ${this.rival} tira con la confianza de quien manda.`;
+    }
     this.phase = (this.scoreP >= this.target || this.scoreA >= this.target) ? 'matchEnd' : 'roundEnd';
     this.phaseT = 0;
     this.decisive = r.winner === 'P' && (r.points >= 2 || this.phase === 'matchEnd');
+
+    // hechos para la crónica de fin de partido (ver match/Chronicle.js): se
+    // guarda el peor momento (para detectar una remontada de verdad) y la
+    // racha más larga vista, no cada mano suelta — la mano decisiva sí se
+    // marca aquí, justo cuando se sabe que es la que cierra el partido
+    if (!this.training) {
+      const deficit = this.scoreA - this.scoreP;
+      if (deficit > this._worstDeficit) { this._worstDeficit = deficit; this._worstDeficitScores = { scoreA: this.scoreA, scoreP: this.scoreP }; }
+      if (this.streak > this._maxStreakSeen) this._maxStreakSeen = this.streak;
+      if (this.phase === 'matchEnd' && this.decisive) this.chronicle.push({ t: 'decisiva', data: { points: r.points } });
+    }
   }
 
   _nameOf(id) { return this._nameProvider ? this._nameProvider(id) : `abuelo ${id}`; }
@@ -333,6 +424,26 @@ export class Match {
     } else { this.jitterA = 0; this.jitterP = 0; }
 
     switch (this.phase) {
+      case 'placeJack': {
+        const jp = this.jackPlace;
+        if (jp.step === 'distance') {
+          if (input.hit('ArrowUp')) jp.distCursor = (jp.distCursor + JACK_DIST_ORDER.length - 1) % JACK_DIST_ORDER.length;
+          if (input.hit('ArrowDown')) jp.distCursor = (jp.distCursor + 1) % JACK_DIST_ORDER.length;
+          if (input.hit('Enter') || input.hit(' ')) jp.step = 'band';
+        } else {
+          if (input.hit('ArrowUp')) jp.bandCursor = (jp.bandCursor + JACK_BAND_ORDER.length - 1) % JACK_BAND_ORDER.length;
+          if (input.hit('ArrowDown')) jp.bandCursor = (jp.bandCursor + 1) % JACK_BAND_ORDER.length;
+          if (input.hit('Escape') || input.hit('Backspace')) jp.step = 'distance';
+          if (input.hit('Enter') || input.hit(' ')) {
+            const dist = JACK_DIST_ORDER[jp.distCursor], band = JACK_BAND_ORDER[jp.bandCursor];
+            this.jackPlace = null;
+            this.narr = Narrator.jackPlaced(dist, true, this.rival);
+            this._startRound(this._pendingIsFirst, { dist, band });
+          }
+        }
+        break;
+      }
+
       case 'roundStart':
         if (this.phaseT > 1.6 || input.hit('Enter') || input.hit(' ')) {
           if (this.turn === 'P') this.pickThrower();
@@ -395,6 +506,7 @@ export class Match {
               this.injuryEvent = { id: this.abuelo, name: this._nameOf(this.abuelo) };
               abueloState.st = Math.max(0, abueloState.st - 20);
               this.narr = `¡SE HA RESENTIDO! ${this._nameOf(this.abuelo)} se dobla al pisar el círculo, cansado. Sigue cojeando, pero sigue en pie.`;
+              this.chronicle.push({ t: 'lesion', data: { name: this._nameOf(this.abuelo) } });
             } else {
               this.narr = `¡FALTA DE PIE! ${this._nameOf(this.abuelo)} pisa el círculo del cansancio que lleva. Bola nula.`;
             }
@@ -489,13 +601,29 @@ export class Match {
           if (tight && !this.measured) {
             this.measured = true;
             this.measureBalls = { p: pB.b, a: aB.b, pd: pB.d, ad: aB.d };
+            this.chronicle.push({ t: 'medicion', data: {} });
             this.phase = 'measuring'; this.phaseT = 0;
             break;
           }
           this.resolveMano();
         } else {
           this.turn = t;
-          if (t === 'P') this.pickThrower();
+          this.pairMoment = false;
+          if (t === 'P') {
+            const prevThrower = this.lastThrown && this.lastThrown.owner === 'P' ? this.lastThrown.thrower : null;
+            this.pickThrower();
+            // momento de pareja: el compañero (no uno mismo) acaba de dejar
+            // la bola muy cerca del boliche, y hay vínculo de verdad entre
+            // los dos (ver domain/Chemistry.js) — un extra puntual solo
+            // para este próximo tiro, no acumulable con el siguiente
+            if (prevThrower !== null && prevThrower !== this.abuelo && this.teamP.includes(prevThrower)) {
+              const lvl = chemistryLevel(gamesFor(this.chemistry, prevThrower, this.abuelo));
+              if (lvl >= 2 && dist2d(this.lastThrown.x, this.lastThrown.y, this.jack.x, this.jack.y) < 3) {
+                this.pairMoment = true;
+                this.narr = `${this._nameOf(prevThrower)} deja la bola a huevo: ${this._nameOf(this.abuelo)} tira con la confianza de la pareja.`;
+              }
+            }
+          }
           this.phase = t === 'P' ? 'aim' : 'aiTurn';
           this.phaseT = 0; this.spin = 0; this.role = 'apuntar';
         }
@@ -507,7 +635,7 @@ export class Match {
         break;
 
       case 'roundEnd':
-        if (this.phaseT > 1.2 && (input.hit('Enter') || input.hit(' '))) { this.round++; this._startRound(false); }
+        if (this.phaseT > 1.2 && (input.hit('Enter') || input.hit(' '))) { this.round++; this._beginRound(false); }
         break;
 
       case 'trainEnd':
@@ -524,6 +652,8 @@ export class Match {
       case 'matchEnd':
         if (this.phaseT > 1.2 && (input.hit('Enter') || input.hit(' '))) {
           const won = this.scoreP >= this.target;
+          if (won && this._worstDeficit >= 2) this.chronicle.push({ t: 'remontada', data: this._worstDeficitScores });
+          if (this._maxStreakSeen >= 3) this.chronicle.push({ t: 'racha', data: { streak: this._maxStreakSeen } });
           for (const id of this.teamP) {
             const a = ABUELO_DATA[id];
             const s = this.roster.get(id);

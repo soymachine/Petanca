@@ -79,4 +79,22 @@ export class Narrator {
         return '';
     }
   }
+
+  // "el boliche es tuyo": línea al colocarlo, según quién elige y qué
+  // distancia — corta favorece el arrime, larga favorece el brazo
+  static jackPlaced(dist, byPlayer, riv) {
+    if (dist === 'corta') {
+      return byPlayer
+        ? pick(['Boliche corto: aquí se juega a arrimar, avisa a tu pulso.', 'Lo dejas cerca. Terreno de finura.'])
+        : pick([`${riv} lo deja corto: busca el arrime fino.`, `${riv} coloca el boliche cerca. Aquí no vale pegar fuerte.`]);
+    }
+    if (dist === 'larga') {
+      return byPlayer
+        ? pick(['Boliche largo: aquí manda quien más llegue y más pegue.', 'Lo mandas lejos. Que hable el brazo.'])
+        : pick([`${riv} lo manda lejos: busca que decida la potencia.`, `${riv} coloca el boliche largo. Va a hacer falta brazo.`]);
+    }
+    return byPlayer
+      ? pick(['Boliche a media distancia: terreno neutral, gana quien juegue mejor.', 'Lo dejas a media pista. Nada de trampas.'])
+      : pick([`${riv} lo deja a media distancia. Terreno neutral.`]);
+  }
 }

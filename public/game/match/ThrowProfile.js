@@ -1,4 +1,5 @@
 import { ABUELO_DATA } from '../data/abuelos.js';
+import { bestBondMultiplier } from '../domain/Chemistry.js';
 
 // Calcula cómo tira el abuelo alineado ahora mismo: temblor, velocidad de la
 // barra de potencia, alcance máximo y longitud de guía. Junta stats, fatiga,
@@ -27,13 +28,25 @@ export class ThrowProfile {
       const affinity = ABUELO_DATA[i].clima[weatherKey] || 0;
       if (s.hasImmunity(weatherKey)) shake *= 0.94;
       else if (affinity < 0) shake *= 1.16;
+      // eco heredado del abuelo saliente (ver AbueloState.retireToGrandchild):
+      // un 5% menos de temblor con ese clima concreto, aunque no llegue a inmunidad
+      if (s.inherited && s.inherited.clima === weatherKey) shake *= 0.95;
     }
 
     shake *= 1 - s.mo * 0.004;
+    if (match.jackChoice === 'larga') shake *= 1.15; // boliche largo: cuesta más precisión a los dos bandos
     if (!match.training && match.streak >= 2) shake *= Math.max(0.6, 1 - (match.streak - 1) * 0.08);
     if (!match.training && s.inFormBonus) shake *= 0.92; // racha de forma: llega confiado de casa
     if (s.item && s.item.id === 'guantes') shake *= 0.92;
     if (match.warmedUp) shake *= 0.93; // llegó calentado antes de un partido importante
+
+    // compenetración de parejas: cuanto más rodados juntos, más firme tira
+    // uno delante del otro (ver domain/Chemistry.js); el "momento de
+    // pareja" es un extra puntual justo tras un buen arrime del compañero
+    if (!match.training && match.teamP && match.teamP.length > 1) {
+      shake *= bestBondMultiplier(match.chemistry, i, match.teamP);
+      if (match.pairMoment) shake *= 0.92;
+    }
 
     let barSpeed = 1.7 * (1 - s.getStat('temple') * 0.035) * (1 + fat * 0.5);
     if (s.item && s.item.id === 'reloj') barSpeed *= 0.8;

@@ -8,6 +8,7 @@ import { TransferPool } from '../domain/TransferPool.js';
 import { SCOUT_TEMPLATES } from '../data/scouts.js';
 import { FOREIGN_COUNTRIES } from '../data/countries.js';
 import { generateScoutPortrait } from '../data/art/scoutPortraits.js';
+import { resetChemistryFor, bondLabel } from '../domain/Chemistry.js';
 
 const TABLE_X = 4, TABLE_Y0 = 10;
 const TABLE_W = 132;
@@ -73,6 +74,7 @@ export class PenyaScreen {
     this.oCursor = 0;
     this.assignCountryFor = null; // modal: { scoutId, cursor } — a qué país lo pones a ojear
     this.assignScoutFor = null; // modal: { seedKey, name, cursor } — qué ojeador vigila a este jugador
+    this.panteonCursor = 0; // qué hueco de la plantilla se mira en el Panteón
   }
 
   // nivel 0-100 de una fila del mercado, tal y como se le puede mostrar al
@@ -136,13 +138,14 @@ export class PenyaScreen {
     screen.clear();
     TabsBar.draw(this.game, 'penya');
     screen.textCenter(4, '═══ MI PEÑA ═══', '#ffb347');
-    const sections = ['plantilla', 'mercado', 'ojeadores'];
-    const clicked = drawTabRow(screen, input, TABLE_X, 6, ['PLANTILLA', 'MERCADO', 'OJEADORES'], sections.indexOf(this.section));
-    screen.text(TABLE_X + 52, 6, '[Q] cambiar de pestaña', '#8a7f66');
+    const sections = ['plantilla', 'mercado', 'ojeadores', 'panteon'];
+    const clicked = drawTabRow(screen, input, TABLE_X, 6, ['PLANTILLA', 'MERCADO', 'OJEADORES', 'PANTEÓN'], sections.indexOf(this.section));
+    screen.text(TABLE_X + 66, 6, '[Q] cambiar de pestaña', '#8a7f66');
 
     if (this.section === 'plantilla') this._drawPlantilla();
     else if (this.section === 'mercado') this._drawMercado();
-    else this._drawOjeadores();
+    else if (this.section === 'ojeadores') this._drawOjeadores();
+    else this._drawPanteon();
 
     if (clicked !== null) this.section = sections[clicked];
     else if (input.hit('q') || input.hit('Q')) this.section = sections[(sections.indexOf(this.section) + 1) % sections.length];
@@ -248,13 +251,27 @@ export class PenyaScreen {
       if (input.hit('t') || input.hit('T')) this.game.scheduleTraining(this.cursor, 'TIRO');
     }
     if (s.torneos >= RETIRE_AT && (input.hit('g') || input.hit('G'))) {
-      s.retireToGrandchild();
+      const hadLegend = resetChemistryFor(player, this.cursor);
+      const { inherited } = s.retireToGrandchild();
+      player.news.push(this._inheritanceNews(this.cursor, inherited));
+      if (hadLegend) player.news.push(`FIN DE UNA ERA: la pareja de leyenda de ${this.game.displayName(this.cursor)} se deshace con el relevo. Al nieto le toca hacerse un hueco desde cero.`);
       player.save();
     }
     if (input.hit('m') || input.hit('M')) {
       this.mentorMode = true;
       this._pendingMentor = this.cursor;
     }
+  }
+
+  // titular del relevo generacional: cita el eco heredado (ver
+  // AbueloState.retireToGrandchild) con el nombre de la familia del hueco
+  _inheritanceNews(id, inherited) {
+    const name = this.game.displayName(id);
+    if (inherited.clima) {
+      const cl = CLIMAS[inherited.clima];
+      return `RELEVO EN LA PEÑA: el nieto de ${name} coge el testigo. Dicen que ${cl.label.toLowerCase()} tampoco le hace mella — ha salido a su abuelo.`;
+    }
+    return `RELEVO EN LA PEÑA: el nieto de ${name} coge el testigo. Se le nota de familia el ${STAT_LABEL[inherited.stat].toLowerCase()}.`;
   }
 
   _levelInfo(s) {
@@ -412,6 +429,15 @@ export class PenyaScreen {
     if (s.item) {
       const it = ITEMS[s.item.id];
       lines.push([`  objeto: ${it.name}`, '#ffd9a0']);
+    }
+    if (s.debt) lines.push([`  ⚔ cuenta pendiente con ${s.debt.label} — se salda ganándole con él en el equipo`, '#ff8c5b']);
+    const bonds = player.roster.ids
+      .filter((oid) => oid !== id)
+      .map((oid) => [oid, bondLabel(player.chemistry, id, oid)])
+      .filter(([, label]) => label);
+    if (bonds.length) {
+      lines.push(['VÍNCULOS:', '#ffb347']);
+      for (const [oid, label] of bonds) lines.push([`  con ${this.game.displayName(oid)}: ${label}`, '#a8e8c8']);
     }
     const already = this.game.trainingScheduledFor(id);
     lines.push(['AGENDAR:', '#ffb347']);
@@ -895,5 +921,87 @@ export class PenyaScreen {
       this.assignCountryFor = null;
     }
     if (input.hit('Escape')) { this.assignCountryFor = null; input.pressed.Escape = false; }
+  }
+
+  // ============================= PANTEÓN =============================
+  // las generaciones pasadas de cada hueco (AbueloState.legacy ya las
+  // guardaba desde hace versiones, pero no se veían en ningún sitio), la
+  // herencia/deuda de la generación actual, y el libro de récords del club.
+  _recordsSummary() {
+    const { player } = this.game;
+    let bestStreak = 0, totalGen = 0;
+    for (const id of player.roster.ids) {
+      const s = player.roster.get(id);
+      totalGen += s.gen;
+      bestStreak = Math.max(bestStreak, s.career.bestStreak);
+      for (const leg of s.legacy) bestStreak = Math.max(bestStreak, leg.bestStreak || 0);
+    }
+    return { bestStreak, totalGen };
+  }
+
+  _drawPanteon() {
+    const { screen, input, player } = this.game;
+    const ids = player.roster.ids;
+    screen.textCenter(8, 'generaciones que han pasado por cada hueco de la peña, y lo que queda para el recuerdo', '#8a7f66');
+
+    if (!ids.length) {
+      screen.text(TABLE_X, 12, 'Aún no tienes a nadie en la peña.', '#8a8a7a');
+      return;
+    }
+    if (!ids.includes(this.panteonCursor)) this.panteonCursor = ids[0];
+
+    const leftX = 4, leftY = 10, leftW = 40, leftH = 24;
+    screen.box(leftX, leftY, leftW, leftH, '#8a7f66');
+    screen.text(leftX + 2, leftY, ' HUECOS DE LA PEÑA ', '#ffb347');
+    ids.forEach((id, i) => {
+      const y = leftY + 2 + i * 2;
+      if (y > leftY + leftH - 2) return;
+      const s = player.roster.get(id);
+      const sel = id === this.panteonCursor;
+      screen.text(leftX + 2, y, `${sel ? '▶' : ' '} ${this.game.displayName(id)}`, sel ? '#fff' : '#c9c2a8');
+      screen.text(leftX + 2, y + 1, `  gen. ${s.gen + 1}ª  ·  ${s.legacy.length} antecesor${s.legacy.length === 1 ? '' : 'es'}`, '#8a7f66');
+    });
+    screen.text(leftX + 2, leftY + leftH - 1, '[↑/↓] elegir hueco', '#8a7f66');
+
+    const rightX = leftX + leftW + 4, rightY = leftY, rightW = 130 - leftW - 4, rightH = leftH;
+    screen.box(rightX, rightY, rightW, rightH, '#8a7f66');
+    const id = this.panteonCursor;
+    const s = player.roster.get(id);
+    screen.text(rightX + 2, rightY, ` ${this.game.displayName(id).toUpperCase()} — GENERACIÓN ACTUAL (${s.gen + 1}ª) `, '#ffe680');
+    let yy = rightY + 2;
+    screen.text(rightX + 2, yy, `${s.career.wins}V ${s.career.losses}D  ·  racha máxima ${s.career.bestStreak}`, '#c9c2a8'); yy++;
+    if (s.inherited) {
+      const label = s.inherited.clima
+        ? `le afecta menos la ${CLIMAS[s.inherited.clima].label.toLowerCase()} — ha salido a su abuelo`
+        : `heredó ${STAT_LABEL[s.inherited.stat].toLowerCase()} de familia`;
+      screen.text(rightX + 2, yy, `herencia: ${label}`, '#a8e8c8'); yy++;
+    }
+    if (s.debt) { screen.text(rightX + 2, yy, `⚔ cuenta pendiente con ${s.debt.label}`, '#ff8c5b'); yy++; }
+    yy++;
+    if (!s.legacy.length) {
+      screen.text(rightX + 2, yy, 'Primera generación en este hueco: aún no hay antecesores que contar.', '#8a8a7a');
+    } else {
+      screen.text(rightX + 2, yy, 'GENERACIONES ANTERIORES:', '#ffb347'); yy++;
+      for (const leg of s.legacy.slice().reverse()) {
+        if (yy > rightY + rightH - 2) break;
+        const reasonTxt = leg.reason === 'fallecimiento' ? 'falleció' : 'se retiró con honores';
+        const legName = leg.name || this.game.faces[id].name;
+        screen.text(rightX + 2, yy, `${leg.gen + 1}ª gen. — ${legName}, ${reasonTxt} a los ${leg.age} años (${leg.wins}V ${leg.losses}D, racha ${leg.bestStreak})`, '#c9b98a');
+        yy++;
+      }
+    }
+
+    const recX = 4, recY = leftY + leftH + 2, recW = 130, recH = 8;
+    screen.box(recX, recY, recW, recH, '#8a7f66');
+    screen.text(recX + 2, recY, ' LIBRO DE RÉCORDS DEL CLUB ', '#ffb347');
+    const rec = this._recordsSummary();
+    const bmw = player.bestMarginWin;
+    screen.text(recX + 2, recY + 2, `mayor paliza dada: ${bmw ? `${bmw.margin} puntos de diferencia vs ${bmw.rival} (${bmw.cityName})` : '—'}`, '#c9c2a8');
+    screen.text(recX + 2, recY + 3, `racha histórica: ${rec.bestStreak || '—'}`, '#c9c2a8');
+    screen.text(recX + 2, recY + 4, `títulos de liga: ${player.seasonTitles}  ·  Copas de España: ${player.cupTitles}  ·  campanadas europeas: ${player.euroUpsets}`, '#c9c2a8');
+    screen.text(recX + 2, recY + 5, `generaciones que han pasado por la peña: ${rec.totalGen || '—'}`, '#c9c2a8');
+
+    if (input.hit('ArrowUp')) { const i = ids.indexOf(this.panteonCursor); this.panteonCursor = ids[(i + ids.length - 1) % ids.length]; }
+    if (input.hit('ArrowDown')) { const i = ids.indexOf(this.panteonCursor); this.panteonCursor = ids[(i + 1) % ids.length]; }
   }
 }

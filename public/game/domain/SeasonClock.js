@@ -110,14 +110,21 @@ export class SeasonClock {
   }
 
   // avanza exactamente UN día (para poder animarlo en la Agenda paso a
-  // paso); devuelve qué hay ese día — 'match'|'cup'|'training'|'negotiation'|'free'
-  advanceOneDay(league, rollNegotiation) {
+  // paso); devuelve qué hay ese día — 'match'|'cup'|'training'|'negotiation'|'decision'|'free'
+  advanceOneDay(league, rollNegotiation, rollDecision) {
     this.day++;
     if (this.euroCupMatches[this.day]) return { type: 'eurocup', day: this.day };
     if (this.cupMatches[this.day]) return { type: 'cup', day: this.day };
     if (this.trainings[this.day]) return { type: 'training', ...this.trainings[this.day], day: this.day };
     if (this.isMatchDay && league && this.matchdayIndex < league.fixtures.length) {
       return { type: 'match', matchdayIndex: this.matchdayIndex, day: this.day };
+    }
+    // eventos de decisión: cualquier día que no sea domingo de liga (ya
+    // cubierto arriba) puede traer una secuela agendada o, con poca
+    // probabilidad, un evento nuevo — ver Game.js._rollDecision
+    if (this.weekday !== 6 && rollDecision) {
+      const d = rollDecision();
+      if (d) return { type: 'decision', event: d.event, ctx: d.ctx, day: this.day };
     }
     if (this.weekday === 0 && rollNegotiation) {
       const offer = rollNegotiation();
@@ -127,9 +134,10 @@ export class SeasonClock {
   }
 
   // avanza día a día hasta el próximo domingo con partido, un entrenamiento
-  // agendado, o (con baja probabilidad) una negociación de fichaje —
-  // devuelve qué lo paró, o null si se acabaron los días razonables (tope)
-  advanceToNextEvent(league, rollNegotiation) {
+  // agendado, o (con baja probabilidad) una negociación de fichaje o un
+  // evento de decisión — devuelve qué lo paró, o null si se acabaron los
+  // días razonables (tope)
+  advanceToNextEvent(league, rollNegotiation, rollDecision) {
     const cap = 30;
     for (let i = 0; i < cap; i++) {
       this.day++;
@@ -138,6 +146,10 @@ export class SeasonClock {
       if (this.trainings[this.day]) return { type: 'training', ...this.trainings[this.day], day: this.day };
       if (this.isMatchDay && league && this.matchdayIndex < league.fixtures.length) {
         return { type: 'match', matchdayIndex: this.matchdayIndex, day: this.day };
+      }
+      if (this.weekday !== 6 && rollDecision) {
+        const d = rollDecision();
+        if (d) return { type: 'decision', event: d.event, ctx: d.ctx, day: this.day };
       }
       if (this.weekday === 0 && rollNegotiation) {
         const offer = rollNegotiation();
