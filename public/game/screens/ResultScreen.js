@@ -1,6 +1,7 @@
-import { TROPHY_ART } from '../data/art/staticArt.js';
 import { ITEMS } from '../data/items.js';
 import { STAT_KEYS } from '../data/abuelos.js';
+import { CrestGenerator } from '../portraits/CrestGenerator.js';
+import { truncate } from '../core/utils.js';
 
 export class ResultScreen {
   constructor(game) { this.game = game; }
@@ -27,20 +28,37 @@ export class ResultScreen {
     const o = this.game.outcome;
     screen.clear();
     const opponent = ctx.opponentClub;
-    if (o.won) {
-      screen.block(Math.floor((screen.cols - 21) / 2), 3, TROPHY_ART, '#ffe14d');
-      screen.textCenter(15, `¡VICTORIA ANTE ${opponent.name}!`, '#7CFC00');
-    } else {
-      screen.textCenter(6, `Derrota ante ${opponent.name}...`, '#ff5c5c');
-      screen.textCenter(8, `${player.clubName} vuelve al pueblo con la cabeza gacha.`, '#c9b98a');
-      screen.textCenter(10, 'Queda apuntado. Habrá revancha.', '#ff8c5b');
+    const res = ctx.results[0];
+
+    // cabecera cara a cara: el escudo de cada club (procedural y
+    // determinista por nombre — ver portraits/CrestGenerator.js) con su
+    // nombre debajo, y el marcador en medio — de un vistazo se ve quién
+    // jugó y cómo quedó, antes de leer una sola línea de texto
+    const myCrest = CrestGenerator.generate(player.clubName);
+    const oppCrest = CrestGenerator.generate(opponent.name);
+    const cx = Math.floor(screen.cols / 2);
+    const crestY = 2, half = 22;
+    const leftCx = cx - half, rightCx = cx + half;
+    screen.drawPortrait(myCrest, leftCx - 4, crestY);
+    screen.drawPortrait(oppCrest, rightCx - 4, crestY);
+    const myName = truncate(player.clubName, 24), oppName = truncate(opponent.name, 24);
+    const myNameCol = o.won ? '#7CFC00' : '#c9c2a8', oppNameCol = o.won ? '#c9c2a8' : '#ff5c5c';
+    screen.text(leftCx - Math.floor(myName.length / 2), crestY + 10, myName, myNameCol);
+    screen.text(rightCx - Math.floor(oppName.length / 2), crestY + 10, oppName, oppNameCol);
+    screen.textCenter(crestY + 3, 'VS', '#8a7f66');
+    if (res) screen.textCenter(crestY + 5, `${res.scoreP} - ${res.scoreA}`, o.won ? '#7CFC00' : '#ff5c5c');
+
+    screen.textCenter(crestY + 12, o.won ? '¡VICTORIA!' : 'DERROTA', o.won ? '#7CFC00' : '#ff5c5c');
+    if (!o.won) {
+      screen.textCenter(crestY + 14, `${player.clubName} vuelve al pueblo con la cabeza gacha. Queda apuntado. Habrá revancha.`, '#c9b98a');
     }
 
     let yy = 18;
-    const res = ctx.results[0];
     if (res) {
-      const names = res.abuelos.map((id) => this.game.displayName(id)).join('+');
-      screen.textCenter(yy++, `${names}   ${res.scoreP}-${res.scoreA}   vs ${res.rival}`, res.won ? '#7ec850' : '#ff5c5c');
+      // el marcador y el rival ya se ven en la cabecera de escudos de
+      // arriba: aquí solo hace falta decir quién jugó la mano
+      const names = res.abuelos.map((id) => this.game.displayName(id)).join(' + ');
+      screen.textCenter(yy++, `Jugaron: ${names}`, res.won ? '#7ec850' : '#ff5c5c');
       const mvpId = this._mvp(res);
       if (mvpId !== null) {
         const margin = res.scoreP - res.scoreA;
