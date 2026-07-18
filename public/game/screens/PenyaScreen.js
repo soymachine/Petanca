@@ -863,6 +863,7 @@ export class PenyaScreen {
   _drawScoutAssign() {
     const { screen, input, player } = this.game;
     const staff = player.scoutStaff.hired;
+    const modalOpen = !!this.assignCountryFor;
     screen.box(4, 11, 132, 17, '#8a7f66');
     screen.text(7, 12, 'ASIGNAR OJEADORES', '#ffb347');
     if (!staff.length) {
@@ -896,11 +897,17 @@ export class PenyaScreen {
         statusCol = '#8a7f66';
       }
       screen.text(46, yy, truncate(statusTxt, 84), statusCol);
-      if (overRow && input.mouse.clicked) this.oCursor = i;
+      if (!modalOpen && overRow && input.mouse.clicked) this.oCursor = i;
       yy += 2;
     });
 
     screen.text(7, yy + 1, '[↑/↓] elegir · ratón = seleccionar   [ENTER] ojear un país   [U] dejar libre', '#c9c2a8');
+
+    // con el modal de país abierto, el foco es suyo: si esta lista también
+    // procesara el teclado, se comería el ENTER (y lo limpiaría) antes de
+    // que _drawAssignCountryModal() llegara a leerlo, y asignar país nunca
+    // llegaba a confirmarse de verdad — ver _drawAssignCountryModal
+    if (modalOpen) return;
 
     if (input.hit('ArrowUp')) this.oCursor = (this.oCursor + staff.length - 1) % staff.length;
     if (input.hit('ArrowDown')) this.oCursor = (this.oCursor + 1) % staff.length;

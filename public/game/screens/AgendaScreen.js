@@ -117,7 +117,7 @@ export class AgendaScreen {
         const isToday = d.day === clock.day;
         const completed = d.day < clock.day;
         const rowOver = !this.playing && input.mouse.cy >= yy && input.mouse.cy <= yy + 2 && input.mouse.cx >= px + 1 && input.mouse.cx < px + PAGE_W - 1;
-        if (rowOver) hover = { d, entry, px, yy };
+        if (rowOver) hover = { d, entry, px, yy, completed };
         const wd = WD_SHORT[d.weekdayName];
         const dayCol = isToday ? '#ffe14d' : d.isMatchDay ? '#e8ddb8' : '#c9c2a8';
         const tabCol = rowOver ? '#fff' : dayCol;
@@ -159,7 +159,7 @@ export class AgendaScreen {
         if (entry.kind === 'match') screen.text(px + 6, yy + 1, entry.text, completed ? '#bfe8bf' : '#7ec850');
         else if (entry.kind === 'cup') screen.text(px + 6, yy + 1, entry.text, completed ? '#c9b970' : (entry.european ? '#88c8e8' : '#ffd75e'));
         else if (entry.kind === 'training') screen.text(px + 6, yy + 1, rowOver && !completed ? entry.text + '  ✕ cancelar' : entry.text, completed ? '#bfe8e8' : rowOver ? '#ff8c5b' : '#88c8e8');
-        else if (rowOver && entry.kind === 'free') screen.text(px + 6, yy + 1, '+ agendar entreno', frame % 20 < 14 ? '#7CFC00' : '#4a8a4a');
+        else if (rowOver && !completed && entry.kind === 'free') screen.text(px + 6, yy + 1, '+ agendar entreno', frame % 20 < 14 ? '#7CFC00' : '#4a8a4a');
 
         // regla horizontal punteada, como las líneas de una libreta real
         // (solo si cabe dentro de la página, el último día no lleva línea)
@@ -180,8 +180,13 @@ export class AgendaScreen {
       screen.textCenter(AY + PAGE_H + 1, canFriendly ? `${baseHelp}    [F] amistoso de pretemporada (quedan ${player.friendliesLeft})` : baseHelp, '#c9c2a8');
     }
 
-    if (hover) this._drawDayTooltip(hover.d, hover.entry, input.mouse.cx, input.mouse.cy);
-    if (!this.playing && hover && input.mouse.clicked && hover.entry.kind === 'free' && !hover.d.isMatchDay) {
+    if (hover) this._drawDayTooltip(hover.d, hover.entry, input.mouse.cx, input.mouse.cy, hover.completed);
+    // un día ya pasado (sellado en la agenda con el relleno ▓) no puede
+    // recibir un entreno nuevo: por muy "libre" que estuviera ese hueco,
+    // ya no hay manera de que SeasonClock lo ejecute — solo comprueba
+    // this.trainings[day] según el reloj avanza hacia delante, así que
+    // agendar en el pasado dejaba el entreno agendado pero nunca se jugaba
+    if (!this.playing && hover && !hover.completed && input.mouse.clicked && hover.entry.kind === 'free' && !hover.d.isMatchDay) {
       this.schedule = { day: hover.d.day, step: 'abuelo', abueloId: null, cursor: 0 };
     }
     if (!this.playing && hover && input.mouse.clicked && hover.entry.kind === 'training') {
@@ -235,7 +240,7 @@ export class AgendaScreen {
     return { kind: 'free', text: '' };
   }
 
-  _drawDayTooltip(d, entry, mx, my) {
+  _drawDayTooltip(d, entry, mx, my, completed) {
     const { screen } = this.game;
     const lines = [];
     lines.push([`${d.weekdayName.toUpperCase()} · día ${d.day}`, '#ffe680']);
@@ -258,6 +263,8 @@ export class AgendaScreen {
       lines.push(['Entreno agendado', '#88c8e8']);
       lines.push([`${entry.drill} — ${this.game.displayName(entry.abueloId)}`, '#c9c2a8']);
       lines.push(['[click] cancelar este entreno', '#ff8c5b']);
+    } else if (completed) {
+      lines.push(['Día ya pasado.', '#8a8a7a']);
     } else {
       lines.push(['Día libre.', '#8a8a7a']);
       lines.push(['[click] agendar un entreno aquí', '#7CFC00']);
