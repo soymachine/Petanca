@@ -1,18 +1,76 @@
 // Piezas para escudos de club procedurales (ver CrestGenerator.js).
-// El escudo es una silueta fija (SHIELD_MASK, 9x9): 'X' = celda rellena,
-// ' ' = fuera del escudo. El generador combina esa silueta con colores y
-// un emblema para dar variedad, igual que PortraitParts.js hace con caras.
+// Cada "forma" es una silueta fija (9x9 en SHAPES, 5x7 en MINI_SHAPES):
+// 'X' = celda rellena, ' ' = fuera de la forma. El generador combina esa
+// silueta con colores y un emblema para dar variedad, igual que
+// PortraitParts.js hace con caras. Varias formas (no solo el escudo
+// heráldico clásico) para que no todos los clubes lean igual de "medieval".
 
-export const SHIELD_MASK = [
-  '  XXXXX  ',
-  ' XXXXXXX ',
-  'XXXXXXXXX',
-  'XXXXXXXXX',
-  ' XXXXXXX ',
-  ' XXXXXXX ',
-  '  XXXXX  ',
-  '   XXX   ',
-  '    X    ',
+export const SHAPES = [
+  [ // escudo
+    '  XXXXX  ',
+    ' XXXXXXX ',
+    'XXXXXXXXX',
+    'XXXXXXXXX',
+    ' XXXXXXX ',
+    ' XXXXXXX ',
+    '  XXXXX  ',
+    '   XXX   ',
+    '    X    ',
+  ],
+  [ // círculo
+    '  XXXXX  ',
+    ' XXXXXXX ',
+    'XXXXXXXXX',
+    'XXXXXXXXX',
+    'XXXXXXXXX',
+    'XXXXXXXXX',
+    'XXXXXXXXX',
+    ' XXXXXXX ',
+    '  XXXXX  ',
+  ],
+  [ // diamante
+    '    X    ',
+    '   XXX   ',
+    '  XXXXX  ',
+    ' XXXXXXX ',
+    'XXXXXXXXX',
+    ' XXXXXXX ',
+    '  XXXXX  ',
+    '   XXX   ',
+    '    X    ',
+  ],
+  [ // cuadrado redondeado
+    ' XXXXXXX ',
+    'XXXXXXXXX',
+    'XXXXXXXXX',
+    'XXXXXXXXX',
+    'XXXXXXXXX',
+    'XXXXXXXXX',
+    'XXXXXXXXX',
+    'XXXXXXXXX',
+    ' XXXXXXX ',
+  ],
+  [ // banderín (banda con muesca de golondrina)
+    ' XXXXXXX ',
+    'XXXXXXXXX',
+    'XXXXXXXXX',
+    'XXXXXXXXX',
+    'XXXXXXXXX',
+    'XXXXXXXXX',
+    'XXX   XXX',
+    'XX     XX',
+    'X       X',
+  ],
+];
+
+// versión compacta (5x7) de las mismas 5 formas, para sitios sin espacio
+// para el escudo grande (p.ej. la cabecera de Mi Peña)
+export const MINI_SHAPES = [
+  [' XXXXX ', 'XXXXXXX', 'XXXXXXX', ' XXXXX ', '  XXX  '], // escudo
+  [' XXXXX ', 'XXXXXXX', 'XXXXXXX', 'XXXXXXX', ' XXXXX '], // círculo
+  ['   X   ', '  XXX  ', ' XXXXX ', '  XXX  ', '   X   '], // diamante
+  ['XXXXXXX', 'XXXXXXX', 'XXXXXXX', 'XXXXXXX', 'XXXXXXX'], // cuadrado
+  ['XXXXXXX', 'XXXXXXX', 'XXXXXXX', 'XX   XX', 'X     X'], // banderín
 ];
 
 // colores base del escudo: saturados y distinguibles a simple vista, en la

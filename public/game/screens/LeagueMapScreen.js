@@ -5,6 +5,7 @@ import { TabsBar } from './TabsBar.js';
 import { Geography } from '../data/geography.js';
 import { hitRect } from '../core/utils.js';
 import { STAT_KEYS, STAT_LABEL } from '../data/abuelos.js';
+import { CrestGenerator } from '../portraits/CrestGenerator.js';
 
 // Niveles de zoom del mapa: el índice 2 es el "normal" (extent=1, los 6
 // países ocupando toda la rejilla). Alejar (extent>1) encoge el
@@ -262,38 +263,51 @@ export class LeagueMapScreen {
     for (let i = 0; i < Math.min(5, table.length); i++) drawEntry(table[i], i, 7, y0 + i);
     for (let i = 5; i < table.length; i++) drawEntry(table[i], i, 45, y0 + (i - 5));
 
-    // modo Debugger: pasar el ratón por un equipo rival muestra su
-    // plantilla real (nombre, stats, valor) — para poder debugar el
-    // Mercado y la generación de jugadores sin tener que fichar a nadie.
+    // pasar el ratón por un equipo rival enseña su escudo y los nombres de
+    // su plantilla (información pública: quién juega en cada club no es
+    // ningún secreto). En modo Debugger, _drawClubTooltip añade encima
+    // stats/valor/estado de venta reales, para poder debugar el Mercado y
+    // la generación de jugadores sin tener que fichar a nadie.
     // No se pinta aquí: se guarda y se pinta al final de draw() para que
     // quede siempre por encima del resto de la UI (ver draw()).
-    if (player.debugMode) {
-      const hovered = rowRects.find((r) => hitRect(input.mouse.cx, input.mouse.cy, r.x, r.y, r.w, 1));
-      if (hovered) this._hoverClub = hovered.club;
-    }
+    const hovered = rowRects.find((r) => hitRect(input.mouse.cx, input.mouse.cy, r.x, r.y, r.w, 1));
+    if (hovered) this._hoverClub = hovered.club;
   }
 
+  // escudo + nombre del club, y quién juega en él, para cualquier equipo
+  // de la tabla — quién forma la plantilla rival no es ningún secreto. En
+  // modo Debugger se añade además la caja del club y, por jugador, edad,
+  // valor de mercado, si está en venta y sus stats reales: eso sí es
+  // información que en juego normal solo se consigue ojeando o fichando.
   _drawClubTooltip(club, mx, my) {
-    const { screen } = this.game;
-    const lines = [];
+    const { screen, player } = this.game;
+    const crest = CrestGenerator.generate(club.name);
     const countryTag = club.country && club.country !== 'ES' ? ` (${(foreignCountry(club.country) || {}).label || club.country})` : '';
-    lines.push([`${club.name}${countryTag}`, '#ffe680']);
-    lines.push([`Caja del club: ${club.money ?? 0}€`, '#c9c2a8']);
+
+    const lines = [[`${club.name}${countryTag}`, '#ffe680']];
+    if (player.debugMode) lines.push([`Caja del club: ${club.money ?? 0}€`, '#c9c2a8']);
     lines.push(['', '#000']);
     if (!club.players.length) lines.push(['(sin jugadores)', '#8a8a7a']);
     for (const p of club.players) {
-      lines.push([`${p.name}${p.forSale ? '  [EN VENTA]' : ''}  ·  ${p.age} años  ·  valor ${p.value}€`, p.forSale ? '#ffd75e' : '#a8e8a8']);
-      const statsTxt = STAT_KEYS.map((k) => `${STAT_LABEL[k].slice(0, 3)} ${p.stats[k]}`).join('  ');
-      lines.push([`  ${statsTxt}`, '#88c8e8']);
+      if (player.debugMode) {
+        lines.push([`${p.name}${p.forSale ? '  [EN VENTA]' : ''}  ·  ${p.age} años  ·  valor ${p.value}€`, p.forSale ? '#ffd75e' : '#a8e8a8']);
+        const statsTxt = STAT_KEYS.map((k) => `${STAT_LABEL[k].slice(0, 3)} ${p.stats[k]}`).join('  ');
+        lines.push([`  ${statsTxt}`, '#88c8e8']);
+      } else {
+        lines.push([`· ${p.name}`, '#a8e8a8']);
+      }
     }
 
-    const tw = Math.min(70, Math.max(...lines.map((l) => l[0].length)) + 4);
-    const th = lines.length + 2;
+    const crestW = 9, textX = crestW + 2;
+    const maxLineLen = Math.max(...lines.map((l) => l[0].length));
+    const tw = Math.min(78, textX + maxLineLen + 4);
+    const th = Math.max(9, lines.length) + 2;
     const tx = Math.min(mx + 2, screen.cols - tw - 1);
     const ty = Math.min(my + 1, screen.rows - th - 1);
     this._fillBlack(tx, ty, tw, th);
     screen.box(tx, ty, tw, th, '#88c8e8', 'double');
-    lines.forEach((l, i) => screen.text(tx + 2, ty + 1 + i, l[0].slice(0, tw - 3), l[1]));
+    screen.drawPortrait(crest, tx + 2, ty + 1);
+    lines.forEach((l, i) => screen.text(tx + 2 + textX, ty + 1 + i, l[0].slice(0, tw - 3 - textX), l[1]));
   }
 
   _fillBlack(x, y, w, h) {

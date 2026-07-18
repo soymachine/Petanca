@@ -9,6 +9,7 @@ import { SCOUT_TEMPLATES } from '../data/scouts.js';
 import { FOREIGN_COUNTRIES } from '../data/countries.js';
 import { generateScoutPortrait } from '../data/art/scoutPortraits.js';
 import { resetChemistryFor, bondLabel } from '../domain/Chemistry.js';
+import { CrestGenerator } from '../portraits/CrestGenerator.js';
 
 const TABLE_X = 4, TABLE_Y0 = 10;
 const TABLE_W = 132;
@@ -146,6 +147,15 @@ export class PenyaScreen {
     }
     TabsBar.draw(this.game, 'penya');
     screen.textCenter(4, '═══ MI PEÑA ═══', '#ffb347');
+
+    // escudo + nombre del club, en la esquina libre de la cabecera (el
+    // escudo grande no cabe aquí: la caja de la tabla empieza en la fila
+    // 9 y ocupa casi todo el ancho — por eso el mini, ver CrestGenerator)
+    const crestX = screen.cols - 9, crestY = 3;
+    screen.drawPortrait(CrestGenerator.generateMini(this.game.player.clubName), crestX, crestY);
+    const clubLabel = truncate(this.game.player.clubName, 30);
+    screen.text(crestX - 1 - clubLabel.length, crestY + 2, clubLabel, '#ffb347');
+
     const sections = ['plantilla', 'mercado', 'ojeadores', 'panteon'];
     const clicked = drawTabRow(screen, input, TABLE_X, 6, ['PLANTILLA', 'MERCADO', 'OJEADORES', 'PANTEÓN'], sections.indexOf(this.section));
     screen.text(TABLE_X + 66, 6, '[Q] cambiar de pestaña', '#8a7f66');
