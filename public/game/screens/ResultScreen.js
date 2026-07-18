@@ -52,6 +52,12 @@ export class ResultScreen {
           : `El que más dio la cara: ${mvpName}, aunque no haya alcanzado.`;
         screen.textCenter(yy++, line, res.won ? '#ffd75e' : '#9a927a');
       }
+      const xpPerAbuelo = o.xpPerAbuelo || {};
+      const xpParts = res.abuelos
+        .map((id) => [id, xpPerAbuelo[id] || 0])
+        .filter(([, xp]) => xp > 0)
+        .map(([id, xp]) => `${this.game.displayName(id)} +${xp} XP`);
+      if (xpParts.length) screen.textCenter(yy++, xpParts.join('   ·   '), '#88c8e8');
     }
     yy += 2;
     screen.textCenter(yy++, `+${o.xp} XP      +${o.money}€`, '#b48ce8');

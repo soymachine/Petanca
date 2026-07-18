@@ -134,10 +134,16 @@ export class Career {
       p.news.push(resultNews);
     }
 
+    // XP de participación de ESTE partido por abuelo (aparte de la de
+    // calidad de tirada, que Game.js suma después desde Match.xpGain): se
+    // guarda para poder enseñarla en ResultScreen, no solo aplicarla
+    const xpPerAbuelo = {};
     for (const id of p.roster.ids) {
       if (ctx.usados.includes(id)) {
         if (won) p.roster.get(id).addMoral(8);
-        this._grantXp(p, id, won ? 6 + 10 : 6);
+        const gained = won ? 6 + 10 : 6;
+        this._grantXp(p, id, gained);
+        xpPerAbuelo[id] = (xpPerAbuelo[id] || 0) + gained;
       }
       else p.roster.get(id).addMoral(-4);
     }
@@ -327,7 +333,7 @@ export class Career {
 
     const ups = p.addReward(xp, money);
     p.save();
-    return { won, xp, money, ups, revenge, stormWin, itemDrop, betResult, sponsorResult, seasonEnd, weeklyGoalResult, ultimatum, crisisDemotion };
+    return { won, xp, money, ups, revenge, stormWin, itemDrop, betResult, sponsorResult, seasonEnd, weeklyGoalResult, ultimatum, crisisDemotion, xpPerAbuelo };
   }
 
   // otorga XP a un abuelo y anuncia en las noticias cada subida de nivel

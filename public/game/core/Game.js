@@ -767,6 +767,15 @@ export class Game {
       return;
     }
     this.outcome = this.career.finishWeeklyMatch(this.weeklyMatch, !!M._won, M.scoreP, M.scoreA, M.chronicle);
+    // suma la XP de calidad de tirada (M.xpGain, aplicada arriba en
+    // _applyThrowXp) a la de participación que ya trae el outcome, para
+    // poder enseñar en ResultScreen el total real ganado por cada abuelo
+    const xpPerAbuelo = { ...this.outcome.xpPerAbuelo };
+    for (const idStr of Object.keys(M.xpGain || {})) {
+      const id = Number(idStr);
+      xpPerAbuelo[id] = (xpPerAbuelo[id] || 0) + M.xpGain[idStr];
+    }
+    this.outcome.xpPerAbuelo = xpPerAbuelo;
     this.state = 'result';
   }
 

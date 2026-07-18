@@ -136,6 +136,14 @@ export class PenyaScreen {
   draw() {
     const { screen, input } = this.game;
     screen.clear();
+    // una modal con su propio cierre por ESC tiene que consumir la tecla
+    // ANTES de que TabsBar la vea, o el atajo global "ESC = Inicio" se
+    // dispara el mismo frame y te saca de la pantalla sin querer
+    if (input.hit('Escape')) {
+      if (this.allocating !== null) { this.allocating = null; input.pressed.Escape = false; }
+      else if (this.assignScoutFor) { this.assignScoutFor = null; input.pressed.Escape = false; }
+      else if (this.assignCountryFor) { this.assignCountryFor = null; input.pressed.Escape = false; }
+    }
     TabsBar.draw(this.game, 'penya');
     screen.textCenter(4, '═══ MI PEÑA ═══', '#ffb347');
     const sections = ['plantilla', 'mercado', 'ojeadores', 'panteon'];
@@ -408,6 +416,19 @@ export class PenyaScreen {
 
     const lines = [];
     lines.push([this.game.displayName(id), '#ffe680']);
+    // nivel granular: la barra visual de siempre (más fina aquí que en la
+    // tabla, 20 segmentos en vez de 5) más los números exactos de XP —
+    // en la fila de la tabla no cabían, aquí sí hay sitio para verlos
+    lines.push(['NIVEL:', '#ffb347']);
+    if (s.isMaxLevel()) {
+      lines.push([`  Nv.${s.level}  ${'▓'.repeat(20)}  NIVEL MÁXIMO`, '#a8d8ff']);
+    } else {
+      const pct = Math.max(0, Math.min(1, s.xp / s.xpToNextLevel()));
+      const filled = Math.round(pct * 20);
+      const bar = `${'▓'.repeat(filled)}${'░'.repeat(20 - filled)}`;
+      lines.push([`  Nv.${s.level}  ${bar}  ${s.xp}/${s.xpToNextLevel()} XP`, '#a8d8ff']);
+    }
+    if (s.points > 0) lines.push([`  ${s.points} puntos por repartir (clic en el nivel de la tabla)`, '#ffd75e']);
     lines.push(['CLIMA:', '#ffb347']);
     for (const [k, v] of Object.entries(ABUELO_DATA[id].clima)) {
       const cl = CLIMAS[k];

@@ -25,6 +25,10 @@ export class AgendaScreen {
     const { screen, input, player, frame } = this.game;
     screen.clear();
     if (this.schedule && input.hit('Escape')) { this.schedule = null; input.pressed.Escape = false; }
+    // un evento de decisión no se puede cancelar con ESC (hay que elegir
+    // una opción), pero tampoco debe dejar pasar la tecla al atajo global
+    // "ESC = Inicio" de TabsBar, o se sale de la Agenda sin resolverlo
+    if (this.game.decisionEvent && input.hit('Escape')) { input.pressed.Escape = false; }
     TabsBar.draw(this.game, 'agenda');
     screen.textCenter(4, '═══ AGENDA DE LA PEÑA ═══', '#ffb347');
 

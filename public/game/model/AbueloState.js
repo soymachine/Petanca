@@ -1,12 +1,16 @@
 import { clamp, gauss, rnd } from '../core/utils.js';
 import { ABUELO_DATA, STAT_KEYS } from '../data/abuelos.js';
 
-// curva de nivel: nivel 1 cuesta 30 XP, nivel 2 50, nivel 3 70... y cada
-// subida da más puntos que la anterior (10, 15, 20...) — constantes
-// pensadas para retocarse fácil si el ritmo no cuaja jugando
+// curva de nivel: nivel 1 cuesta 89 XP, nivel 2 126, nivel 3 171... el
+// término cuadrático hace que la distancia entre niveles crezca cada vez
+// más (+37, +45, +53, +61...), no solo el coste base — así los niveles
+// altos cuestan de verdad, no es una recta con más margen. Los puntos por
+// nivel (10, 15, 20... en la escala vieja) se reparten al 85% para que
+// subir de nivel siga siendo un premio, pero menos generoso que antes.
+// Constantes pensadas para retocarse fácil si el ritmo no cuaja jugando.
 const LEVEL_CAP = 12;
-function xpToNextLevel(level) { return 30 + level * 20; }
-function pointsForLevel(level) { return 10 + (level - 1) * 5; }
+function xpToNextLevel(level) { return 60 + level * 25 + level * level * 4; }
+function pointsForLevel(level) { return Math.round((10 + (level - 1) * 5) * 0.85); }
 
 // Estado vivo de un abuelo de la peña: stamina, moral, entrenamiento
 // acumulado, amuleto, generación (nietos) y estadísticas de carrera.
