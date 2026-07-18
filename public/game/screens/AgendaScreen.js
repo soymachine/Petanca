@@ -2,6 +2,8 @@ import { TabsBar } from './TabsBar.js';
 import { countryTag } from '../data/countries.js';
 import { wrapText } from '../core/utils.js';
 import { fillDecisionText } from '../data/decisionEvents.js';
+import { TRAINING_DRILLS } from '../data/trainingDrills.js';
+import { STAT_LABEL } from '../data/abuelos.js';
 
 const WD_SHORT = { lunes: 'LUN', martes: 'MAR', miércoles: 'MIÉ', jueves: 'JUE', viernes: 'VIE', sábado: 'SÁB', domingo: 'DOM' };
 const AY = 10, PAGE_W = 55, PAGE_GAP = 5, PAGE_H = 33;
@@ -415,18 +417,18 @@ export class AgendaScreen {
         this.schedule.step = 'drill';
       }
     } else {
-      const drills = ['ARRIME', 'TIRO'];
-      const bonus = player.facilities.trainingStatBonus();
       screen.textCenter(y + 1, `¿QUÉ ENTRENA ${this.game.displayName(this.schedule.abueloId)}?`, '#ffe680');
-      drills.forEach((drill, i) => {
+      this.schedule.cursor = ((this.schedule.cursor % TRAINING_DRILLS.length) + TRAINING_DRILLS.length) % TRAINING_DRILLS.length;
+      TRAINING_DRILLS.forEach((drill, i) => {
         const sel = i === this.schedule.cursor;
-        const stat = drill === 'ARRIME' ? 'pulso' : 'brazo';
-        screen.text(x + 4, y + 4 + i * 3, `${sel ? '▶' : ' '} ${drill}  (+${bonus} ${stat})`, sel ? '#fff' : '#c9c2a8');
+        const bonus = player.facilities.trainingStatBonus(drill.stat);
+        screen.text(x + 4, y + 4 + i * 3, `${sel ? '▶' : ' '} ${drill.label}  (+${bonus} ${STAT_LABEL[drill.stat]})`, sel ? '#fff' : '#c9c2a8');
       });
       screen.textCenter(y + h - 2, '[↑/↓] elegir   [ENTER] agendar   [ESC] cancelar', '#c9c2a8');
-      if (input.hit('ArrowUp') || input.hit('ArrowDown')) this.schedule.cursor = this.schedule.cursor === 0 ? 1 : 0;
+      if (input.hit('ArrowUp')) this.schedule.cursor = (this.schedule.cursor + TRAINING_DRILLS.length - 1) % TRAINING_DRILLS.length;
+      if (input.hit('ArrowDown')) this.schedule.cursor = (this.schedule.cursor + 1) % TRAINING_DRILLS.length;
       if (input.hit('Enter') || input.hit(' ')) {
-        this.game.scheduleTrainingOnDay(this.schedule.day, this.schedule.abueloId, drills[this.schedule.cursor]);
+        this.game.scheduleTrainingOnDay(this.schedule.day, this.schedule.abueloId, TRAINING_DRILLS[this.schedule.cursor].id);
         this.schedule = null;
       }
     }

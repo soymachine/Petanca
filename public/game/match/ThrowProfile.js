@@ -1,6 +1,7 @@
 import { ABUELO_DATA } from '../data/abuelos.js';
 import { bestBondMultiplier } from '../domain/Chemistry.js';
 import { clamp } from '../core/utils.js';
+import { drillFor } from '../data/trainingDrills.js';
 
 // fatiga -> temblor: tramo suave hasta los 30 STA (igual que antes), y por
 // debajo una "pared del cansancio" con el doble de pendiente — jugar
@@ -41,6 +42,25 @@ export class ThrowProfile {
     if (!match.training && match.scoreA > match.scoreP && i !== 5) {
       const press = (1 - s.getStat('temple') / 10) * 0.35;
       shake *= 1 + press * (match.feature === 'pressure' ? 1.7 : 1);
+    }
+    // drill de PRESIÓN: no hay marcador de verdad que apriete, así que la
+    // presión se simula creciendo con cada bola de la tanda (empieza
+    // tranquilo, la última es casi un "todo o nada") — mismo trato de
+    // inmunidad que la presión de partido de verdad (i !== 5, "nervios de
+    // acero"), y el propio temple amortigua cuánto sube
+    if (match.training === 'PRESION' && i !== 5) {
+      const drillLen = drillFor('PRESION').balls;
+      const stage = clamp((drillLen - match.ballsLeftP) / drillLen, 0, 1);
+      const press = (1 - s.getStat('temple') / 10) * 0.5;
+      shake *= 1 + press * (0.3 + stage * 1.3);
+    }
+    // drill de FONDO: el pulso se resiente a medida que se acumulan
+    // tiradas seguidas sin descanso — el aguante amortigua cuánto crece
+    if (match.training === 'FONDO') {
+      const drillLen = drillFor('FONDO').balls;
+      const done = drillLen - match.ballsLeftP;
+      const fatigueGrowth = Math.max(0, done * (0.07 - s.getStat('aguante') * 0.006));
+      shake *= 1 + fatigueGrowth;
     }
     if (i === 8 && match.firstManoWon === true) shake *= 0.8; // FERMÍN supersticioso
     if (i === 9 && !match.training) shake *= match.stage === 2 ? 0.85 : match.stage === 0 ? 1.15 : 1; // BLAS

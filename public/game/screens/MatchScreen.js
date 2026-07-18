@@ -2,6 +2,7 @@ import { CW, CH, COURT_X, COURT_Y, THROW_X, GRAV } from '../physics/constants.js
 import { CLIMAS, isRainy } from '../data/climas.js';
 import { ABUELO_DATA, STAT_KEYS, STAT_LABEL } from '../data/abuelos.js';
 import { BIG_DIGITS } from '../data/art/staticArt.js';
+import { drillFor } from '../data/trainingDrills.js';
 import { clamp, dist2d } from '../core/utils.js';
 
 export class MatchScreen {
@@ -25,7 +26,8 @@ export class MatchScreen {
 
     screen.text(26, 1, this.game.displayName(M.abuelo), '#4fc3f7');
     const teamSize = M.teamP.length;
-    const ballCount = M.training ? (M.training === 'TIRO' ? 4 : 3) : 3 * teamSize;
+    const drill = M.training ? drillFor(M.training) : null;
+    const ballCount = drill ? drill.balls : 3 * teamSize;
     screen.text(26, 2, `${'●'.repeat(M.ballsLeftP)}${'○'.repeat(Math.max(0, ballCount - M.ballsLeftP))}`, '#4fc3f7');
     const st = pState.st;
     const stCol = st > 60 ? '#7ec850' : st > 30 ? '#ffe14d' : '#ff5c5c';
@@ -38,11 +40,13 @@ export class MatchScreen {
     }
 
     if (M.training) {
-      screen.textCenter(0, `╣ EL DESCAMPADO · ENTRENAMIENTO DE ${M.training} ╠`, '#88c8e8');
-      if (M.training === 'ARRIME') screen.textCenter(4, `PUNTOS: ${M.score} / 16`, M.score >= 16 ? '#7ec850' : '#ffe680');
-      else screen.textCenter(4, `DERRIBADAS: ${M.targetsHit} / 3`, M.targetsHit >= 3 ? '#7ec850' : '#ffe680');
+      const modeLabel = M.practice ? 'PRACTICANDO' : 'ENTRENAMIENTO DE';
+      screen.textCenter(0, `╣ EL DESCAMPADO · ${modeLabel} ${drill.label} ╠`, '#88c8e8');
+      if (drill.hits) screen.textCenter(4, `DERRIBADAS: ${M.targetsHit} / ${drill.target}`, M.targetsHit >= drill.target ? '#7ec850' : '#ffe680');
+      else screen.textCenter(4, `PUNTOS: ${M.score} / ${drill.target}`, M.score >= drill.target ? '#7ec850' : '#ffe680');
       screen.textCenter(6, `bolas restantes: ${M.ballsLeftP}`, '#c9c2a8');
-      screen.textCenter(8, `premio: +${M._trainBonus} ${M.training === 'ARRIME' ? 'PULSO' : 'BRAZO'} para ${this.game.displayName(M.abuelo)}`, '#d8b8e8');
+      if (M.practice) screen.textCenter(8, `práctica libre para ${this.game.displayName(M.abuelo)} — sin coste ni premio`, '#8a8a7a');
+      else screen.textCenter(8, `premio: +${M._trainBonus} ${STAT_LABEL[drill.stat].toUpperCase()} para ${this.game.displayName(M.abuelo)}`, '#d8b8e8');
     } else {
       screen.box(screen.cols - 24, 0, 22, 14, M.turn === 'A' ? '#ef7676' : '#3a3f4a', 'double');
       if (M.rivalMini || M.rivalPortrait) screen.drawAnyPortrait(M.rivalMini || M.rivalPortrait, screen.cols - 22, 1);
@@ -224,7 +228,9 @@ export class MatchScreen {
       return frame % 8 < 3;
     };
 
-    if (M.training === 'ARRIME') {
+    // diana alrededor del boliche: la comparten todos los drills que
+    // puntúan por cercanía (todos menos TIRO, que puntúa por derribos)
+    if (M.training && !drillFor(M.training).hits) {
       for (let dy = -5; dy <= 5; dy++) {
         for (let dx = -10; dx <= 10; dx++) {
           const gx = M.jack.x + dx, gy = M.jack.y + dy;
@@ -235,6 +241,10 @@ export class MatchScreen {
           }
         }
       }
+    }
+    if (M.training === 'EFECTO') {
+      const obstacle = M.balls.find((b) => b.owner === 'T');
+      if (obstacle) screen.put(COURT_X + obstacle.ox, COURT_Y + obstacle.oy, '▓', '#8a5a3a');
     }
     if (M.training === 'TIRO') {
       for (const b of M.balls) if (b.owner === 'T') screen.put(COURT_X + b.ox, COURT_Y + b.oy, '+', '#6a6a5a');
@@ -374,9 +384,10 @@ export class MatchScreen {
         won ? '#7CFC00' : '#ff5c5c');
       screen.text(85, py + 1, '[ENTER] continuar', '#c9c2a8');
     } else if (M.phase === 'trainEnd') {
-      const statName = M.training === 'ARRIME' ? 'PULSO' : 'BRAZO';
+      const statName = STAT_LABEL[drillFor(M.training).stat].toUpperCase();
+      const doneLabel = M.practice ? '¡PRÁCTICA SUPERADA!' : '¡ENTRENAMIENTO SUPERADO!';
       screen.text(5, py + 1, M.success
-        ? `¡ENTRENAMIENTO SUPERADO! +${M._trainBonus} ${statName} para ${this.game.displayName(M.abuelo)}.`
+        ? (M.practice ? `${doneLabel} Buena sesión para ${this.game.displayName(M.abuelo)}.` : `${doneLabel} +${M._trainBonus} ${statName} para ${this.game.displayName(M.abuelo)}.`)
         : 'No ha podido ser. Mañana más, que el cuerpo ya no es el que era.',
         M.success ? '#7CFC00' : '#ff8c5b');
       screen.text(85, py + 1, '[ENTER] volver a la peña', '#c9c2a8');

@@ -10,6 +10,8 @@ import { FOREIGN_COUNTRIES } from '../data/countries.js';
 import { generateScoutPortrait } from '../data/art/scoutPortraits.js';
 import { resetChemistryFor, bondLabel } from '../domain/Chemistry.js';
 import { CrestGenerator } from '../portraits/CrestGenerator.js';
+import { TRAINING_DRILLS } from '../data/trainingDrills.js';
+import { archetypeForAbuelo } from '../data/abueloArchetypes.js';
 
 const TABLE_X = 4, TABLE_Y0 = 10;
 const TABLE_W = 132;
@@ -68,6 +70,7 @@ export class PenyaScreen {
     this.mScroll = 0;
     this.allocating = null; // id del abuelo con el overlay de reparto de puntos abierto
     this.allocCursor = 0;
+    this.trainDrillPick = null; // modal: { abueloId, cursor } — qué minijuego de entreno agendarle
     this._rDrag = false; // arrastrando la barra de scroll de Plantilla
     this._mDrag = false; // arrastrando la barra de scroll de Mercado
     this.mSort = { key: 'nivel', dir: -1 }; // orden del Mercado: nivel de más a menos, por defecto
@@ -142,6 +145,7 @@ export class PenyaScreen {
     // dispara el mismo frame y te saca de la pantalla sin querer
     if (input.hit('Escape')) {
       if (this.allocating !== null) { this.allocating = null; input.pressed.Escape = false; }
+      else if (this.trainDrillPick) { this.trainDrillPick = null; input.pressed.Escape = false; }
       else if (this.assignScoutFor) { this.assignScoutFor = null; input.pressed.Escape = false; }
       else if (this.assignCountryFor) { this.assignCountryFor = null; input.pressed.Escape = false; }
     }
@@ -178,7 +182,7 @@ export class PenyaScreen {
       const statLabel = STAT_LABEL[player.roster.mentorStatOf(this._pendingMentor)];
       screen.textCenter(8, `¿A QUIÉN ENSEÑA ${this.game.displayName(this._pendingMentor).toUpperCase()}? · su fuerte es ${statLabel} — solo ayuda extra si el pupilo entrena eso · [ENTER] elegir · [M] cancelar`, '#c8a0e8');
     } else {
-      screen.textCenter(8, '[↑/↓] elegir · [ENTER] fichar (fundacional) · [A/T] entrenar · [G] retirar · [M] mentor · [P] repartir puntos · ratón = detalle', '#c9c2a8');
+      screen.textCenter(8, '[↑/↓] elegir · [ENTER] fichar (fundacional) · [T] entrenar · [G] retirar · [M] mentor · [P] repartir puntos · ratón = detalle', '#c9c2a8');
     }
 
     const visibleRows = Math.min(ids.length, MAX_VISIBLE_ROWS);
@@ -251,6 +255,10 @@ export class PenyaScreen {
       this._drawAllocator(this.allocating);
       return;
     }
+    if (this.trainDrillPick) {
+      this._drawTrainDrillModal();
+      return;
+    }
 
     const s = player.roster.get(this.cursor);
 
@@ -266,8 +274,7 @@ export class PenyaScreen {
     if (input.hit('p') || input.hit('P')) { this.allocating = this.cursor; this.allocCursor = 0; }
 
     if (s.st >= player.facilities.trainingCost() && !this.game.trainingScheduledFor(this.cursor) && !s.isInjured(player.seasonClock.day)) {
-      if (input.hit('a') || input.hit('A')) this.game.scheduleTraining(this.cursor, 'ARRIME');
-      if (input.hit('t') || input.hit('T')) this.game.scheduleTraining(this.cursor, 'TIRO');
+      if (input.hit('t') || input.hit('T')) this.trainDrillPick = { abueloId: this.cursor, cursor: 0 };
     }
     if (s.torneos >= RETIRE_AT && (input.hit('g') || input.hit('G'))) {
       const hadLegend = resetChemistryFor(player, this.cursor);
@@ -420,6 +427,39 @@ export class PenyaScreen {
     if (input.hit('Escape') || input.hit('p') || input.hit('P')) this.allocating = null;
   }
 
+  // qué minijuego de entreno agendarle: 5 drills desde que se dejó de
+  // poder solo con [A]rrime/[T]iro directos (con 5 opciones ya no caben
+  // en teclas sueltas sin chocar con [P] repartir puntos, [G] retirar...)
+  _drawTrainDrillModal() {
+    const { screen, input, player } = this.game;
+    const { abueloId } = this.trainDrillPick;
+    const w = 62, h = 6 + TRAINING_DRILLS.length * 2;
+    const x = Math.floor((screen.cols - w) / 2), y = 11;
+    this._fillBlack(x, y, w, h);
+    screen.box(x, y, w, h, '#ffe14d', 'double');
+    screen.text(x + 2, y, ` ¿QUÉ ENTRENA ${this.game.displayName(abueloId).toUpperCase()}? `, '#ffe680');
+
+    let ry = y + 2;
+    TRAINING_DRILLS.forEach((d, i) => {
+      const sel = i === this.trainDrillPick.cursor;
+      const overRow = input.mouse.cy === ry && input.mouse.cx >= x + 2 && input.mouse.cx < x + w - 2;
+      if (sel || overRow) screen.text(x + 2, ry, ' '.repeat(w - 4), '#3a2a10');
+      const label = `${d.label.padEnd(10)} +1 ${STAT_LABEL[d.stat].toUpperCase().padEnd(8)} ${d.desc}`;
+      screen.text(x + 2, ry, label.slice(0, w - 4), sel || overRow ? '#fff' : '#c9c2a8');
+      if (overRow && input.mouse.clicked) this.trainDrillPick.cursor = i;
+      ry += 2;
+    });
+
+    screen.text(x + 2, y + h - 2, '[↑/↓] elegir   [ENTER] agendar   [ESC] cancelar', '#c9c2a8');
+
+    if (input.hit('ArrowUp')) this.trainDrillPick.cursor = (this.trainDrillPick.cursor + TRAINING_DRILLS.length - 1) % TRAINING_DRILLS.length;
+    if (input.hit('ArrowDown')) this.trainDrillPick.cursor = (this.trainDrillPick.cursor + 1) % TRAINING_DRILLS.length;
+    if (input.hit('Enter') || input.hit(' ')) {
+      this.game.scheduleTraining(abueloId, TRAINING_DRILLS[this.trainDrillPick.cursor].id);
+      this.trainDrillPick = null;
+    }
+  }
+
   _drawTooltip(id, mx, my) {
     const { screen, player } = this.game;
     const f = this.game.faces[id];
@@ -440,6 +480,14 @@ export class PenyaScreen {
       lines.push([`  Nv.${s.level}  ${bar}  ${s.xp}/${s.xpToNextLevel()} XP`, '#a8d8ff']);
     }
     if (s.points > 0) lines.push([`  ${s.points} puntos por repartir (clic en el nivel de la tabla)`, '#ffd75e']);
+    // arquetipo propio: se gana entrenando en serio una stat (a diferencia
+    // del arquetipo rival, que es fijo de serie) — ver data/abueloArchetypes.js
+    const archetype = archetypeForAbuelo(s);
+    if (archetype) {
+      lines.push(['ARQUETIPO:', '#ffb347']);
+      lines.push([`  ${archetype.label}`, '#c8a0e8']);
+      wrapText(archetype.desc, 40).forEach((l) => lines.push(['  ' + l, '#9a927a']));
+    }
     lines.push(['CLIMA:', '#ffb347']);
     for (const [k, v] of Object.entries(ABUELO_DATA[id].clima)) {
       const cl = CLIMAS[k];

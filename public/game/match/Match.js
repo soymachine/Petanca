@@ -1,5 +1,6 @@
 import { rnd, clamp, gauss, dist2d } from '../core/utils.js';
-import { ABUELO_DATA } from '../data/abuelos.js';
+import { ABUELO_DATA, STAT_LABEL } from '../data/abuelos.js';
+import { drillFor } from '../data/trainingDrills.js';
 import { BOLAS } from '../data/bolas.js';
 import { CLIMAS, avisoClima, cambioClima } from '../data/climas.js';
 import { RIVALS, ROUND_NAMES } from '../data/cities.js';
@@ -28,16 +29,27 @@ const FORCED_WIND_FEATURES = ['cierzo', 'fohn', 'atlantic'];
 const JACK_DIST_RANGES = { corta: [70, 85], media: [85, 105], larga: [105, 120] };
 const JACK_BAND_RANGES = { arriba: [6, 9], centro: [9, 13], abajo: [13, 16] };
 const JACK_DIST_ORDER = ['corta', 'media', 'larga'];
+
+// frase de acierto por drill de entrenamiento — ver throwDone
+const GOOD_THROW_FLAVOR = {
+  ARRIME: '¡Arrime de libro!',
+  EFECTO: '¡La rodea de libro!',
+  PRESION: '¡Aguanta el pulso pese a los nervios!',
+  FONDO: '¡Sigue firme pese al desgaste!',
+};
 const JACK_BAND_ORDER = ['arriba', 'centro', 'abajo'];
 
 // Una partida: el estado-máquina de fases (puntería, efecto, elevación,
 // potencia, simulación...) más las reglas de puntuación de la petanca.
 // No dibuja nada: MatchScreen lee sus propiedades públicas para pintarlas.
 export class Match {
-  constructor({ tournament, roster, team, training = null, sweetBonus = 0, trainBonus = 1, chemistry = {} }) {
+  constructor({ tournament, roster, team, training = null, practice = false, sweetBonus = 0, trainBonus = 1, chemistry = {} }) {
     this.tournament = tournament;
     this.roster = roster;
-    this.training = training; // null | 'ARRIME' | 'TIRO'
+    this.training = training; // null | 'ARRIME' | 'TIRO' | 'EFECTO' | 'PRESION' | 'FONDO' — ver data/trainingDrills.js
+    // modo Practicar: mismo minijuego, pero gratis y sin premio de stat —
+    // ver Game.startPractice/onMatchFinished (dailyBest en vez de train())
+    this.practice = !!practice;
     this._sweetBonus = sweetBonus;
     this._trainBonus = trainBonus;
     this.chemistry = chemistry; // Player.chemistry — ver domain/Chemistry.js
@@ -79,7 +91,7 @@ export class Match {
     this.round = 1;
     this.phase = 'roundStart'; this.phaseT = 0;
     this.balls = []; this.jack = null; this.jack2 = null; this.twinJacks = false;
-    this.ballsLeftP = training ? (training === 'ARRIME' ? 3 : 4) : 3 * this.teamP.length;
+    this.ballsLeftP = training ? (drillFor(training)?.balls ?? 3) : 3 * this.teamP.length;
     this.ballsLeftA = training ? 0 : 3 * this.teamP.length;
     this.turn = 'P';
     this.aimAngle = 0; this.spin = 0; this.loft = 0.6; this.power = 0; this.powerDir = 1;
@@ -110,11 +122,13 @@ export class Match {
       ? { atRound: 2 + Math.floor(rnd(0, 2)), to: tournament.currentRound.forecast.changeTo, warned: false }
       : null;
 
-    this.narr = training
-      ? (training === 'ARRIME'
-          ? 'ARRIME: suma 16 puntos acercándote a la diana con 3 bolas. Premio: +1 PULSO.'
-          : 'TIRO: derriba las 3 bolas viejas en 4 lanzamientos. Premio: +1 BRAZO.')
-      : `${this.rival} te espera en la pista. ${roundFlavor(this.stage)}`;
+    if (training) {
+      const drill = drillFor(training);
+      const rewardTxt = this.practice ? ' Modo práctica: gratis, sin coste ni premio de stat.' : ` Premio: +1 ${STAT_LABEL[drill.stat].toUpperCase()}.`;
+      this.narr = drill.desc + rewardTxt;
+    } else {
+      this.narr = `${this.rival} te espera en la pista. ${roundFlavor(this.stage)}`;
+    }
 
     this.court.setupFeature(this.weather.type, this.city.diff);
     if (FORCED_WIND_FEATURES.includes(this.feature) && this.weather.type !== 'VIENTO' && Math.random() < 0.4) {
@@ -131,11 +145,13 @@ export class Match {
   }
 
   // el entrenamiento no pasa por el flujo de "mano" del torneo: se lanza
-  // directo a apuntar, sin aviso de clima ni desgaste de calor.
+  // directo a apuntar, sin aviso de clima ni desgaste de calor. ARRIME,
+  // EFECTO, PRESIÓN y FONDO comparten el mismo terreno (diana alrededor
+  // del boliche); EFECTO además coloca una bola bloqueando la línea recta
+  // (hay que rodearla con efecto, ver throwDone) y TIRO es el único que
+  // usa un terreno propio (bolas viejas que derribar).
   _setupTraining() {
-    if (this.training === 'ARRIME') {
-      this.jack = new Ball({ x: rnd(80, 110), y: rnd(7, CH - 7), owner: 'J' });
-    } else {
+    if (this.training === 'TIRO') {
       this.jack = new Ball({ x: 130, y: 1, owner: 'J' });
       for (let k = 0; k < 3; k++) {
         const tx = rnd(78, 112), ty = rnd(5, CH - 5);
@@ -143,6 +159,13 @@ export class Match {
         b.ox = tx; b.oy = ty;
         this.balls.push(b);
       }
+    } else if (this.training === 'EFECTO') {
+      this.jack = new Ball({ x: rnd(88, 108), y: rnd(9, 13), owner: 'J' });
+      const mid = new Ball({ x: (THROW_X + this.jack.x) / 2, y: this.jack.y, owner: 'T' });
+      mid.ox = mid.x; mid.oy = mid.y;
+      this.balls.push(mid);
+    } else {
+      this.jack = new Ball({ x: rnd(80, 110), y: rnd(7, CH - 7), owner: 'J' });
     }
     this.court.weather = this.weather.type;
     this.phase = 'aim'; this.phaseT = 0;
@@ -572,14 +595,36 @@ export class Match {
           this.jack2 = null; this.twinJacks = false;
         }
 
-        if (this.training === 'ARRIME') {
-          const d = dist2d(this.lastThrown.x, this.lastThrown.y, this.jack.x, this.jack.y);
-          const gained = Math.max(0, Math.round(10 - d));
-          this.score += gained;
-          this.narr = gained > 6 ? `¡Arrime de libro! +${gained} puntos.`
-            : gained > 0 ? `Se queda a ${d.toFixed(1)} pasos. +${gained} puntos.`
-            : 'Demasiado lejos. Eso no puntúa.';
-          if (this.ballsLeftP === 0) { this.success = this.score >= 16; this.phase = 'trainEnd'; this.phaseT = 0; }
+        // ARRIME/EFECTO/PRESIÓN/FONDO comparten la misma fórmula de arrime
+        // (10-distancia por bola, hasta el objetivo del drill); solo TIRO
+        // (más abajo) puntúa por derribos en vez de por cercanía. EFECTO
+        // además puede "bloquear" la bola si choca con la que corta la
+        // línea recta (hay que rodearla con efecto) — se detecta con
+        // wasHit, reseteado cada tiro para no arrastrar el choque anterior.
+        if (this.training && this.training !== 'TIRO') {
+          const drill = drillFor(this.training);
+          const obstacle = this.training === 'EFECTO' ? this.balls.find((b) => b.owner === 'T') : null;
+          const blocked = !!(obstacle && obstacle.wasHit);
+          if (obstacle) obstacle.wasHit = false;
+          if (blocked) {
+            this.narr = '¡Choque con la bola que bloquea! No cuenta esta bola.';
+          } else {
+            const d = dist2d(this.lastThrown.x, this.lastThrown.y, this.jack.x, this.jack.y);
+            const gained = Math.max(0, Math.round(10 - d));
+            this.score += gained;
+            this.narr = gained > 6 ? `${GOOD_THROW_FLAVOR[this.training]} +${gained} puntos.`
+              : gained > 0 ? `Se queda a ${d.toFixed(1)} pasos. +${gained} puntos.`
+              : 'Demasiado lejos. Eso no puntúa.';
+          }
+          // si quedan más bolas, el obstáculo vuelve a su sitio de partida:
+          // debe cortar la línea recta en TODAS las tiradas del drill, no
+          // solo en la primera (si no, tras el primer golpe quedaría
+          // apartado y el resto de bolas ya no tendrían nada que rodear)
+          if (obstacle && this.ballsLeftP > 0) {
+            obstacle.x = obstacle.ox; obstacle.y = obstacle.oy;
+            obstacle.vx = 0; obstacle.vy = 0; obstacle.vz = 0; obstacle.z = 0; obstacle.moving = false;
+          }
+          if (this.ballsLeftP === 0) { this.success = this.score >= drill.target; this.phase = 'trainEnd'; this.phaseT = 0; }
           else { this.phase = 'aim'; this.phaseT = 0; }
           break;
         }
@@ -642,8 +687,11 @@ export class Match {
 
       case 'trainEnd':
         if (this.phaseT > 0.8 && (input.hit('Enter') || input.hit(' '))) {
-          if (this.success) {
-            const k = this.training === 'ARRIME' ? 'pulso' : 'brazo';
+          // en modo Practicar no hay premio de stat (ver Game.startPractice):
+          // el único registro que queda es la marca personal (dailyBest),
+          // que se guarda fuera de Match.js porque vive en Player, no en Roster
+          if (this.success && !this.practice) {
+            const k = drillFor(this.training).stat;
             const mentorBonus = this.roster.mentorBonusFor ? this.roster.mentorBonusFor(this.abuelo, k) : 0;
             this.roster.get(this.abuelo).train(k, (this._trainBonus || 1) + mentorBonus);
           }

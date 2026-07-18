@@ -18,6 +18,7 @@ import { FriendlyMatchContext } from '../domain/FriendlyMatchContext.js';
 import { DIFFICULTIES } from '../data/difficulty.js';
 import { CLIMAS } from '../data/climas.js';
 import { STAT_LABEL } from '../data/abuelos.js';
+import { drillFor } from '../data/trainingDrills.js';
 import { resetChemistryFor } from '../domain/Chemistry.js';
 import { Chronicle } from '../match/Chronicle.js';
 import { DECISION_EVENTS, decisionEventById, fillDecisionText } from '../data/decisionEvents.js';
@@ -671,10 +672,23 @@ export class Game {
   startTraining(id, drill) {
     this.match = new Match({
       tournament: null, roster: this.player.roster, team: [id], training: drill,
-      trainBonus: this.player.facilities.trainingStatBonus(),
+      trainBonus: this.player.facilities.trainingStatBonus(drillFor(drill).stat),
     });
     this.match.setNameProvider((id2) => this.displayName(id2));
     this.player.roster.get(id).st = Math.max(0, this.player.roster.get(id).st - this.player.facilities.trainingCost());
+    this.player.save();
+    this.state = 'match';
+  }
+
+  // modo Practicar: el mismo minijuego, pero gratis (sin coste de STA, sin
+  // ocupar un día de la Agenda) y sin premio de stat — solo para coger
+  // soltura con los controles. Ver Match.practice / onMatchFinished.
+  startPractice(id, drill) {
+    this.match = new Match({
+      tournament: null, roster: this.player.roster, team: [id], training: drill, practice: true,
+      trainBonus: this.player.facilities.trainingStatBonus(drillFor(drill).stat),
+    });
+    this.match.setNameProvider((id2) => this.displayName(id2));
     this.player.save();
     this.state = 'match';
   }
@@ -777,8 +791,19 @@ export class Game {
   onMatchFinished() {
     const M = this.match;
     if (M.training) {
+      // en modo Practicar no hay premio de stat (gratis, sin coste): lo
+      // único que queda de la sesión es la marca personal — revive
+      // Player.dailyBest, que existía desde hace tiempo pero no lo usaba
+      // nadie. TIRO se mide en derribos, el resto en puntos de arrime.
+      if (M.practice) {
+        const val = drillFor(M.training).hits ? M.targetsHit : M.score;
+        this.player.dailyBest[M.training] = Math.max(this.player.dailyBest[M.training] || 0, val);
+        this.screens.club.section = 'facilities';
+        this.state = 'club';
+      } else {
+        this.state = 'hub';
+      }
       this.player.save();
-      this.state = 'hub';
       return;
     }
     if (M.injuryEvent) {
