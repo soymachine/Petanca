@@ -1,20 +1,25 @@
 # Next steps
 
-Segunda pasada sobre los escudos de club, ya implementada:
+Rediseño completo de la pantalla de Inicio, ya implementado:
 
-1. **Un 50% más grandes** — el escudo "de héroe" pasa de 9x9 a 13x13
-   (ResultScreen, tooltip de Ligas). El mini de Mi Peña crece de 5x7 a 5x9
-   (el ancho sí sube un 28%; el alto se queda en 5 filas porque la fila 8
-   de esa pantalla ya la usa el texto de ayuda de cada sección — subirlo
-   más se lo comería).
-2. **Formas más variadas** — de 5 siluetas a 8: se añaden estrella (4
-   puntas a lo brújula), hexágono (lados rectos largos) y cruz, además de
-   escudo/círculo/diamante/cuadrado/banderín. Mismo orden en SHAPES y
-   MINI_SHAPES para que un mismo club "vaya a juego" a las dos escalas.
-3. **Degradados en vez de colores planos** — el color base ya no es un
-   único tono por mitad del escudo: se aproxima un degradado real
-   (vertical / horizontal / diagonal / radial) con varias bandas finas
-   interpoladas entre 2 colores, como el dithering de un pixel art retro
-   (`CrestGenerator.gradientLayers`).
+1. **Tarjeta de identidad** — el escudo "de héroe" (13x13) junto al nombre
+   del club, nivel de liga, renombre y caja.
+2. **Próximo partido** (sustituye "PRÓXIMOS 7 DÍAS") — rival de la próxima
+   jornada con su escudo mini, más Copa/Copa de Europa (antes sueltas en
+   la cabecera). Clic → Agenda.
+3. **Clasificación** en su propia tarjeta — rango/puntos/récord, con
+   ▲/▼ si tocan ascenso/descenso. Rollover enseña la tabla completa de la
+   liga en un tooltip; clic → Ligas.
+4. **Objetivo de la junta** en su propia tarjeta — resumen del objetivo de
+   temporada y semanal más una barra de confianza. Clic → El Club › **LA
+   JUNTA** (pestaña nueva, junto a Descampado/Patrocinios): presidente
+   (nombre/arquetipo/tono, ya deterministas por club), confianza en
+   grande, ultimátums de la temporada y el detalle completo de ambos
+   objetivos.
+5. **Última noticia** (sustituye el listado de 10 titulares) — solo el más
+   reciente, a toda plana. Clic → Hemeroteca.
+6. **Aviso de crisis de la junta** como banner fijo arriba de todo si
+   aplica, y el aviso de imprevistos (negociación/lesión/fallecimiento) se
+   mantiene en un sitio fijo fuera de las tarjetas, sin tocar.
 
 Este archivo queda vacío a la espera de la próxima tanda de ideas.

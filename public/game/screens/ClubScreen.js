@@ -1,13 +1,15 @@
 import { wrapText, hitRect, drawTabRow } from '../core/utils.js';
 import { TabsBar } from './TabsBar.js';
 import { SHIRT_SPONSOR_POOL } from '../data/sponsors.js';
+import { boardPresidentFor, boardAdj } from '../data/boardPresident.js';
 
-const SECTIONS = ['facilities', 'sponsor'];
-const SECTION_LABEL = { facilities: 'DESCAMPADO', sponsor: 'PATROCINIOS' };
+const SECTIONS = ['facilities', 'sponsor', 'junta'];
+const SECTION_LABEL = { facilities: 'DESCAMPADO', sponsor: 'PATROCINIOS', junta: 'LA JUNTA' };
 
-// Gestión del club: mejoras del descampado y patrocinios. Los ojeadores
-// (contratar y asignar) viven ahora en Mi Peña, junto al Mercado que
-// vigilan — ver PenyaScreen.js.
+// Gestión del club: mejoras del descampado, patrocinios y la junta
+// directiva (objetivos, confianza, presidente). Los ojeadores (contratar
+// y asignar) viven ahora en Mi Peña, junto al Mercado que vigilan — ver
+// PenyaScreen.js.
 export class ClubScreen {
   constructor(game) { this.game = game; this.cursor = 0; this.section = 'facilities'; }
 
@@ -22,7 +24,8 @@ export class ClubScreen {
     screen.text(110, 6, `nómina semanal: ${nomina}€`, '#c98080');
 
     if (this.section === 'facilities') this._drawFacilities();
-    else this._drawSponsor();
+    else if (this.section === 'sponsor') this._drawSponsor();
+    else this._drawJunta();
 
     if (clicked !== null) { this.section = SECTIONS[clicked]; this.cursor = 0; }
     else if (input.hit('q') || input.hit('Q')) {
@@ -138,6 +141,53 @@ export class ClubScreen {
         player.news.push(`${s.name} se convierte en el nuevo patrocinador de camiseta de ${player.clubName}. +${s.signBonus}€.`);
         player.save();
       }
+    }
+  }
+
+  // toda la información de la junta directiva en un sitio: quién es el
+  // presidente (nombre/arquetipo/tono ya deterministas por club, ver
+  // data/boardPresident.js), la confianza y sus ultimátums, y el detalle
+  // completo de los objetivos de temporada y semanal — Inicio solo enseña
+  // un resumen clicable de esto último (ver HubScreen._drawBoardCard)
+  _drawJunta() {
+    const { screen, player } = this.game;
+    const pres = boardPresidentFor(player.clubName);
+
+    screen.box(4, 8, 64, 20, '#8a7f66');
+    screen.text(7, 9, 'LA JUNTA DIRECTIVA', '#ffb347');
+    screen.text(7, 11, pres.name, '#ffe680');
+    screen.text(7, 12, `presidente${boardAdj(pres, '', 'a')} ${pres.archetype}`, '#c9a35d');
+    wrapText(`"${pres.tone}."`, 56).forEach((l, i) => screen.text(7, 14 + i, l, '#9a927a'));
+
+    const confCol = player.boardConfidence <= 25 ? '#ff5c5c' : player.boardConfidence <= 50 ? '#ffe14d' : '#88e088';
+    const filled = Math.round((player.boardConfidence / 100) * 40);
+    const bar = `${'▓'.repeat(filled)}${'░'.repeat(40 - filled)}`;
+    screen.text(7, 19, 'Confianza:', '#8a7f66');
+    screen.text(7, 20, bar, confCol);
+    screen.text(7, 21, `${player.boardConfidence}/100`, confCol);
+
+    screen.text(7, 23, `Ultimátums esta temporada: ${player.boardUltimatums}`, player.boardUltimatums > 0 ? '#ff8c5b' : '#8a8a7a');
+    if (player.boardCrisis) {
+      screen.text(7, 25, '⚠ un ultimátum más y os bajan de categoría sin miramientos.', '#ff5c5c');
+    } else {
+      screen.text(7, 25, 'La junta no ha tenido que dar ningún ultimátum esta temporada.', '#8a8a7a');
+    }
+
+    const bx = 72;
+    screen.box(bx, 8, 64, 20, '#8a7f66');
+    screen.text(bx + 3, 9, 'OBJETIVOS', '#ffb347');
+    screen.text(bx + 3, 11, 'DE TEMPORADA', '#c9a35d');
+    wrapText(player.boardGoal.desc, 56).forEach((l, i) => screen.text(bx + 3, 12 + i, l, '#c8a0e8'));
+    screen.text(bx + 3, 15, `Si se cumple: +${player.boardGoal.rewardMoney}€`, '#7ec850');
+    screen.text(bx + 3, 16, `Si no: -${player.boardGoal.penaltyMoney}€`, '#ff8c5b');
+
+    screen.text(bx + 3, 19, 'DE ESTA SEMANA', '#c9a35d');
+    if (player.weeklyGoal) {
+      wrapText(player.weeklyGoal.desc, 56).forEach((l, i) => screen.text(bx + 3, 20 + i, l, '#c8a0e8'));
+      screen.text(bx + 3, 23, `Si se cumple: +${player.weeklyGoal.reward}€`, '#7ec850');
+      if (player.weeklyGoal.penalty > 0) screen.text(bx + 3, 24, `Si no: -${player.weeklyGoal.penalty}€`, '#ff8c5b');
+    } else {
+      screen.text(bx + 3, 20, 'Sin objetivo semanal activo ahora mismo.', '#8a8a7a');
     }
   }
 }
