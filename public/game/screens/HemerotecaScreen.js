@@ -1,5 +1,5 @@
 import { TabsBar } from './TabsBar.js';
-import { wrapText, mulberry32, hashStr } from '../core/utils.js';
+import { wrapText, mulberry32, hashStr, clamp } from '../core/utils.js';
 
 const PAGE_X = 5, PAGE_Y = 4, PAGE_W = 130, PAGE_H = 39;
 const FILLER = ['▓', '▓', '▒', '░'];
@@ -25,12 +25,18 @@ const BIG_GLYPH_W = 5, BIG_GLYPH_GAP = 1, BIG_SPACE_W = 4;
 // de la página en cada edición, como si tocara buscarlo. Se pasa página
 // con flechas, como quien hojea un diario viejo.
 export class HemerotecaScreen {
-  constructor(game) { this.game = game; this.page = 0; }
+  constructor(game) { this.game = game; this.page = 0; this.mode = 'normal'; this.annalScroll = 0; }
 
   draw() {
     const { screen, input, player, frame } = this.game;
     screen.clear();
     TabsBar.draw(this.game, 'hemeroteca');
+
+    if (input.hit('h') || input.hit('H')) {
+      this.mode = this.mode === 'normal' ? 'historica' : 'normal';
+      this.annalScroll = 0;
+    }
+    if (this.mode === 'historica') { this._drawHistorica(); return; }
 
     const news = player.news.latest(30);
     if (this.page >= news.length) this.page = Math.max(0, news.length - 1);
@@ -57,10 +63,48 @@ export class HemerotecaScreen {
     const nextLabel = 'más reciente [→] ▶';
     screen.text(PAGE_X + PAGE_W - 2 - nextLabel.length, PAGE_Y + PAGE_H - 1, canNext && frame % 20 < 14 ? nextLabel : '', canNext ? '#ffe680' : '#3a352c');
 
-    screen.textCenter(45, '[←/→] pasar página   [1] inicio', '#c9c2a8');
+    screen.textCenter(45, '[←/→] pasar página   [H] anales del club   [1] inicio', '#c9c2a8');
 
     if (input.hit('ArrowLeft') && canPrev) this.page++;
     if (input.hit('ArrowRight') && canNext) this.page--;
+  }
+
+  // "ANALES DEL CLUB": a diferencia de la hemeroteca normal (un titular
+  // escondido entre ruido por página, que se pierde tras 30 ediciones),
+  // esto es Player.annals — permanente y sin podar. Se listan en legible
+  // de verdad, sin el gimmick de "buscar el titular", porque estos hitos
+  // están para encontrarse a la primera, no para rebuscarlos.
+  _drawHistorica() {
+    const { screen, input, player } = this.game;
+    screen.box(PAGE_X - 1, PAGE_Y - 1, PAGE_W + 2, PAGE_H + 2, '#c9a35d');
+    this._fillPaper();
+    this._drawBigTextCenter(PAGE_Y + 1, 'ANALES DEL CLUB', '#ffe14d');
+    screen.textCenter(PAGE_Y + 7, `${player.clubName.toUpperCase()} — LOS HITOS QUE NO SE OLVIDAN`, '#c9a35d');
+    screen.text(PAGE_X + 1, PAGE_Y + 8, '─'.repeat(PAGE_W - 2), '#8a7f66');
+
+    const annals = player.annals.slice().reverse(); // más reciente primero
+    const listY = PAGE_Y + 10, listBottom = PAGE_Y + PAGE_H - 3;
+    if (!annals.length) {
+      screen.textCenter(listY + 4, 'Todavía no hay hitos que contar.', '#8a8a7a');
+      screen.textCenter(listY + 5, 'Los títulos, ascensos y campanadas quedarán aquí para siempre.', '#8a8a7a');
+    } else {
+      this.annalScroll = clamp(this.annalScroll, 0, Math.max(0, annals.length - 1));
+      let y = listY;
+      for (let i = this.annalScroll; i < annals.length; i++) {
+        const a = annals[i];
+        const lines = wrapText(a.text, PAGE_W - 8);
+        const blockH = 1 + lines.length + 1;
+        if (y + blockH > listBottom) break;
+        screen.text(PAGE_X + 3, y, a.dateLabel.toUpperCase(), '#8a7f66');
+        lines.forEach((l, k) => screen.text(PAGE_X + 3, y + 1 + k, l, '#fff6dc'));
+        y += blockH;
+      }
+      if (input.hit('ArrowDown')) this.annalScroll = Math.min(annals.length - 1, this.annalScroll + 1);
+      if (input.hit('ArrowUp')) this.annalScroll = Math.max(0, this.annalScroll - 1);
+    }
+
+    screen.textCenter(PAGE_Y + PAGE_H - 1, `${annals.length} hito${annals.length === 1 ? '' : 's'} en la historia del club`, '#8a7f66');
+    screen.textCenter(45, '[↑/↓] desplazar   [H] volver a la hemeroteca   [1] inicio', '#c9c2a8');
   }
 
   _fillPaper() {

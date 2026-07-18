@@ -12,6 +12,8 @@ import { rivalPersonalityLine } from '../data/rivalPersonality.js';
 import { countryTag } from '../data/countries.js';
 import { chemistryKey, chemistryLevel, CHEMISTRY_LEVELS } from '../domain/Chemistry.js';
 import { Chronicle } from '../match/Chronicle.js';
+import { composeBiography } from '../data/biografias.js';
+import { boardPresidentFor, boardAdj } from '../data/boardPresident.js';
 
 function maybeDropItem(roster, candidates) {
   const eligible = candidates.filter((i) => !roster.get(i).item);
@@ -70,7 +72,7 @@ export class Career {
       p.news.push(won
         ? `¡EL DERBI! ${p.clubName} se lleva el partido contra su eterno rival, ${opponent.name} (${p.derbyHistory.wins}-${p.derbyHistory.losses} en el historial).`
         : `EL DERBI se lo lleva ${opponent.name}. Se aprieta los dientes hasta la próxima (${p.derbyHistory.wins}-${p.derbyHistory.losses}).`);
-      if (opponent.captain) p.news.push(`DESDE ${opponent.name}: ${rivalPersonalityLine(opponent)}`);
+      if (opponent.captain) p.news.push(`DESDE ${opponent.name}: ${rivalPersonalityLine(opponent, p.publicImage)}`);
     }
 
     const promiseBroken = !!(p.pressPromise && p.pressPromise.opponentId === opponent.id && !won && p.pressPromise.loseBonus < 0);
@@ -101,16 +103,18 @@ export class Career {
         crisisDemotion = league.level > 1;
         money -= 250;
         p.boardConfidence = 45;
+        const pres = boardPresidentFor(p.clubName);
         if (crisisDemotion) {
-          p.news.push(`CRISIS EN LA JUNTA: segundo ultimátum de la temporada. Os bajan de categoría sin miramientos, a ${cityAt(league.level - 1)}, y multa de 250€.`);
+          p.news.push(`${pres.name.toUpperCase()} YA NO AGUANTA MÁS: segundo ultimátum de la temporada. Os bajan de categoría sin miramientos, a ${cityAt(league.level - 1)}, y multa de 250€.`);
         } else {
-          p.news.push(`CRISIS EN LA JUNTA: segundo ultimátum de la temporada. Ya no quedan categorías más abajo, pero la multa es de 250€ y la paciencia sigue bajo mínimos.`);
+          p.news.push(`${pres.name.toUpperCase()} YA NO AGUANTA MÁS: segundo ultimátum de la temporada. Ya no quedan categorías más abajo, pero la multa es de 250€ y la paciencia sigue bajo mínimos.`);
         }
       } else {
         p.boardCrisis = true;
         money -= 100;
         p.boardConfidence = 35;
-        p.news.push(`ULTIMÁTUM DE LA JUNTA: la paciencia se ha agotado. Multa de 100€ — como vuelva a pasar esta temporada, no será solo dinero.`);
+        const pres = boardPresidentFor(p.clubName);
+        p.news.push(`ULTIMÁTUM DE ${pres.name.toUpperCase()}: ${pres.tone}. La paciencia se ha agotado — multa de 100€, como vuelva a pasar esta temporada no será solo dinero.`);
       }
     }
 
@@ -120,6 +124,7 @@ export class Career {
       ? Chronicle.compose(chronicleFacts, {
           won, scoreP: finalScoreP, scoreA: finalScoreA, rivalName: opponent.name,
           clubName: p.clubName, venueLabel: `la liga de ${league.cityName}`, promiseBroken,
+          publicImage: p.publicImage,
         })
       : (won
           ? `${p.clubName} gana ${finalScoreP}-${finalScoreA} a ${opponent.name} en la liga de ${league.cityName}.`
@@ -265,6 +270,7 @@ export class Career {
       p.seasonsPlayed++;
       p.boardCrisis = false; // temporada nueva, cuenta atrás de ultimátums a cero
       for (const id of p.roster.ids) p.roster.get(id).age++;
+      this._ageRivalWorld(p, league);
       const rank = league.myRank();
       const table = league.standings();
       let boardResult = null;
@@ -273,11 +279,15 @@ export class Career {
         boardResult = bo.settle(rank);
         money += boardResult.amount;
         p.boardConfidence = clamp(p.boardConfidence + (boardResult.met ? 20 : -25), 0, 100);
+        const pres = boardPresidentFor(p.clubName);
         p.news.push(boardResult.met
-          ? `La junta directiva respira: cumplís el objetivo. +${boardResult.amount}€.`
-          : `La junta directiva no está contenta: no llegáis al objetivo. ${boardResult.amount}€.`);
+          ? `${pres.name} respira: cumplís el objetivo. +${boardResult.amount}€.`
+          : `${pres.name} no queda ${boardAdj(pres, 'contento', 'contenta')}: no llegáis al objetivo. ${boardResult.amount}€.`);
       }
-      if (rank === 1) p.seasonTitles++;
+      if (rank === 1) {
+        p.seasonTitles++;
+        p.addAnnal(`¡CAMPEONES DE LA LIGA DE ${league.cityName}! ${p.clubName} corona la temporada en lo más alto de su categoría.`);
+      }
 
       const promoted = rank <= 2 && league.level < 8;
       const relegated = rank >= 9 && league.level > 1;
@@ -287,6 +297,10 @@ export class Career {
         p.currentLeagueLevel = league.level + 1;
         p.leagueWorld.movePlayer(fromLevel, p.currentLeagueLevel, p.clubName);
         p.news.push(`¡ASCENSO! ${p.clubName} sube a la liga de ${cityAt(p.currentLeagueLevel)} tras acabar ${rank}º.`);
+        if (p.currentLeagueLevel === 8 && !p.reachedTopFlight) {
+          p.reachedTopFlight = true;
+          p.addAnnal(`${p.clubName} PISA MADRID POR PRIMERA VEZ: ascenso a la máxima categoría de la liga federada.`);
+        }
       } else if (relegated) {
         p.relegations++;
         p.currentLeagueLevel = Math.max(1, league.level - 1);
@@ -355,6 +369,34 @@ export class Career {
     }
   }
 
+  // el mundo también envejece: los clubes IA de la liga española completa
+  // y de las 3 de fondo de cada país extranjero pierden y ganan jugadores
+  // por edad, igual que tu propia peña (ver Club.ageAndRenew). Si el
+  // capitán que se retira era el del derbi o el del némesis, se anuncia —
+  // esas son las dos únicas relaciones que el jugador sigue de cerca, así
+  // que son las únicas que merecen una noticia entre cientos de clubes.
+  _ageRivalWorld(p, league) {
+    const derbyBefore = p.derbyClub ? p.derbyClub.captain : null;
+    const nemesisClub = p.nemesis ? league.clubById(p.nemesis.city) : null;
+    const nemesisCaptainBefore = nemesisClub ? nemesisClub.captain : null;
+
+    for (const [, lg] of p.leagueWorld.leagues) {
+      for (const c of lg.clubs) {
+        if (c.isPlayer) continue;
+        const retired = c.ageAndRenew();
+        if (!retired) continue;
+        if (derbyBefore && retired.id === derbyBefore.id) {
+          p.news.push(`EL DERBI CAMBIA DE CARA: el capitán de siempre en ${p.derbyClub.name} cuelga la petanca. Toma el relevo alguien con ganas de hacerse un nombre.`);
+        } else if (nemesisCaptainBefore && retired.id === nemesisCaptainBefore.id) {
+          p.news.push(`VUESTRO NÉMESIS TAMBIÉN CAMBIA DE CARA: se retira quien capitaneaba ${nemesisClub.name}. La rivalidad sigue, pero con otra mano al frente.`);
+        }
+      }
+    }
+    for (const world of p.foreignLeagues.values()) {
+      for (const [, lg] of world.leagues) for (const c of lg.clubs) c.ageAndRenew();
+    }
+  }
+
   // liquida la deuda de sangre de cualquiera de los `usados` que arrastre
   // una cuenta pendiente con el club rival de este partido (ver
   // AbueloState.retireToGrandchild / Game.js._startWeeklyMatch) — solo si
@@ -386,6 +428,9 @@ export class Career {
         const lvlBefore = chemistryLevel(before), lvlAfter = chemistryLevel(after);
         if (lvlAfter > lvlBefore && CHEMISTRY_LEVELS[lvlAfter].label) {
           p.news.push(`COMPENETRACIÓN: ${this.nameOf(a)} y ${this.nameOf(b)} ${CHEMISTRY_LEVELS[lvlAfter].label}. Se les nota en la pista.`);
+          if (lvlAfter === CHEMISTRY_LEVELS.length - 1) {
+            p.addAnnal(`PAREJA DE LEYENDA: ${this.nameOf(a)} y ${this.nameOf(b)} alcanzan la compenetración máxima tras años rodados juntos.`);
+          }
         }
         if (won && lvlAfter === CHEMISTRY_LEVELS.length - 1) {
           p.roster.get(a).addMoral(1);
@@ -422,6 +467,15 @@ export class Career {
         `RUMOR: ${cand.name} anda mirando ofertas, según cuentan. Habrá que echar un ojo al Mercado.`,
       ];
       p.news.push(templates[Math.floor(Math.random() * templates.length)]);
+    }
+
+    // reportaje sobre un abuelo concreto: racha, vínculo, mentoría,
+    // herencia, veteranía o nivel — para que la Hemeroteca hable de
+    // personas y no solo de resultados y cotilleo genérico (ver
+    // data/biografias.js, que reutiliza datos ya trackeados en otro sitio)
+    if (Math.random() <= 0.08) {
+      const bio = composeBiography(p, (id) => this.nameOf(id));
+      if (bio) p.news.push(bio);
     }
   }
 

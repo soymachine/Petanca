@@ -1,3 +1,5 @@
+import { clamp } from '../core/utils.js';
+
 // Compone la crónica de un partido jugado en vivo a partir de los hechos
 // reales acumulados en Match.chronicle (ver Match.js: resolveMano, el bloque
 // de falta/lesión, el cambio de clima y la medición) — no inventa nada que
@@ -32,10 +34,14 @@ function factClause(fact) {
 }
 
 export const Chronicle = {
-  // ctx: { won, scoreP, scoreA, rivalName, clubName, venueLabel, promiseBroken }
+  // ctx: { won, scoreP, scoreA, rivalName, clubName, venueLabel, promiseBroken, publicImage }
   compose(facts, ctx) {
     const picked = PRIORITY.map((t) => facts.find((f) => f.t === t)).filter(Boolean).slice(0, 3);
-    const cronista = ctx.promiseBroken ? 'paco' : (Math.random() < 0.25 ? 'paco' : 'eladio');
+    // Arenas tiene más munición cuanto más fanfarrón te has labrado fama de
+    // ser (ver Player.publicImage): su probabilidad base sube o baja con
+    // ella, aunque una promesa de prensa rota siempre se la lleva él
+    const arenasChance = clamp(0.25 + (ctx.publicImage || 0) * 0.006, 0.05, 0.9);
+    const cronista = ctx.promiseBroken ? 'paco' : (Math.random() < arenasChance ? 'paco' : 'eladio');
 
     const scoreLabel = ctx.won ? `${ctx.scoreP}-${ctx.scoreA}` : `${ctx.scoreA}-${ctx.scoreP}`;
     let body = ctx.won

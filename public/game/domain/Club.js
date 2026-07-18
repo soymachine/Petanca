@@ -1,6 +1,7 @@
 import { RivalPlayer } from './RivalPlayer.js';
 import { nationalityByCode } from '../data/names.js';
 import { strengthFor } from '../data/countries.js';
+import { clamp } from '../core/utils.js';
 
 // nombres de club: mismo patrón prefijo+sufijo en todos los países, con
 // vocabulario propio de la petanca de cada uno (pétanque/boule/bocce/...)
@@ -94,6 +95,34 @@ export class Club {
   get captain() {
     if (!this.players.length) return null;
     return this.players.reduce((best, p) => (p.avgSkill > best.avgSkill ? p : best), this.players[0]);
+  }
+
+  // el mundo simulado también envejece: cada fin de temporada, cada
+  // jugador cumple un año y, con una probabilidad que crece cuadrático a
+  // partir de los 70 (mismo espíritu que AbueloState.deathChance, pero sin
+  // toda la granularidad de moral/lesión que aquí no hace falta), se
+  // retira y un jugador nuevo generado al mismo nivel ocupa su hueco.
+  // Devuelve al retirado (o null) para que quien llame pueda anunciarlo si
+  // le importa — p.ej. si era el capitán del derbi o del némesis.
+  ageAndRenew() {
+    let retired = null;
+    const usedNames = new Set(this.players.map((p) => p.name));
+    for (let i = 0; i < this.players.length; i++) {
+      const pl = this.players[i];
+      pl.age++;
+      const over = Math.max(0, pl.age - 70);
+      const retireChance = clamp(over * over * 0.00004 + over * 0.0004, 0, 0.06);
+      if (Math.random() < retireChance) {
+        retired = pl;
+        usedNames.delete(pl.name);
+        const replacement = RivalPlayer.generate(pl.avgSkill, pl.nationality, usedNames);
+        replacement.clubId = this.id;
+        replacement.forSale = !!pl.forSale;
+        this.players[i] = replacement;
+        usedNames.add(replacement.name);
+      }
+    }
+    return retired;
   }
 
   avgSkill(externalRoster) {

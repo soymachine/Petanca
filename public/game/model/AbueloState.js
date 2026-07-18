@@ -49,6 +49,10 @@ export class AbueloState {
     // pendiente (némesis activa o derbi en contra) — se salda ganando a
     // ese club con el nieto alineado (ver Career.settleDebts)
     this.debt = data.debt ?? null;
+    // presagio de la edad ya disparado (ver data/agingFlavor.js /
+    // Game.js._maybeAgingForeshadow): como mucho una vez por generación,
+    // para no repetir el mismo aviso cada semana
+    this.agingFlavorSeen = data.agingFlavorSeen ?? false;
   }
 
   static fromJSON(id, json) {
@@ -70,6 +74,7 @@ export class AbueloState {
       age: this.age, signed: this.signed, formStreak: this.formStreak, injuredUntil: this.injuredUntil,
       legacy: this.legacy, xp: this.xp, level: this.level, points: this.points,
       potentialCap: this.potentialCap, inherited: this.inherited, debt: this.debt,
+      agingFlavorSeen: this.agingFlavorSeen,
     };
   }
 
@@ -260,6 +265,7 @@ export class AbueloState {
     }
     this.inherited = inherited;
     this.debt = debt;
+    this.agingFlavorSeen = false; // generación nueva, todavía nada que presagiar
     return { inherited, debt };
   }
 

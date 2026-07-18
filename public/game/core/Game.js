@@ -21,6 +21,7 @@ import { STAT_LABEL } from '../data/abuelos.js';
 import { resetChemistryFor } from '../domain/Chemistry.js';
 import { Chronicle } from '../match/Chronicle.js';
 import { DECISION_EVENTS, decisionEventById, fillDecisionText } from '../data/decisionEvents.js';
+import { AGING_FLAVOR } from '../data/agingFlavor.js';
 import { clamp } from './utils.js';
 
 import { TitleScreen } from '../screens/TitleScreen.js';
@@ -436,14 +437,19 @@ export class Game {
       else if (this.player.derbyClub && this.player.derbyHistory.losses > this.player.derbyHistory.wins) {
         debt = { clubId: this.player.derbyClub.id, label: this.player.derbyClub.name };
       }
+      const wasForeshadowed = this.player.roster.get(diedId).agingFlavorSeen;
       const hadLegend = resetChemistryFor(this.player, diedId);
       const { inherited } = this.player.roster.get(diedId).retireToGrandchild('fallecimiento', debt);
       const echo = inherited.clima
         ? `Dicen que ha salido a su abuelo: tampoco le hace mella la ${CLIMAS[inherited.clima].label.toLowerCase()}.`
         : `Se le nota de familia el ${STAT_LABEL[inherited.stat].toLowerCase()}.`;
       const debtTxt = debt ? ` El nieto se guarda una cuenta pendiente con ${debt.label}.` : '';
+      // si ya se le veía venir (ver _maybeAgingForeshadow), el titular lo
+      // cita en vez de sonar a sorpresa — cierra el presagio con el desenlace
+      const foreshadowTxt = wasForeshadowed ? ' Llevaba tiempo avisando de que el cuerpo no daba para más.' : '';
       this.deathEvent = { id: diedId, text: `${name} nos dejó a los ${age} años. El testigo pasa a su nieto.` };
-      this.player.news.push(`IN MEMORIAM: se nos fue ${name}, a los ${age} años. Su nieto recoge el testigo en la peña. ${echo}${debtTxt}`);
+      this.player.news.push(`IN MEMORIAM: se nos fue ${name}, a los ${age} años.${foreshadowTxt} Su nieto recoge el testigo en la peña. ${echo}${debtTxt}`);
+      this.player.addAnnal(`IN MEMORIAM — ${name} (${age} años). El testigo pasa a su nieto en la peña.`);
       if (hadLegend) this.player.news.push(`FIN DE UNA ERA: la pareja de leyenda de ${name} se deshace con su marcha. Al nieto le toca hacerse un hueco desde cero.`);
     } else {
       this.calendarEvent = calendar.rollEvent(this.player.roster.ids, (id) => this.displayName(id), evChance);
@@ -452,6 +458,7 @@ export class Game {
         if (this.calendarEvent.staPenalty) s.st = Math.max(0, s.st - this.calendarEvent.staPenalty);
         if (this.calendarEvent.moralBonus) s.addMoral(this.calendarEvent.moralBonus);
       }
+      this._maybeAgingForeshadow();
     }
     const league = this.player.league;
     const fixtures = league.fixturesForMatchday(league.matchday);
@@ -475,6 +482,27 @@ export class Game {
     } else {
       this.state = 'lineup';
     }
+  }
+
+  // presagio de la edad: sin efecto mecánico, solo una línea de aviso para
+  // que la muerte (Calendar.rollDeath) no llegue de sopetón cuando el
+  // declive físico (AbueloState.ageDeclineFor) ya lleva tiempo notándose.
+  // Solo se comprueba en semanas "tranquilas" (sin muerte ni imprevisto ya
+  // resuelto esta jornada) para no amontonar noticias, y como mucho una
+  // vez por generación (ver AbueloState.agingFlavorSeen).
+  _maybeAgingForeshadow() {
+    if (Math.random() > 0.04) return;
+    const p = this.player;
+    const candidates = p.roster.ids.filter((id) => {
+      const s = p.roster.get(id);
+      return !s.agingFlavorSeen && s.ageDeclineFor('aguante') > 15;
+    });
+    if (!candidates.length) return;
+    const id = candidates[Math.floor(Math.random() * candidates.length)];
+    const s = p.roster.get(id);
+    s.agingFlavorSeen = true;
+    const line = AGING_FLAVOR[Math.floor(Math.random() * AGING_FLAVOR.length)];
+    p.news.push(line.replace('{n}', this.displayName(id)));
   }
 
   // --- Copa de España: cruce agendado en el calendario ---
@@ -515,7 +543,7 @@ export class Game {
 
     if (!won) {
       const resultNews = chronicleFacts
-        ? Chronicle.compose(chronicleFacts, { won, scoreP, scoreA, rivalName: opponent.name, clubName: p.clubName, venueLabel: `${cup.roundName.toLowerCase()} de la Copa de España`, promiseBroken })
+        ? Chronicle.compose(chronicleFacts, { won, scoreP, scoreA, rivalName: opponent.name, clubName: p.clubName, venueLabel: `${cup.roundName.toLowerCase()} de la Copa de España`, promiseBroken, publicImage: p.publicImage })
         : `COPA DE ESPAÑA: ${p.clubName} cae ante ${opponent.name} en ${cup.roundName.toLowerCase()} (${scoreP}-${scoreA}). Se acaba el sueño por esta vez.`;
       p.news.push(resultNews);
       p.addReward(40, 30);
@@ -526,6 +554,7 @@ export class Game {
         p.boardConfidence = Math.min(100, p.boardConfidence + 15);
         p.addReward(400, 800);
         p.news.push(`¡¡¡CAMPEONES DE LA COPA DE ESPAÑA!!! ${p.clubName} se corona tras ganar a ${opponent.name} en la final (${scoreP}-${scoreA}). ¡Fiesta en el pueblo!`);
+        p.addAnnal(`CAMPEONES DE LA COPA DE ESPAÑA: ${p.clubName} gana la final a ${opponent.name} (${scoreP}-${scoreA}).`);
       } else {
         p.addReward(80, 120);
         const nextOpp = cup.playerOpponent();
@@ -577,6 +606,7 @@ export class Game {
     if (won && strengthFor(opponent.country) > 1) {
       p.euroUpsets++;
       p.news.push(`DAIS LA CAMPANADA: ${p.clubName} tumba a ${opponent.name}${rivalTag}, de un país con más nivel que el vuestro. La comarca no habla de otra cosa.`);
+      p.addAnnal(`CAMPANADA EUROPEA: ${p.clubName} tumba a ${opponent.name}${rivalTag}, de un país de más nivel, en ${cup.roundName.toLowerCase()}.`);
     }
 
     const promiseBroken = !!(p.pressPromise && p.pressPromise.opponentId === opponent.id && !won && p.pressPromise.loseBonus < 0);
@@ -590,7 +620,7 @@ export class Game {
 
     if (!won) {
       const resultNews = chronicleFacts
-        ? Chronicle.compose(chronicleFacts, { won, scoreP, scoreA, rivalName: `${opponent.name}${rivalTag}`, clubName: p.clubName, venueLabel: `${cup.roundName.toLowerCase()} de la Copa de Europa`, promiseBroken })
+        ? Chronicle.compose(chronicleFacts, { won, scoreP, scoreA, rivalName: `${opponent.name}${rivalTag}`, clubName: p.clubName, venueLabel: `${cup.roundName.toLowerCase()} de la Copa de Europa`, promiseBroken, publicImage: p.publicImage })
         : `COPA DE EUROPA: ${p.clubName} cae ante ${opponent.name}${rivalTag} en ${cup.roundName.toLowerCase()} (${scoreP}-${scoreA}). Se acaba la aventura europea por esta vez.`;
       p.news.push(resultNews);
       p.addReward(80, 60);
@@ -600,6 +630,7 @@ export class Game {
         p.boardConfidence = Math.min(100, p.boardConfidence + 25);
         p.addReward(900, 1800);
         p.news.push(`¡¡¡CAMPEONES DE LA COPA DE EUROPA!!! ${p.clubName} se corona tras ganar a ${opponent.name}${rivalTag} en la final (${scoreP}-${scoreA}). ¡La peña entera lo va a recordar toda la vida!`);
+        p.addAnnal(`CAMPEONES DE LA COPA DE EUROPA: ${p.clubName} gana la final a ${opponent.name}${rivalTag} (${scoreP}-${scoreA}).`);
       } else {
         p.addReward(180, 260);
         const nextOpp = cup.playerOpponent();

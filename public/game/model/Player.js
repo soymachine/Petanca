@@ -14,7 +14,7 @@ import { Cup } from '../domain/Cup.js';
 import { EuropeanCup } from '../domain/EuropeanCup.js';
 import { ScoutStaff } from './ScoutStaff.js';
 import { boardObjectiveFor, rollWeeklyGoal, weeklyGoalToJSON, weeklyGoalFromJSON } from '../data/boardObjectives.js';
-import { hashStr } from '../core/utils.js';
+import { hashStr, clamp } from '../core/utils.js';
 
 const SAVE_KEY = 'petanka_save_v4';
 const LEGACY_KEYS = ['petanka_save_v3', 'petanka_save_v2', 'petanka_save_v1'];
@@ -74,6 +74,13 @@ export class Player {
     // libro de récords del Panteón: la mayor paliza dada, cualquiera que
     // sea la competición — {margin, rival, cityName} o null hasta la primera
     this.bestMarginWin = null;
+    // anales del club: a diferencia de `news` (un buffer rodante de 30
+    // titulares que se borra solo), esto es permanente — solo los hitos
+    // de verdad (títulos, ascenso a Madrid, campanadas, fallecimientos,
+    // pareja de leyenda) entran aquí, y no se podan nunca. Ver
+    // Player.addAnnal y la sección histórica de HemerotecaScreen.js.
+    this.annals = [];
+    this.reachedTopFlight = false; // ya se anotó el hito de llegar por primera vez a Madrid (nivel 8)
     // compenetración de parejas: "idMenor-idMayor" -> partidos jugados
     // juntos (ver Roster.chemistryKey / Career.js)
     this.chemistry = {};
@@ -87,6 +94,12 @@ export class Player {
     // queda parado en 8 al llegar a Madrid y no refleja cuántas temporadas
     // llevas jugando de verdad)
     this.seasonsPlayed = 0;
+    // percepción pública del mánager: -50 (comedido) .. +50 (fanfarrón),
+    // se mueve con las respuestas en Rueda de Prensa (ver PressScreen.js) y
+    // colorea las pullas rivales (data/rivalPersonality.js) y quién firma
+    // la crónica (match/Chronicle.js) — una reputación que se construye a
+    // lo largo de la carrera, no solo lo que pasó esta semana
+    this.publicImage = 0;
     this.boardGoal = boardObjectiveFor(1, 1);
     this.weeklyGoal = rollWeeklyGoal();
 
@@ -149,6 +162,21 @@ export class Player {
   }
 
   xpForNextLevel() { return xpForLevel(this.level); }
+
+  // hito para siempre: a diferencia de `news.push`, esto nunca se borra
+  addAnnal(text) {
+    this.annals.push({ text, day: this.seasonClock.day, dateLabel: this.seasonClock.dateLabel() });
+  }
+
+  // rendimientos decrecientes al acercarse a los extremos (±50), igual que
+  // la moral de un abuelo: hacen falta varias ruedas de prensa seguidas del
+  // mismo signo para labrarse fama de verdad, no una sola declaración
+  nudgePublicImage(d) {
+    const cap = 50;
+    if (d > 0) d *= clamp((cap - this.publicImage) / cap, 0.2, 1);
+    else if (d < 0) d *= clamp((this.publicImage + cap) / cap, 0.2, 1);
+    this.publicImage = clamp(this.publicImage + d, -cap, cap);
+  }
 
   addReward(xp, money) {
     this.xp += xp;
@@ -224,6 +252,7 @@ export class Player {
       difficulty: this.difficulty, difficultyChosen: this.difficultyChosen, debugMode: this.debugMode, pressPromise: this.pressPromise,
       friendliesLeft: this.friendliesLeft, cup: this.cup ? this.cup.toJSON() : null, cupTitles: this.cupTitles,
       bestMarginWin: this.bestMarginWin, chemistry: this.chemistry, seasonsPlayed: this.seasonsPlayed,
+      publicImage: this.publicImage, annals: this.annals, reachedTopFlight: this.reachedTopFlight,
       seenDecisions: this.seenDecisions, pendingDecisions: this.pendingDecisions,
       clubName: this.clubName, currentLeagueLevel: this.currentLeagueLevel,
       leagueWorld: this.leagueWorld.toJSON(),
@@ -289,6 +318,8 @@ export class Player {
     // actual (razonable — para llegar ahí hace falta haber jugado al menos
     // esas temporadas) en vez de arrancar de golpe en la exigencia mínima
     p.seasonsPlayed = json.seasonsPlayed ?? Math.max(1, json.currentLeagueLevel || 1);
+    p.publicImage = json.publicImage ?? 0;
+    p.annals = json.annals || [];
     p.seenDecisions = json.seenDecisions || [];
     p.pendingDecisions = json.pendingDecisions || [];
     p.dailyBest = json.dailyBest || {};
@@ -296,6 +327,9 @@ export class Player {
     p.weeklyGoal = weeklyGoalFromJSON(json.weeklyGoal);
     p.clubName = json.clubName || p.clubName;
     p.currentLeagueLevel = json.currentLeagueLevel ?? 1;
+    // guardado antiguo sin el flag: si ya estaba en Madrid, se da por
+    // anotado el hito (evita duplicar el anal en la próxima temporada)
+    p.reachedTopFlight = json.reachedTopFlight ?? (p.currentLeagueLevel >= 8);
     // guardados anteriores al overhaul del Mercado (v5) o al de los países
     // extranjeros (v6: un ForeignLeagueWorld genérico por país en vez de
     // un único `frenchLeagues` especial) traen un mundo de ligas con una
