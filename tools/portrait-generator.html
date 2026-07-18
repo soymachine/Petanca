@@ -1,0 +1,868 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>Petanka — generador de retratos ASCII</title>
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 16px; background: #14140f; color: #e8ddb8;
+    font-family: -apple-system, Helvetica, Arial, sans-serif; font-size: 14px;
+  }
+  h1 { font-size: 18px; margin: 0 0 4px; color: #ffb347; }
+  p.sub { margin: 0 0 16px; color: #9a927a; }
+  .layout { display: grid; grid-template-columns: 340px 1fr; gap: 20px; align-items: start; }
+  fieldset { border: 1px solid #4a4536; border-radius: 6px; margin: 0 0 14px; padding: 10px 12px; }
+  legend { color: #ffb347; padding: 0 6px; font-size: 12px; letter-spacing: .04em; text-transform: uppercase; }
+  label { display: block; margin: 8px 0 2px; color: #c9c2a8; font-size: 12px; }
+  select {
+    width: 100%; background: #1e1d16; border: 1px solid #4a4536; color: #e8ddb8;
+    padding: 5px 7px; border-radius: 4px; font-family: inherit;
+  }
+  input[type=range] { width: 100%; }
+  input[type=text], input[type=number] {
+    width: 100%; background: #1e1d16; border: 1px solid #4a4536; color: #e8ddb8;
+    padding: 5px 7px; border-radius: 4px; font-family: inherit;
+  }
+  .row { display: flex; gap: 8px; }
+  .row > div { flex: 1; }
+  .val { color: #7CFC00; float: right; }
+  button {
+    background: #2a3a22; border: 1px solid #7ec850; color: #d8f0c0; padding: 7px 12px;
+    border-radius: 4px; cursor: pointer; font-family: inherit; font-size: 13px;
+  }
+  button:hover { background: #35492c; }
+  button.secondary { background: #2a2a22; border-color: #8a7f66; color: #c9c2a8; }
+  button.secondary:hover { background: #35342a; }
+  button.warn { background: #3a2222; border-color: #a05050; color: #f0c0c0; }
+  button:disabled { opacity: .4; cursor: default; }
+  #drop {
+    border: 2px dashed #4a4536; border-radius: 8px; padding: 22px; text-align: center;
+    color: #8a8a7a; cursor: pointer; margin-bottom: 10px;
+  }
+  #drop.over { border-color: #7CFC00; color: #cde0cd; }
+  #fileInput { display: none; }
+  .preview-box { background: #000; border: 2px solid #8a7f66; border-radius: 4px; padding: 10px; overflow: auto; }
+  .preview-box pre { margin: 0; line-height: 1; font-family: 'SF Mono', Menlo, Consolas, monospace; }
+  .preview-title { color: #ffb347; font-size: 12px; margin: 0 0 6px; text-transform: uppercase; letter-spacing: .04em; }
+  .previews { display: flex; gap: 16px; flex-wrap: wrap; margin-bottom: 16px; }
+  textarea {
+    width: 100%; height: 140px; background: #1e1d16; color: #9adf7c; border: 1px solid #4a4536;
+    border-radius: 4px; padding: 8px; font-family: Menlo, Consolas, monospace; font-size: 11px;
+  }
+  .gallery { display: flex; flex-wrap: wrap; gap: 8px; margin: 10px 0; }
+  .gallery .chip {
+    background: #22261c; border: 1px solid #4a5a3a; border-radius: 4px; padding: 4px 8px;
+    font-size: 12px; color: #cde0cd; display: flex; align-items: center; gap: 6px;
+  }
+  .gallery .chip button { padding: 1px 6px; font-size: 11px; }
+  .hint { color: #6a6656; font-size: 11px; margin-top: 4px; }
+  .actions { display: flex; gap: 8px; margin: 10px 0; flex-wrap: wrap; align-items: center; }
+  .stat { color: #6a86a0; font-size: 11px; }
+  a { color: #88c8e8; }
+  #connectStatus { font-size: 12px; padding: 6px 0; }
+  #connectStatus.ok { color: #7ec850; }
+  #connectStatus.bad { color: #ef9f9f; }
+  #connectStatus.idle { color: #8a8a7a; }
+  .viewer {
+    display: flex; flex-wrap: wrap; gap: 10px; max-height: 420px; overflow-y: auto;
+    background: #000; border: 2px solid #8a7f66; border-radius: 4px; padding: 10px;
+  }
+  .viewer .card {
+    background: #1a1a14; border: 1px solid #3a3628; border-radius: 4px; padding: 6px;
+    width: 130px; text-align: center; position: relative;
+  }
+  .viewer .card pre { margin: 0 0 4px; font-size: 6px; line-height: 1; font-family: Menlo, Consolas, monospace; }
+  .viewer .card .name { font-size: 10px; color: #cde0cd; word-break: break-word; }
+  .viewer .card .del {
+    position: absolute; top: 2px; right: 2px; background: #3a2222; border: 1px solid #a05050;
+    color: #f0c0c0; font-size: 9px; padding: 0 4px; border-radius: 3px; cursor: pointer;
+  }
+  .viewer .empty { color: #6a6656; font-size: 12px; padding: 10px; }
+  .savedFlash { color: #7CFC00; font-size: 12px; opacity: 0; transition: opacity .2s; }
+  .savedFlash.show { opacity: 1; }
+  .banner {
+    background: #2a2216; border: 1px solid #8a7050; color: #e8c8a0; padding: 8px 10px;
+    border-radius: 4px; font-size: 12px; margin-bottom: 12px;
+  }
+  .resultCard {
+    background: #1a1a14; border: 2px solid #3a3628; border-radius: 4px; padding: 4px;
+    width: 110px; text-align: center; cursor: pointer;
+  }
+  .resultCard:hover { border-color: #7CFC00; }
+  .resultCard.picked { border-color: #ffb347; }
+  .resultCard img { width: 100%; height: 90px; object-fit: cover; border-radius: 2px; display: block; }
+  .resultCard .rtitle { font-size: 9px; color: #8a8a7a; margin-top: 3px; max-height: 24px; overflow: hidden; }
+</style>
+</head>
+<body>
+
+<h1>Generador de retratos ASCII — Petanka</h1>
+<p class="sub">Sube una foto, ajusta, y guarda el resultado directamente en los ficheros que usa el juego (o cópialo a mano si tu navegador no lo soporta).</p>
+
+<div id="unsupportedBanner" class="banner" style="display:none;">
+  Tu navegador no soporta la File System Access API (solo Chrome/Edge de escritorio), así que no se puede guardar
+  automáticamente ni mostrar el visor conectado. Puedes seguir usando la galería manual de más abajo para copiar el código.
+</div>
+
+<fieldset>
+  <legend>1. Conectar con el juego</legend>
+  <div class="actions">
+    <button id="connectBtn">Conectar carpeta de retratos (public/game/data/art)</button>
+    <span id="connectStatus" class="idle">no conectado — los cambios solo se generan como código para copiar</span>
+  </div>
+  <label>Pool de destino</label>
+  <select id="poolSelect">
+    <option value="rivalPhotoPool">RIVAL_PHOTO_POOL — rivales de liga, el que más variedad necesita</option>
+    <option value="faces">FACES — tu plantilla curada (con descripción)</option>
+    <option value="rivalFaces">RIVAL_FACES — retrato pequeño de respaldo</option>
+    <option value="items">AMULETOS (ITEM_ART) — 5 fijos, subir una foto SUSTITUYE el icono actual</option>
+  </select>
+  <p class="hint" id="poolHint"></p>
+</fieldset>
+
+<fieldset>
+  <legend>0. Buscar imagen en internet (Google Images)</legend>
+  <div class="actions">
+    <input type="text" id="searchQuery" placeholder="p.ej. old people portraits" style="max-width:320px;">
+    <button id="searchBtn">Buscar</button>
+    <button class="secondary" id="searchSettingsBtn">Configurar API ⚙</button>
+  </div>
+  <div id="searchSettings" style="display:none;margin-top:8px;">
+    <p class="hint">
+      Usa la <a href="https://developers.google.com/custom-search/v1/overview" target="_blank" rel="noopener">Google Custom Search JSON API</a>
+      (gratis hasta 100 búsquedas/día): crea una clave de API en
+      <a href="https://console.cloud.google.com/apis/credentials" target="_blank" rel="noopener">Google Cloud Console</a>
+      y un motor en <a href="https://programmablesearchengine.google.com/" target="_blank" rel="noopener">Programmable Search Engine</a>
+      con "Búsqueda de imágenes" activada y "Buscar en toda la web" activado. Se guardan solo en este navegador (localStorage), nunca se envían a ningún sitio nuestro.
+    </p>
+    <div class="row">
+      <div><label>API key</label><input type="text" id="gcsKey" placeholder="AIza..."></div>
+      <div><label>CX (ID del motor)</label><input type="text" id="gcsCx" placeholder="0123456789abcdef0:xxxxxxx"></div>
+    </div>
+  </div>
+  <div id="searchResults" class="viewer" style="margin-top:10px;display:none;"></div>
+  <div class="actions" id="searchMoreWrap" style="display:none;">
+    <button class="secondary" id="searchMoreBtn">Cargar 10 más</button>
+    <span class="hint" id="searchStatus"></span>
+  </div>
+</fieldset>
+
+<div class="layout">
+  <div>
+    <div id="drop">Arrastra una imagen aquí, o haz clic para elegir<br><span class="hint">JPG/PNG, idealmente un retrato recortado a cara/hombros — o elige un resultado de la búsqueda de arriba</span></div>
+    <input type="file" id="fileInput" accept="image/*">
+
+    <fieldset id="nameFieldset">
+      <legend>Nombre (opcional)</legend>
+      <input type="text" id="nameInput" placeholder="déjalo en blanco para autogenerar uno">
+      <div id="descWrap" style="display:none;">
+        <label>Descripción (solo FACES)</label>
+        <input type="text" id="descInput" placeholder="p.ej. Boina parda y mano firme desde 1972.">
+      </div>
+      <p class="hint">Es solo una etiqueta interna del fichero (el jugador nunca la ve — su nombre lo genera el juego aparte). Si lo dejas vacío se asigna uno tipo POOL-N; si lo rellenas, se comprueba que no exista ya.</p>
+    </fieldset>
+
+    <fieldset id="itemFieldset" style="display:none;">
+      <legend>Amuleto a sustituir</legend>
+      <select id="itemSelect">
+        <option value="petaca">LA PETACA DE LA SUERTE (petaca)</option>
+        <option value="panuelo">EL PAÑUELO DE LA ABUELA (panuelo)</option>
+        <option value="reloj">EL RELOJ DEL PUEBLO (reloj)</option>
+        <option value="guantes">GUANTES DE CUERO (guantes)</option>
+        <option value="botas">LAS BOTAS DE FAENA (botas)</option>
+      </select>
+      <p class="hint">Son 5 fijos, no se pueden añadir más. "+ Añadir" reemplaza el icono de este amuleto por la foto de arriba — el anterior se pierde.</p>
+    </fieldset>
+
+    <fieldset>
+      <legend>Tamaño (cols × rows)</legend>
+      <div class="row">
+        <div><label>Foto grande</label><input type="text" id="sizePhoto" value="60x39"></div>
+        <div><label>Mini (HUD)</label><input type="text" id="sizeMini" value="18x12"></div>
+      </div>
+      <p class="hint">60×39 / 18×12 son los tamaños estándar del pool actual. Para RIVAL_FACES solo se usa la mini, guardada como "photo" (18×12) — así lo espera ese fichero.</p>
+    </fieldset>
+
+    <fieldset>
+      <legend>Ajustes de imagen</legend>
+      <label>Brillo <span class="val" id="vBright">0</span></label>
+      <input type="range" id="brightness" min="-80" max="80" value="0">
+      <label>Contraste <span class="val" id="vContrast">0</span></label>
+      <input type="range" id="contrast" min="-80" max="80" value="15">
+      <label>Gamma <span class="val" id="vGamma">1.0</span></label>
+      <input type="range" id="gamma" min="40" max="220" value="100">
+      <label>Saturación <span class="val" id="vSat">100%</span></label>
+      <input type="range" id="saturation" min="0" max="200" value="115">
+      <label><input type="checkbox" id="invert" style="width:auto;display:inline;margin-right:6px;">Invertir densidad (fondos claros → carácter denso)</label>
+    </fieldset>
+
+    <fieldset>
+      <legend>Fondo / transparencia</legend>
+      <label><input type="checkbox" id="chromaOn" style="width:auto;display:inline;margin-right:6px;">Quitar fondo por color (clic en la vista previa para elegir el color)</label>
+      <label>Tolerancia <span class="val" id="vTol">40</span></label>
+      <input type="range" id="tolerance" min="0" max="120" value="40">
+      <p class="hint">Color elegido: <span id="chromaSwatch" style="display:inline-block;width:12px;height:12px;background:#333;vertical-align:middle;border:1px solid #666;"></span> <span id="chromaHex">—</span></p>
+    </fieldset>
+
+    <fieldset>
+      <legend>Colores</legend>
+      <label>Paso de cuantización (menos = paleta más grande) <span class="val" id="vQuant">12</span></label>
+      <input type="range" id="quant" min="4" max="48" value="12">
+      <p class="hint stat" id="paletteStat"></p>
+    </fieldset>
+  </div>
+
+  <div>
+    <div class="previews">
+      <div>
+        <p class="preview-title">Foto grande</p>
+        <div class="preview-box"><pre id="previewPhoto"></pre></div>
+      </div>
+      <div>
+        <p class="preview-title">Mini (HUD)</p>
+        <div class="preview-box"><pre id="previewMini"></pre></div>
+      </div>
+    </div>
+
+    <div class="actions">
+      <button id="addBtn" disabled>+ Añadir</button>
+      <span class="savedFlash" id="savedFlash">✔ guardado en el fichero del juego</span>
+    </div>
+
+    <fieldset>
+      <legend id="viewerTitle">2. Retratos ya existentes en el pool</legend>
+      <div class="actions">
+        <input type="text" id="viewerFilter" placeholder="filtrar por nombre..." style="max-width:220px;">
+        <button class="secondary" id="reloadViewerBtn">Recargar</button>
+      </div>
+      <div class="viewer" id="viewer"><div class="empty">Conecta la carpeta para ver los retratos actuales.</div></div>
+    </fieldset>
+
+    <fieldset>
+      <legend>Galería local (copiar a mano)</legend>
+      <p class="hint">Además de guardarse solo (si está conectado), cada retrato añadido queda aquí como respaldo/copia manual.</p>
+      <div class="gallery" id="gallery"></div>
+      <div class="actions">
+        <button class="secondary" id="clearGalleryBtn">Vaciar galería local</button>
+      </div>
+      <textarea id="output" readonly placeholder="Genera al menos un retrato y pulsa &quot;Añadir&quot;..."></textarea>
+      <div class="actions">
+        <button class="secondary" id="copyBtn">Copiar al portapapeles</button>
+        <button class="secondary" id="downloadBtn">Descargar .js</button>
+      </div>
+    </fieldset>
+  </div>
+</div>
+
+<script>
+'use strict';
+
+// rampa de densidad (oscuro→claro), calcada del estilo de los retratos
+// existentes en el juego: primero símbolos finos, luego letras gruesas
+const RAMP = " .`'`:,;i!|(l1tfjxuncvzXYUJCLQ0OZmwqpdbkhao*#MW&8%$@";
+
+// --- esquema de cada pool tal y como lo espera el juego (ver
+// public/game/data/art/{rivalPhotoPool,faces,rivalFaces}.js y
+// domain/RivalPlayer.js / RIVAL_FACES) ---
+const POOLS = {
+  rivalPhotoPool: {
+    file: 'rivalPhotoPool.js', varName: 'RIVAL_PHOTO_POOL',
+    hint: 'Se asigna por hash a cada jugador rival de las 11 ligas (España+Francia) — el que más entradas necesita para evitar repeticiones.',
+    build: (name, photo, mini) => ({ name, photo, mini }),
+    thumb: (entry) => entry.mini,
+  },
+  faces: {
+    file: 'faces.js', varName: 'FACES',
+    hint: 'Tu plantilla curada (los "abuelos" fichables desde el principio). Lleva descripción de sabor.',
+    build: (name, photo, mini, desc) => ({ name, desc: desc || '', photo, mini }),
+    thumb: (entry) => entry.mini,
+  },
+  rivalFaces: {
+    file: 'rivalFaces.js', varName: 'RIVAL_FACES',
+    hint: 'Retrato de respaldo pequeño (solo 18×12, guardado bajo la clave "photo").',
+    build: (name, photo, mini) => ({ name, photo: mini }),
+    thumb: (entry) => entry.photo,
+  },
+  items: {
+    file: 'itemArt.js', varName: 'ITEM_ART',
+    hint: 'Los 5 amuletos del Bar. No es una pool que crece: cada id tiene SIEMPRE una única entrada — subir una foto para un id sustituye su icono anterior.',
+    fixedIds: true,
+    defaultSize: '11x7',
+    labels: {
+      petaca: 'LA PETACA DE LA SUERTE', panuelo: 'EL PAÑUELO DE LA ABUELA', reloj: 'EL RELOJ DEL PUEBLO',
+      guantes: 'GUANTES DE CUERO', botas: 'LAS BOTAS DE FAENA',
+    },
+    build(id, photo) { return { id, label: this.labels[id] || id, photo }; },
+    thumb: (entry) => entry.photo,
+  },
+};
+
+let img = null;
+let chromaColor = null; // {r,g,b} elegido en la vista previa
+const gallery = []; // { poolKey, entry } — respaldo local, copiable a mano
+
+let dirHandle = null;
+const poolCache = {}; // poolKey -> { fileHandle, prefix, suffix, array }
+
+const $ = (id) => document.getElementById(id);
+const drop = $('drop'), fileInput = $('fileInput');
+
+if (!window.showDirectoryPicker) {
+  $('unsupportedBanner').style.display = 'block';
+  $('connectBtn').disabled = true;
+}
+
+function currentPoolKey() { return $('poolSelect').value; }
+
+function updatePoolUi() {
+  const cfg = POOLS[currentPoolKey()];
+  $('poolHint').textContent = cfg.hint;
+  $('descWrap').style.display = currentPoolKey() === 'faces' ? 'block' : 'none';
+  $('nameFieldset').style.display = cfg.fixedIds ? 'none' : 'block';
+  $('itemFieldset').style.display = cfg.fixedIds ? 'block' : 'none';
+  if (cfg.defaultSize) { $('sizePhoto').value = cfg.defaultSize; }
+  $('viewerTitle').textContent = `2. Retratos ya existentes en ${cfg.varName}`;
+  renderViewer();
+}
+$('poolSelect').addEventListener('change', updatePoolUi);
+
+// red de seguridad a nivel de página: si sueltas fuera del recuadro (o el
+// navegador procesa el drop antes de llegar a él), evita que intente
+// "navegar" a lo soltado — con file:// eso dispara un error de seguridad
+// feo en vez de simplemente no hacer nada
+window.addEventListener('dragover', (e) => e.preventDefault());
+window.addEventListener('drop', (e) => e.preventDefault());
+
+drop.addEventListener('click', () => fileInput.click());
+drop.addEventListener('dragover', (e) => { e.preventDefault(); drop.classList.add('over'); });
+drop.addEventListener('dragleave', () => drop.classList.remove('over'));
+drop.addEventListener('drop', (e) => {
+  e.preventDefault(); e.stopPropagation(); drop.classList.remove('over');
+  const f = e.dataTransfer.files && e.dataTransfer.files[0];
+  if (f) { loadFile(f); return; }
+  // arrastrar una imagen desde otra pestaña/web suelta una URL, no un
+  // archivo real — con file:// no se puede cargar por seguridad del
+  // navegador, así que avisamos en vez de fallar en silencio o feo
+  const url = e.dataTransfer.getData('text/uri-list') || e.dataTransfer.getData('text/plain');
+  if (url) {
+    alert('Eso es un enlace a una imagen (de otra pestaña/web), no un archivo.\n\n'
+      + 'Guarda la imagen en tu disco primero (clic derecho → "Guardar imagen como...") '
+      + 'y luego arrastra ese archivo, o usa el botón de elegir archivo.');
+  }
+});
+fileInput.addEventListener('change', () => { if (fileInput.files[0]) loadFile(fileInput.files[0]); });
+
+function loadFile(file) {
+  const reader = new FileReader();
+  reader.onload = () => {
+    const image = new Image();
+    image.onload = () => { img = image; chromaColor = null; $('chromaHex').textContent = '—'; $('chromaSwatch').style.background = '#333'; render(); };
+    image.src = reader.result;
+  };
+  reader.readAsDataURL(file);
+}
+
+// ============ búsqueda de imágenes (Google Custom Search JSON API) ============
+// clave/CX se guardan solo en localStorage de este navegador — no se envían
+// a ningún sitio nuestro, van directas de tu navegador a Google
+const GCS_KEY_STORAGE = 'petanka_gcs_key', GCS_CX_STORAGE = 'petanka_gcs_cx';
+$('gcsKey').value = localStorage.getItem(GCS_KEY_STORAGE) || '';
+$('gcsCx').value = localStorage.getItem(GCS_CX_STORAGE) || '';
+$('gcsKey').addEventListener('change', () => localStorage.setItem(GCS_KEY_STORAGE, $('gcsKey').value.trim()));
+$('gcsCx').addEventListener('change', () => localStorage.setItem(GCS_CX_STORAGE, $('gcsCx').value.trim()));
+$('searchSettingsBtn').addEventListener('click', () => {
+  $('searchSettings').style.display = $('searchSettings').style.display === 'none' ? 'block' : 'none';
+});
+
+let searchStart = 1; // índice 1-based que espera la API de Google
+
+async function runSearch(append) {
+  const key = $('gcsKey').value.trim(), cx = $('gcsCx').value.trim();
+  const q = $('searchQuery').value.trim();
+  if (!key || !cx) { $('searchSettings').style.display = 'block'; alert('Faltan la API key y/o el CX — configúralos primero (botón "Configurar API").'); return; }
+  if (!q) { alert('Escribe algo que buscar.'); return; }
+  if (!append) { searchStart = 1; $('searchResults').innerHTML = ''; $('searchResults').style.display = 'flex'; }
+  $('searchStatus').textContent = 'buscando...';
+  $('searchMoreBtn').disabled = true;
+  try {
+    const url = `https://www.googleapis.com/customsearch/v1?key=${encodeURIComponent(key)}&cx=${encodeURIComponent(cx)}`
+      + `&searchType=image&q=${encodeURIComponent(q)}&num=10&start=${searchStart}&safe=active`;
+    const res = await fetch(url);
+    const data = await res.json();
+    if (!res.ok) throw new Error((data.error && data.error.message) || `HTTP ${res.status}`);
+    const items = data.items || [];
+    renderSearchResults(items, append);
+    searchStart += 10;
+    $('searchMoreWrap').style.display = items.length ? 'flex' : 'none';
+    $('searchStatus').textContent = items.length ? `${items.length} resultados más cargados` : 'sin más resultados';
+  } catch (e) {
+    $('searchStatus').textContent = '';
+    alert('Error buscando: ' + e.message);
+  } finally {
+    $('searchMoreBtn').disabled = false;
+  }
+}
+
+function renderSearchResults(items, append) {
+  const el = $('searchResults');
+  if (!append) el.innerHTML = '';
+  if (!items.length && !append) { el.innerHTML = '<div class="empty">Sin resultados.</div>'; return; }
+  for (const item of items) {
+    const card = document.createElement('div');
+    card.className = 'resultCard';
+    const thumb = document.createElement('img');
+    thumb.src = (item.image && item.image.thumbnailLink) || item.link;
+    thumb.loading = 'lazy';
+    thumb.referrerPolicy = 'no-referrer';
+    const title = document.createElement('div');
+    title.className = 'rtitle';
+    title.textContent = item.title || '';
+    card.appendChild(thumb);
+    card.appendChild(title);
+    card.addEventListener('click', () => pickSearchResult(item, card));
+    el.appendChild(card);
+  }
+}
+
+// carga la imagen a tamaño completo directamente en el canvas de trabajo;
+// muchos sitios no mandan cabeceras CORS y el navegador bloqueará leer los
+// píxeles ("canvas contaminado") — en ese caso se avisa y se ofrece abrir
+// la imagen original para guardarla y arrastrarla a mano
+function pickSearchResult(item, card) {
+  document.querySelectorAll('.resultCard.picked').forEach((c) => c.classList.remove('picked'));
+  card.classList.add('picked');
+  const image = new Image();
+  image.crossOrigin = 'anonymous';
+  image.referrerPolicy = 'no-referrer';
+  image.onload = () => {
+    img = image;
+    chromaColor = null;
+    $('chromaHex').textContent = '—'; $('chromaSwatch').style.background = '#333';
+    try {
+      render();
+    } catch (e) {
+      alert('Esta imagen no se puede leer por restricciones CORS del sitio de origen.\n\n'
+        + 'Se va a abrir en una pestaña nueva: guárdala (clic derecho → "Guardar imagen como...") y arrástrala aquí.');
+      window.open(item.link, '_blank', 'noopener');
+    }
+  };
+  image.onerror = () => {
+    alert('No se pudo cargar esa imagen directamente (bloqueo CORS o enlace roto).\n\n'
+      + 'Se va a abrir en una pestaña nueva: guárdala y arrástrala aquí.');
+    window.open(item.link, '_blank', 'noopener');
+  };
+  image.src = item.link;
+}
+
+$('searchBtn').addEventListener('click', () => runSearch(false));
+$('searchQuery').addEventListener('keydown', (e) => { if (e.key === 'Enter') runSearch(false); });
+$('searchMoreBtn').addEventListener('click', () => runSearch(true));
+
+// --- controles: cualquier cambio vuelve a renderizar ---
+['brightness', 'contrast', 'gamma', 'saturation', 'invert', 'chromaOn', 'tolerance', 'quant', 'sizePhoto', 'sizeMini']
+  .forEach((id) => $(id).addEventListener('input', () => { syncLabels(); render(); }));
+
+function syncLabels() {
+  $('vBright').textContent = $('brightness').value;
+  $('vContrast').textContent = $('contrast').value;
+  $('vGamma').textContent = (Number($('gamma').value) / 100).toFixed(2);
+  $('vSat').textContent = $('saturation').value + '%';
+  $('vTol').textContent = $('tolerance').value;
+  $('vQuant').textContent = $('quant').value;
+}
+syncLabels();
+updatePoolUi();
+
+function parseSize(str, fallback) {
+  const m = /^(\d+)\s*x\s*(\d+)$/i.exec(str.trim());
+  if (!m) return fallback;
+  return [Math.max(2, Math.min(200, +m[1])), Math.max(2, Math.min(200, +m[2]))];
+}
+
+// una celda de carácter monoespacio es más alta que ancha; para que un
+// retrato no salga "estirado" verticalmente, se compensa al recortar
+// la imagen de origen (fit "cover" sobre una caja con ese ratio)
+const CHAR_ASPECT = 0.52; // ancho/alto aproximado de un glifo monoespacio
+
+function sampleGrid(cols, rows) {
+  const canvas = document.createElement('canvas');
+  canvas.width = cols; canvas.height = rows;
+  const ctx = canvas.getContext('2d');
+  const boxAspect = cols / (rows / CHAR_ASPECT); // ancho:alto "real" deseado
+  const imgAspect = img.width / img.height;
+  let sx, sy, sw, sh;
+  if (imgAspect > boxAspect) { sh = img.height; sw = sh * boxAspect; sx = (img.width - sw) / 2; sy = 0; }
+  else { sw = img.width; sh = sw / boxAspect; sx = 0; sy = (img.height - sh) / 2; }
+  ctx.imageSmoothingEnabled = true;
+  ctx.drawImage(img, sx, sy, sw, sh, 0, 0, cols, rows);
+  return ctx.getImageData(0, 0, cols, rows).data;
+}
+
+function clamp255(v) { return v < 0 ? 0 : v > 255 ? 255 : v; }
+
+function adjust(r, g, b) {
+  const bright = Number($('brightness').value);
+  const contrast = Number($('contrast').value);
+  const gamma = Number($('gamma').value) / 100;
+  const sat = Number($('saturation').value) / 100;
+
+  // saturación: interpola contra el gris de luminancia
+  const lum = 0.299 * r + 0.587 * g + 0.114 * b;
+  r = lum + (r - lum) * sat; g = lum + (g - lum) * sat; b = lum + (b - lum) * sat;
+
+  // brillo + contraste
+  const cf = (259 * (contrast + 255)) / (255 * (259 - contrast));
+  r = cf * (r - 128) + 128 + bright; g = cf * (g - 128) + 128 + bright; b = cf * (b - 128) + 128 + bright;
+
+  r = clamp255(r); g = clamp255(g); b = clamp255(b);
+  // gamma
+  r = 255 * Math.pow(r / 255, 1 / gamma); g = 255 * Math.pow(g / 255, 1 / gamma); b = 255 * Math.pow(b / 255, 1 / gamma);
+  return [clamp255(r) | 0, clamp255(g) | 0, clamp255(b) | 0];
+}
+
+function quantize(v, step) { return Math.round(v / step) * step; }
+
+// convierte una foto a {cols, rows, palette, chars, colorIdx}
+function buildArt(cols, rows) {
+  const data = sampleGrid(cols, rows);
+  const step = Number($('quant').value);
+  const tol = Number($('tolerance').value);
+  const chromaOn = $('chromaOn').checked && chromaColor;
+  const invert = $('invert').checked;
+
+  const palette = [];
+  const paletteIdx = new Map(); // "r,g,b" -> index
+  const chars = [];
+  const colorIdx = [];
+
+  for (let y = 0; y < rows; y++) {
+    let charRow = '';
+    const idxRow = [];
+    for (let x = 0; x < cols; x++) {
+      const i = (y * cols + x) * 4;
+      let [r, g, b] = adjust(data[i], data[i + 1], data[i + 2]);
+      const a = data[i + 3];
+
+      let transparent = a < 10;
+      if (!transparent && chromaOn) {
+        const d = Math.sqrt((r - chromaColor.r) ** 2 + (g - chromaColor.g) ** 2 + (b - chromaColor.b) ** 2);
+        if (d < tol) transparent = true;
+      }
+
+      if (transparent) { charRow += ' '; idxRow.push(0); continue; }
+
+      const lum = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+      let t = invert ? 1 - lum : lum;
+      t = Math.max(0, Math.min(1, t));
+      const ch = RAMP[Math.min(RAMP.length - 1, Math.floor(t * RAMP.length))];
+      charRow += ch === ' ' ? RAMP[1] : ch; // el índice 0 de la rampa ya es un símbolo suave; el espacio real solo lo marca la transparencia
+
+      const qr = quantize(r, step), qg = quantize(g, step), qb = quantize(b, step);
+      const hex = `#${qr.toString(16).padStart(2, '0')}${qg.toString(16).padStart(2, '0')}${qb.toString(16).padStart(2, '0')}`;
+      let pi = paletteIdx.get(hex);
+      if (pi === undefined) { pi = palette.length; palette.push(hex); paletteIdx.set(hex, pi); }
+      idxRow.push(pi);
+    }
+    chars.push(charRow);
+    colorIdx.push(idxRow);
+  }
+  if (!palette.length) palette.push('#888888');
+  return { cols, rows, palette, chars, colorIdx };
+}
+
+function renderAsciiHtml(art) {
+  let html = '';
+  for (let y = 0; y < art.rows; y++) {
+    let run = '', runColor = null;
+    for (let x = 0; x < art.cols; x++) {
+      const ch = art.chars[y][x];
+      const color = art.palette[art.colorIdx[y][x]];
+      if (ch === ' ') { if (run) { html += `<span style="color:${runColor}">${run}</span>`; run = ''; } html += ' '; runColor = null; continue; }
+      if (color !== runColor) { if (run) html += `<span style="color:${runColor}">${run}</span>`; run = ''; runColor = color; }
+      run += ch;
+    }
+    if (run) html += `<span style="color:${runColor}">${run}</span>`;
+    html += '\n';
+  }
+  return html;
+}
+
+let lastPhoto = null, lastMini = null;
+
+function render() {
+  if (!img) { $('addBtn').disabled = true; return; }
+  const [pc, pr] = parseSize($('sizePhoto').value, [60, 39]);
+  const [mc, mr] = parseSize($('sizeMini').value, [18, 12]);
+  lastPhoto = buildArt(pc, pr);
+  lastMini = buildArt(mc, mr);
+  $('previewPhoto').innerHTML = renderAsciiHtml(lastPhoto);
+  $('previewMini').innerHTML = renderAsciiHtml(lastMini);
+  $('paletteStat').textContent = `paleta foto: ${lastPhoto.palette.length} colores · paleta mini: ${lastMini.palette.length} colores`;
+  $('addBtn').disabled = false;
+}
+
+// clic en la vista previa de la foto grande para elegir el color de fondo
+// a quitar (usa el color YA ajustado, sacado de un recálculo puntual)
+$('previewPhoto').addEventListener('click', (e) => {
+  if (!img) return;
+  const pre = $('previewPhoto');
+  const rect = pre.getBoundingClientRect();
+  const charW = rect.width / lastPhoto.cols, charH = rect.height / lastPhoto.rows;
+  const cx = Math.min(lastPhoto.cols - 1, Math.max(0, Math.floor((e.clientX - rect.left) / charW)));
+  const cy = Math.min(lastPhoto.rows - 1, Math.max(0, Math.floor((e.clientY - rect.top) / charH)));
+  const hex = lastPhoto.palette[lastPhoto.colorIdx[cy][cx]];
+  const r = parseInt(hex.slice(1, 3), 16), g = parseInt(hex.slice(3, 5), 16), b = parseInt(hex.slice(5, 7), 16);
+  chromaColor = { r, g, b };
+  $('chromaHex').textContent = hex;
+  $('chromaSwatch').style.background = hex;
+  $('chromaOn').checked = true;
+  render();
+});
+
+// ============ conexión con la carpeta real del juego (File System Access API) ============
+
+// localiza el literal `export const VAR = [...]` sin regex greedy: cuenta
+// corchetes respetando strings, para no depender de que el array sea la
+// última cosa del fichero
+function extractArrayLiteral(src, varName) {
+  const marker = `export const ${varName} = `;
+  const start = src.indexOf(marker);
+  if (start === -1) throw new Error(`No se encontró "${marker}" en el fichero.`);
+  const arrStart = start + marker.length;
+  let i = arrStart, depth = 0, inStr = false, strCh = null;
+  for (; i < src.length; i++) {
+    const c = src[i];
+    if (inStr) { if (c === '\\') { i++; continue; } if (c === strCh) inStr = false; continue; }
+    if (c === '"' || c === "'") { inStr = true; strCh = c; continue; }
+    if (c === '[') depth++;
+    else if (c === ']') { depth--; if (depth === 0) { i++; break; } }
+  }
+  const arrEnd = i;
+  const literal = src.slice(arrStart, arrEnd);
+  const array = new Function('return ' + literal)();
+  return { prefix: src.slice(0, arrStart), suffix: src.slice(arrEnd), array };
+}
+
+async function connectDir() {
+  try {
+    dirHandle = await window.showDirectoryPicker({ mode: 'readwrite' });
+  } catch (e) {
+    if (e.name !== 'AbortError') setConnectStatus('bad', 'No se pudo abrir el selector: ' + e.message);
+    return;
+  }
+  let okCount = 0, errCount = 0;
+  for (const key of Object.keys(POOLS)) {
+    try { await loadPool(key); okCount++; }
+    catch (e) { errCount++; console.warn(`No se pudo cargar ${POOLS[key].file}:`, e.message); }
+  }
+  if (okCount === 0) {
+    setConnectStatus('bad', 'No se encontró ningún fichero esperado — ¿elegiste la carpeta public/game/data/art?');
+    dirHandle = null;
+    return;
+  }
+  setConnectStatus('ok', `conectado ✔ (${okCount}/3 ficheros cargados${errCount ? `, ${errCount} no encontrados` : ''}) — los retratos nuevos se guardan solos`);
+  updatePoolUi();
+}
+
+async function loadPool(key) {
+  const cfg = POOLS[key];
+  const fh = await dirHandle.getFileHandle(cfg.file);
+  const file = await fh.getFile();
+  const src = await file.text();
+  const { prefix, suffix, array } = extractArrayLiteral(src, cfg.varName);
+  poolCache[key] = { fileHandle: fh, prefix, suffix, array };
+}
+
+async function savePool(key) {
+  const cache = poolCache[key];
+  if (!cache) return;
+  const src = cache.prefix + JSON.stringify(cache.array) + cache.suffix;
+  const writable = await cache.fileHandle.createWritable();
+  await writable.write(src);
+  await writable.close();
+}
+
+function setConnectStatus(kind, text) {
+  const el = $('connectStatus');
+  el.className = kind;
+  el.textContent = text;
+}
+
+$('connectBtn').addEventListener('click', connectDir);
+$('reloadViewerBtn').addEventListener('click', async () => {
+  if (!dirHandle) return;
+  try { await loadPool(currentPoolKey()); renderViewer(); }
+  catch (e) { alert('No se pudo recargar: ' + e.message); }
+});
+$('viewerFilter').addEventListener('input', renderViewer);
+
+function renderViewer() {
+  const el = $('viewer');
+  const key = currentPoolKey();
+  const cache = poolCache[key];
+  if (!cache) { el.innerHTML = '<div class="empty">Conecta la carpeta para ver los retratos actuales de este pool.</div>'; return; }
+  const filter = $('viewerFilter').value.trim().toUpperCase();
+  const cfg = POOLS[key];
+  el.innerHTML = '';
+  const labelOf = (e) => cfg.fixedIds ? (e.label || e.id) : e.name;
+  const entries = cache.array.filter((e) => !filter || (labelOf(e) || '').toUpperCase().includes(filter));
+  if (!entries.length) { el.innerHTML = '<div class="empty">Sin resultados.</div>'; return; }
+  for (const entry of entries) {
+    const art = cfg.thumb(entry);
+    const card = document.createElement('div');
+    card.className = 'card';
+    const pre = document.createElement('pre');
+    pre.innerHTML = art ? renderAsciiHtml(art) : '';
+    const name = document.createElement('div');
+    name.className = 'name';
+    name.textContent = labelOf(entry);
+    card.appendChild(pre);
+    card.appendChild(name);
+    if (cfg.fixedIds) {
+      // los 5 amuletos son fijos: no se borran desde aquí (dejaría al
+      // Bar sin icono para ese id) — para "sustituir" basta con volver a
+      // generar uno con el mismo id y pulsar "+ Añadir"
+      el.appendChild(card);
+      continue;
+    }
+    const del = document.createElement('button');
+    del.className = 'del';
+    del.textContent = '×';
+    del.title = 'Eliminar de este pool';
+    del.addEventListener('click', async () => {
+      if (!confirm(`¿Eliminar "${labelOf(entry)}" de ${cfg.varName}? Se guarda al momento.`)) return;
+      cache.array = cache.array.filter((e) => e !== entry);
+      poolCache[key].array = cache.array;
+      await savePool(key);
+      renderViewer();
+    });
+    card.appendChild(del);
+    el.appendChild(card);
+  }
+}
+
+// el "name" del pool es solo una etiqueta interna para no repetir entradas
+// en el fichero — el jugador nunca lo ve (su nombre real lo pone
+// RivalPlayer aparte) — así que si lo dejas en blanco se autogenera uno
+function nameTaken(key, name) {
+  const cache = poolCache[key];
+  const existsInPool = cache && cache.array.some((e) => (e.name || '').toUpperCase() === name);
+  const existsLocal = gallery.some((g) => g.poolKey === key && g.entry.name.toUpperCase() === name);
+  return existsInPool || existsLocal;
+}
+
+function autoName(key) {
+  const cfg = POOLS[key];
+  const cache = poolCache[key];
+  const base = cfg.varName.replace(/[^A-Z]/g, '') || 'RETRATO';
+  let n = 1 + (cache ? cache.array.length : 0) + gallery.filter((g) => g.poolKey === key).length;
+  let name = `${base}-${n}`;
+  while (nameTaken(key, name)) { n++; name = `${base}-${n}`; }
+  return name;
+}
+
+// --- añadir un retrato nuevo: se guarda solo si hay pool conectado, y
+// siempre queda además en la galería local como respaldo/copia manual.
+// Los pools de ids fijos (amuletos) son la excepción: no acumulan, cada id
+// tiene una única entrada — "+ Añadir" REEMPLAZA el icono de ese id. ---
+$('addBtn').addEventListener('click', async () => {
+  const key = currentPoolKey();
+  const cfg = POOLS[key];
+  const cache = poolCache[key];
+
+  if (cfg.fixedIds) {
+    const id = $('itemSelect').value;
+    const entry = cfg.build(id, lastPhoto);
+
+    gallery.push({ poolKey: key, entry });
+    renderGallery();
+    updateOutput();
+
+    if (cache) {
+      const i = cache.array.findIndex((e) => e.id === id);
+      if (i >= 0) cache.array[i] = entry; else cache.array.push(entry);
+      try {
+        await savePool(key);
+        renderViewer();
+        flashSaved();
+      } catch (e) {
+        alert('Se generó el icono pero no se pudo guardar en el fichero: ' + e.message + '\nQueda en la galería local para copiarlo a mano.');
+      }
+    }
+    return;
+  }
+
+  let name = $('nameInput').value.trim().toUpperCase();
+  if (!name) name = autoName(key);
+
+  const existsInPool = cache && cache.array.some((e) => (e.name || '').toUpperCase() === name);
+  const existsLocal = gallery.some((g) => g.poolKey === key && g.entry.name.toUpperCase() === name);
+  if (existsInPool || existsLocal) { alert(`Ya hay un retrato llamado "${name}" en ${cfg.varName} — usa otro nombre.`); return; }
+
+  const desc = $('descInput').value.trim();
+  const entry = cfg.build(name, lastPhoto, lastMini, desc);
+
+  gallery.push({ poolKey: key, entry });
+  renderGallery();
+  updateOutput();
+
+  if (cache) {
+    cache.array.push(entry);
+    try {
+      await savePool(key);
+      renderViewer();
+      flashSaved();
+    } catch (e) {
+      alert('Se generó el retrato pero no se pudo guardar en el fichero: ' + e.message + '\nQueda en la galería local para copiarlo a mano.');
+    }
+  }
+});
+
+function flashSaved() {
+  const el = $('savedFlash');
+  el.classList.add('show');
+  setTimeout(() => el.classList.remove('show'), 1600);
+}
+
+$('clearGalleryBtn').addEventListener('click', () => {
+  gallery.length = 0;
+  renderGallery();
+  updateOutput();
+});
+
+function renderGallery() {
+  const el = $('gallery');
+  el.innerHTML = '';
+  gallery.forEach((g, i) => {
+    const chip = document.createElement('div');
+    chip.className = 'chip';
+    chip.innerHTML = `${g.entry.name} <span class="hint">(${POOLS[g.poolKey].varName})</span> <button data-i="${i}">×</button>`;
+    chip.querySelector('button').addEventListener('click', () => { gallery.splice(i, 1); renderGallery(); updateOutput(); });
+    el.appendChild(chip);
+  });
+}
+
+function updateOutput() {
+  const out = gallery.map((g) => JSON.stringify(g.entry));
+  $('output').value = out.join(',\n');
+}
+
+$('copyBtn').addEventListener('click', () => {
+  $('output').select();
+  navigator.clipboard.writeText($('output').value).catch(() => document.execCommand('copy'));
+});
+
+$('downloadBtn').addEventListener('click', () => {
+  if (!gallery.length) return;
+  const blob = new Blob([$('output').value], { type: 'text/javascript' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = 'retratos-nuevos.js';
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+});
+</script>
+</body>
+</html>

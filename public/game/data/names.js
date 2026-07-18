@@ -1,0 +1,250 @@
+// Nombres para generar jugadores IA: un pool por cada país del circuito
+// (España, Francia, Italia, Bélgica, Suiza, Portugal — ver data/countries.js
+// para el resto de datos de cada país). Cada pool combina un puñado de
+// nombres "de sabor" curados a mano (motes españoles, nombres clásicos del
+// país) con combinaciones de nombre + apellido normales generadas por
+// código — así hay 200+ nombres distintos por país sin tener que
+// escribirlos uno a uno, y los curados (más vistosos) salen primero en la
+// pool antes de caer en los normales. Bélgica y Suiza son multilingües: sus
+// pools mezclan las dos comunidades principales de cada país (francófona +
+// neerlandófona en Bélgica; germanófona + francófona en Suiza).
+
+const SPANISH_MOTES = [
+  'EL SABIO', 'PACO EL LARGO', 'LA JOSEFA', 'EL CARDENAL', 'DON EVARISTO',
+  'EL DE BILBAO', 'REMEDIOS', 'MARISCAL RAMÓN', 'EL CHATO CHICO', 'LA PAQUITA',
+  'EL TUERTO', 'DOÑA ASUN', 'EL MELINDRES', 'TÍO CEBOLLA', 'LA GENEROSA',
+  'EL CURA LOCO', 'LA TELEGRAFISTA', 'EL FARMACÉUTICO', 'DON SEGISMUNDO', 'LA MODISTA',
+  'EL DE LA HUERTA', 'TÍA PACA', 'EL RENCOROSO', 'LA CIEGA', 'EL SASTRE',
+  'DON PANTALEÓN', 'LA DEL ESTANCO', 'EL FORASTERO', 'TÍO MATÍAS', 'LA CONCEJALA',
+  'EL BOTICARIO', 'DOÑA ROSAURA', 'EL PREGONERO', 'LA DEL BAR', 'EL SACRISTÁN',
+  'TÍO HONORIO', 'LA VIUDA ALEGRE', 'EL ALCALDE VIEJO', 'DON ABUNDIO', 'LA GITANA',
+];
+
+const FRENCH_MOTES = [
+  'MARCEL DUBOIS', 'JEAN-PIERRE', 'ANTOINE ROUX', 'MICHEL PETIT', 'CLAUDINE MOREAU',
+  'PHILIPPE LAURENT', 'BERNARD GARNIER', 'DIDIER FONTAINE', 'PATRICK LEROY', 'GÉRARD MARTIN',
+  'YVES BONNET', 'FRANÇOISE DUPONT', 'JACQUES MERCIER', 'ALAIN GAUTHIER', 'DANIEL ROBIN',
+  'CHRISTIAN PERRIN', 'SERGE BLANCHARD', 'PASCAL MEUNIER',
+];
+
+const ITALIAN_MOTES = [
+  'GIUSEPPE ROSSI', 'MARIO BIANCHI', 'LUIGI FERRARI', 'ENZO CONTI', 'FRANCESCA ROMANO',
+  'ANTONIO ESPOSITO', 'SALVATORE RUSSO', 'GIOVANNI COLOMBO', 'CARLO RICCI', 'DOMENICO MARINO',
+  'FRANCESCO GRECO', 'PIETRO BRUNO', 'VINCENZO GALLO', 'ANGELO CONTE', 'ROBERTO DE LUCA',
+  'STEFANO MANCINI', 'MARIA COSTA', 'LUCIA FONTANA',
+];
+
+const BELGIAN_MOTES = [
+  'FILIP PEETERS', 'WOUTER CLAES', 'ANNEKE MAES', 'JEAN-MARC LEFÈVRE', 'SOPHIE DEVOS',
+  'KOEN JANSSENS', 'MARIE DUBOIS', 'PIET WILLEMS', 'CHRISTINE GOOSSENS', 'LUC DEGROOTE',
+  'ANNE-SOPHIE MICHAUX', 'BART VERSTRAETE', 'NATHALIE SIMON', 'DIRK VERMEULEN', 'CATHERINE LAMBERT',
+  'TOM DE CLERCK',
+];
+
+const SWISS_MOTES = [
+  'HANS MÜLLER', 'URS KELLER', 'BEAT SCHNEIDER', 'WERNER MEYER', 'JEAN-LUC ROSSIER',
+  'MARIE-CLAUDE FAVRE', 'KURT WEBER', 'PETER BRUNNER', 'FRANÇOISE BERTHOUD', 'DANIEL STUDER',
+  'RUTH ZIMMERMANN', 'CHRISTOPH HUBER', 'ANDRÉ PERRET', 'MONIKA FISCHER', 'THOMAS WIDMER',
+  'CLAIRE BOREL',
+];
+
+const PORTUGUESE_MOTES = [
+  'MANEL SOUSA', 'JOAQUIM FARIA', 'AUGUSTO COSTA', 'MARIA SANTOS', 'JOÃO PEREIRA',
+  'ANTÓNIO SILVA', 'ROSA FERREIRA', 'CARLOS OLIVEIRA', 'FERNANDA RODRIGUES', 'JOSÉ MARTINS',
+  'TERESA ALVES', 'MANUEL GONÇALVES', 'LUÍSA CARVALHO', 'FRANCISCO TEIXEIRA', 'ISABEL LOPES',
+  'PAULO RIBEIRO',
+];
+
+const SPANISH_FIRST_NAMES = [
+  'ANTONIO', 'FRANCISCO', 'MANUEL', 'JOSÉ', 'JUAN', 'PEDRO', 'MIGUEL', 'RAFAEL',
+  'ÁNGEL', 'ANDRÉS', 'FERNANDO', 'ENRIQUE', 'RAMÓN', 'VICENTE', 'SALVADOR', 'IGNACIO',
+  'EMILIO', 'GREGORIO', 'LORENZO', 'MARIANO', 'SEVERIANO', 'EUSEBIO', 'BALDOMERO', 'ANASTASIO',
+  'FLORENCIO', 'CELESTINO', 'HERMENEGILDO', 'ROMUALDO', 'TEODORO', 'VALENTÍN',
+  'CARMEN', 'DOLORES', 'PILAR', 'ENCARNACIÓN', 'REMEDIOS', 'ASUNCIÓN', 'CONCEPCIÓN', 'MERCEDES',
+  'JOSEFA', 'FRANCISCA', 'ANTONIA', 'MANUELA', 'ROSARIO', 'PURIFICACIÓN', 'AMPARO', 'CONSUELO',
+  'VICTORIA', 'ADELA', 'BENITA', 'FELISA',
+];
+
+const SPANISH_SURNAMES = [
+  'GARCÍA', 'GONZÁLEZ', 'RODRÍGUEZ', 'FERNÁNDEZ', 'LÓPEZ', 'MARTÍNEZ', 'SÁNCHEZ', 'PÉREZ',
+  'GÓMEZ', 'MARTÍN', 'JIMÉNEZ', 'RUIZ', 'HERNÁNDEZ', 'DÍAZ', 'MORENO', 'ÁLVAREZ',
+  'MUÑOZ', 'ROMERO', 'ALONSO', 'GUTIÉRREZ', 'NAVARRO', 'TORRES', 'DOMÍNGUEZ', 'VÁZQUEZ',
+  'RAMOS', 'GIL', 'RAMÍREZ', 'SERRANO', 'BLANCO', 'SUÁREZ', 'MOLINA', 'MORALES',
+  'ORTEGA', 'DELGADO', 'CASTRO', 'ORTIZ', 'RUBIO', 'MARÍN', 'SANZ', 'IGLESIAS',
+  'MEDINA', 'GARRIDO', 'CORTÉS', 'CASTILLO', 'SANTOS', 'LOZANO', 'GUERRERO', 'CANO',
+  'PRIETO', 'MÉNDEZ', 'CALVO', 'GALLEGO', 'VIDAL', 'LEÓN', 'HERRERA', 'PASCUAL',
+  'AGUILAR', 'REYES', 'FLORES', 'VARGAS', 'SOTO', 'CONTRERAS', 'SILVA', 'NÚÑEZ',
+  'CABRERA', 'VEGA', 'ROJAS', 'SALAZAR', 'MONTES', 'BRAVO', 'CARRASCO', 'PEÑA',
+  'ARIAS', 'VILLANUEVA', 'ESPINOSA', 'CAMPOS', 'VELASCO', 'PALACIOS', 'PADILLA', 'MERINO',
+  'BENÍTEZ', 'ESCOBAR', 'VALVERDE', 'MONTOYA', 'ROSALES', 'BUSTOS', 'ZAMORA', 'ARROYO',
+  'SEGURA', 'QUINTANA', 'ROBLES', 'ESTEBAN', 'BERMEJO', 'CRESPO', 'SOLER', 'PLAZA',
+  'ARENAS', 'MONTERO', 'LUCAS', 'PALOMO', 'CID', 'VELA', 'FUENTES', 'PARRA',
+  'GALÁN', 'MOYA', 'GIMÉNEZ', 'NIETO', 'VILLAR', 'CARO', 'BAENA', 'SOLANO',
+];
+
+const FRENCH_FIRST_NAMES = [
+  'JEAN', 'PIERRE', 'MICHEL', 'ANDRÉ', 'PHILIPPE', 'ALAIN', 'BERNARD', 'CLAUDE',
+  'DANIEL', 'GÉRARD', 'JACQUES', 'ROGER', 'ROBERT', 'HENRI', 'RENÉ', 'MAURICE',
+  'GEORGES', 'MARCEL', 'LOUIS', 'FRANÇOIS', 'PAUL', 'ÉMILE', 'ARMAND', 'GASTON',
+  'MARIE', 'JEANNE', 'FRANÇOISE', 'MONIQUE', 'CLAUDINE', 'YVETTE', 'SIMONE', 'GENEVIÈVE',
+  'DENISE', 'ODETTE', 'MARGUERITE', 'SUZANNE', 'PAULETTE', 'GISÈLE', 'ANDRÉE', 'ANTOINETTE',
+];
+
+const FRENCH_SURNAMES = [
+  'DUBOIS', 'MOREAU', 'LAURENT', 'GARNIER', 'FONTAINE', 'LEROY', 'MARTIN', 'BONNET',
+  'DUPONT', 'MERCIER', 'GAUTHIER', 'ROBIN', 'PERRIN', 'BLANCHARD', 'MEUNIER', 'ROUX',
+  'PETIT', 'GIRARD', 'ANDRÉ', 'LEFEBVRE', 'MICHEL', 'MOULIN', 'ARNAUD', 'ROLLAND',
+  'FAURE', 'BARBIER', 'RENARD', 'CHEVALIER', 'FRANÇOIS', 'DUVAL', 'BENOIT', 'GAUTIER',
+  'MASSON', 'MARCHAND', 'DUCHÊNE', 'RENAUD', 'BRUN', 'PICARD', 'CARON', 'AUBERT',
+  'SIMON', 'ROUSSEAU', 'VINCENT', 'FOURNIER', 'MOREL', 'GIRAUD', 'BLANC', 'GUÉRIN',
+  'BOYER', 'CLÉMENT', 'MORIN', 'NICOLAS', 'HENRY', 'ROUSSEL', 'MATHIEU', 'NOËL',
+  'DUFOUR', 'DUMONT', 'LEGRAND', 'ROBERT', 'COLIN', 'LACROIX', 'POIRIER', 'DENIS',
+  'BOULANGER', 'LEMAIRE', 'MARCHAL', 'GILBERT', 'RICHARD', 'DURAND', 'LEMOINE', 'PAYET',
+  'ROUGET', 'COUSIN', 'LEGROS', 'PELLETIER', 'CHARPENTIER', 'GAY', 'HUBERT', 'JULLIEN',
+  'TESSIER', 'BAILLY', 'COLLET', 'FABRE', 'ROY', 'ROUSSET', 'GAILLARD', 'BERGER',
+  'PONS', 'GROS', 'BOUCHER', 'LEVÊQUE', 'RENAULT', 'GUYOT', 'THOMAS', 'PICHON',
+  'DESCHAMPS', 'TURPIN', 'ADAM', 'GERMAIN', 'JOLY', 'MARTEL', 'HUET', 'JOUBERT',
+];
+
+const ITALIAN_FIRST_NAMES = [
+  'GIUSEPPE', 'MARIO', 'LUIGI', 'ENZO', 'ANTONIO', 'SALVATORE', 'GIOVANNI', 'CARLO',
+  'DOMENICO', 'FRANCESCO', 'PIETRO', 'VINCENZO', 'ANGELO', 'ROBERTO', 'STEFANO', 'GIORGIO',
+  'ALDO', 'DARIO', 'RENZO', 'UMBERTO', 'FRANCESCA', 'MARIA', 'LUCIA', 'ANNA',
+  'ROSA', 'TERESA', 'CATERINA', 'GIOVANNA', 'PAOLA', 'SILVANA',
+];
+
+const ITALIAN_SURNAMES = [
+  'ROSSI', 'BIANCHI', 'FERRARI', 'CONTI', 'ROMANO', 'ESPOSITO', 'RUSSO', 'COLOMBO',
+  'RICCI', 'MARINO', 'GRECO', 'BRUNO', 'GALLO', 'CONTE', 'MANCINI', 'COSTA',
+  'FONTANA', 'MORETTI', 'BARBIERI', 'RIZZO', 'LOMBARDI', 'GIORDANO', 'RINALDI', 'CARUSO',
+  'FERRARA', 'GALLI', 'MARTINI', 'LEONE', 'LONGO', 'GENTILE', 'MARCHETTI', 'VITALE',
+  'SERRA', 'FERRI', 'BIANCO', 'VILLA', 'GRASSI', 'VALENTINI', 'MESSINA', 'DE SANTIS',
+  'BARONE', 'FIORE', 'DE LUCA', 'MARINI', 'GRASSO', 'GATTO', 'DI STEFANO', 'MANCINO',
+  'ROMAGNOLI', 'BATTAGLIA', 'SANTORO', 'MARCHESE', 'PARISI', 'FERRANTE', "D'AMICO", 'CATALDO',
+  'GAROFALO', 'CARBONE', 'GUERRA', 'DE ROSA', 'PAGANO', 'DONATI', 'PALUMBO', 'SORRENTINO',
+  'SILVESTRI', 'DE ANGELIS', 'COSTANTINI', 'MONTANARI', 'BELLINI', 'ORLANDO', 'FABBRI', 'MARCHESI',
+  'PALMIERI', 'DI MARCO', 'COSTANZI', 'RUSSI', 'CONTINI', 'FERRAIOLI', 'BENEDETTI', 'PIRAS',
+  'GIULIANI', 'MAZZA', 'MARTINO', 'COPPOLA', 'SANNA', 'DE FILIPPO', 'MONTI', 'PECORARO',
+  'VALLE', 'SPINA', 'AMATO', 'RIZZI', 'TESTA', 'MORO', 'LEONI', 'BIANCHINI',
+  'DE MARCO', 'VOLPE', 'GATTI', 'RAVAGLI', 'PRATI',
+];
+
+// Bélgica: pool mixta francófona + neerlandófona, a partes iguales
+const BELGIAN_FIRST_NAMES = [
+  'FILIP', 'WOUTER', 'KOEN', 'PIET', 'LUC', 'BART', 'DIRK', 'TOM',
+  'JAN', 'PETER', 'JEAN-MARC', 'JEAN-CLAUDE', 'MARC', 'PHILIPPE', 'THIERRY', 'PASCAL',
+  'DIDIER', 'OLIVIER', 'ANNEKE', 'SOPHIE', 'MARIE', 'CHRISTINE', 'NATHALIE', 'CATHERINE',
+  'ANNE-SOPHIE', 'VÉRONIQUE', 'ISABELLE', 'MARTINE', 'GRIET', 'HILDE',
+];
+
+const BELGIAN_SURNAMES = [
+  'PEETERS', 'CLAES', 'MAES', 'JANSSENS', 'WILLEMS', 'GOOSSENS', 'DEGROOTE', 'VERSTRAETE',
+  'VERMEULEN', 'DE CLERCK', 'LEFÈVRE', 'DEVOS', 'DUBOIS', 'MICHAUX', 'SIMON', 'LAMBERT',
+  'JACOBS', 'MERTENS', 'WOUTERS', 'DE SMET', 'DECLERCQ', 'DELVAUX', 'GILLET', 'RENARD',
+  'THOMAS', 'HENDRICKX', 'DE COCK', 'VANDEN BERGHE', 'DE WOLF', 'VERHOEVEN', 'PIRARD', 'COLLARD',
+  'HERMANS', 'DEPREZ', 'DEWAELE', 'VAN DAMME', 'DE BACKER', 'VAN DEN BROECK', 'DE VOS', 'PAUWELS',
+  'DEWEER', 'VANHOVE', 'DE PAUW', 'VAN ACKER', 'VERSTRAELEN', 'LEMMENS', 'VAN DEN BOSSCHE', 'SEGERS',
+  'DE BRUYNE', 'VAN DAM', 'GEENS', 'VAN HECKE', 'DIERCKX', 'BOGAERT', 'VAN LOO', 'DECOSTER',
+  'VANDEPUTTE', 'DE MEYER', 'DELHAYE', 'ANCIAUX', 'GODEFROID', 'MARCHAL', 'THIRY', 'PIRLOT',
+  'GILSON', 'DUMONT', 'DEPAEPE', 'VAN DEN EYNDE', 'VERBEKE', 'CLAEYS', 'VERCRUYSSE', 'BOSMANS',
+  'WAUTERS', 'VAN DEN BERG', 'DENYS', 'LATOUR', 'GEERTS', 'SCHEPENS', 'VAN OVERSTRAETEN', 'DELCOURT',
+  'LIBERT', 'TOUSSAINT', 'GODART', 'WATTEEUW', 'DEBAETS', 'VERSTEEG', 'VAN DYCK', 'DHONDT',
+  'VERELST', 'ROELANDT', 'BEECKMAN', 'STIENON', 'GILLARD', 'ANSEEUW', 'VANDENBROUCKE', 'DEPOORTER',
+  'VANDEVELDE', 'HENDRIKX', 'VAN DER LINDEN', 'CALLENS',
+];
+
+// Suiza: pool mixta germanófona + francófona, a partes iguales
+const SWISS_FIRST_NAMES = [
+  'HANS', 'URS', 'BEAT', 'WERNER', 'KURT', 'PETER', 'DANIEL', 'CHRISTOPH',
+  'THOMAS', 'RUDOLF', 'HEINZ', 'BRUNO', 'WALTER', 'ERNST', 'MARKUS', 'JEAN-LUC',
+  'ANDRÉ', 'MICHEL', 'PIERRE', 'CLAUDE', 'MARIE-CLAUDE', 'FRANÇOISE', 'RUTH', 'MONIKA',
+  'CLAIRE', 'ELISABETH', 'URSULA', 'VERENA', 'HEIDI', 'SILVIA',
+];
+
+const SWISS_SURNAMES = [
+  'MÜLLER', 'KELLER', 'SCHNEIDER', 'MEYER', 'WEBER', 'BRUNNER', 'STUDER', 'ZIMMERMANN',
+  'HUBER', 'FISCHER', 'WIDMER', 'ROSSIER', 'FAVRE', 'BERTHOUD', 'PERRET', 'BOREL',
+  'MOSER', 'BAUMANN', 'FREI', 'SUTER', 'GERBER', 'STEINER', 'WENGER', 'AMMANN',
+  'HOFMANN', 'GRABER', 'BURKHARD', 'WYSS', 'LEUENBERGER', 'RENAUD', 'DUPASQUIER', 'JAQUET',
+  'SCHMID', 'WINKLER', 'EGLI', 'KOCH', 'BAUR', 'STUCKI', 'AEBI', 'ZBINDEN',
+  'LÜTHI', 'KUNZ', 'BURGER', 'HAAB', 'RYSER', 'TSCHANZ', 'WALTHER', 'HAUSER',
+  'BRAND', 'ISLER', 'FANKHAUSER', 'GYGAX', 'NIEDERHAUSER', 'SCHENK', 'WITTWER', 'ZAUGG',
+  'GLAUSER', 'FLURY', 'HODEL', 'IMHOF', 'ARNOLD', 'BURI', 'STETTLER', 'WÜTHRICH',
+  'BRECHBÜHL', 'SCHÄR', 'ROSSET', 'PERRENOUD', 'JEANNERET', 'MONNIER', 'CHAPPUIS', 'GUYE',
+  'DROZ', 'MATTHEY', 'VUILLE', 'THIÉBAUD', 'RACINE', 'PIGUET', 'CUENDET', 'FREY',
+  'MARTI', 'NÄF', 'SCHLÄPPI', 'BIERI', 'LIENHARD', 'SCHILD', 'BRUGGER', 'TRACHSEL',
+  'RUFENER', 'ZWAHLEN', 'AMSTUTZ', 'HALDIMANN', 'MEYLAN', 'DELACRÉTAZ', 'BALMER', 'INDERMÜHLE',
+  'SANDOZ', 'JACCARD', 'PELLET', 'BÜHLER',
+];
+
+const PORTUGUESE_FIRST_NAMES = [
+  'MANEL', 'JOAQUIM', 'AUGUSTO', 'JOÃO', 'ANTÓNIO', 'CARLOS', 'JOSÉ', 'MANUEL',
+  'FRANCISCO', 'PAULO', 'ARMANDO', 'DOMINGOS', 'FERNANDO', 'HENRIQUE', 'LEONEL',
+  'MARIA', 'ROSA', 'FERNANDA', 'TERESA', 'LUÍSA', 'ISABEL', 'CONCEIÇÃO', 'GRAÇA',
+  'AMÉLIA', 'CELESTE', 'ODETE', 'ARMANDA', 'DEOLINDA', 'GLÓRIA', 'PIEDADE',
+];
+
+const PORTUGUESE_SURNAMES = [
+  'SOUSA', 'FARIA', 'COSTA', 'SANTOS', 'PEREIRA', 'SILVA', 'FERREIRA', 'OLIVEIRA',
+  'RODRIGUES', 'MARTINS', 'ALVES', 'GONÇALVES', 'CARVALHO', 'TEIXEIRA', 'LOPES', 'RIBEIRO',
+  'MARQUES', 'FERNANDES', 'GOMES', 'PINTO', 'MOREIRA', 'ANTUNES', 'MATOS', 'CUNHA',
+  'ROCHA', 'DIAS', 'NEVES', 'CORREIA', 'MENDES', 'NUNES', 'MACHADO', 'TAVARES',
+  'LEITE', 'BRANCO', 'CASTRO', 'AMARAL', 'ESTEVES', 'MONTEIRO', 'ANDRADE', 'PIMENTA',
+  'ABREU', 'MACEDO', 'BAPTISTA', 'PEIXOTO', 'VIEIRA', 'VALE', 'GUERREIRO', 'SEQUEIRA',
+  'MAGALHÃES', 'BORGES', 'AZEVEDO', 'BARBOSA', 'XAVIER', 'SIMÕES', 'VALENTE', 'MOTA',
+  'SÁ', 'REGO', 'PIRES', 'CORDEIRO', 'MADEIRA', 'BATISTA', 'ARAÚJO', 'LEAL',
+  'RAPOSO', 'ANJOS', 'GUEDES', 'FONSECA', 'BRITO', 'MELO', 'PAIVA', 'REIS',
+  'SANTANA', 'QUEIRÓS', 'CAETANO', 'MARCELINO', 'LOUREIRO', 'FALCÃO', 'BASTOS', 'FIGUEIREDO',
+  'PINHEIRO', 'COELHO', 'VALADARES', 'SOARES', 'NOGUEIRA', 'AMORIM', 'ABRANTES', 'GARCÊS',
+  'MATIAS', 'SEABRA', 'CRUZ', 'ALMADA', 'BRANDÃO', 'PACHECO', 'RESENDE', 'FREITAS',
+  'MOURA', 'PROENÇA', 'TOMÉ', 'GALVÃO',
+];
+
+// combina cada nombre con cada apellido y baraja el resultado, para que las
+// combinaciones "normales" no salgan siempre en el mismo orden
+function shuffledCombos(firsts, lasts) {
+  const out = [];
+  for (const f of firsts) for (const l of lasts) out.push(`${f} ${l}`);
+  for (let i = out.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [out[i], out[j]] = [out[j], out[i]];
+  }
+  return out;
+}
+
+// motes/nombres curados primero (más "de sabor"), y cuando se acaban se
+// rellena con combinaciones normales de nombre + apellido hasta llegar al
+// mínimo pedido — así hay cientos de nombres distintos sin apenas repetirse
+function buildPool(curated, firsts, lasts, minSize) {
+  const pool = curated.slice();
+  const seen = new Set(pool);
+  for (const combo of shuffledCombos(firsts, lasts)) {
+    if (pool.length >= minSize) break;
+    if (seen.has(combo)) continue;
+    seen.add(combo);
+    pool.push(combo);
+  }
+  return pool;
+}
+
+export const NATIONALITIES = [
+  { code: 'ES', label: 'España', weight: 45, names: buildPool(SPANISH_MOTES, SPANISH_FIRST_NAMES, SPANISH_SURNAMES, 200) },
+  { code: 'FR', label: 'Francia', weight: 15, names: buildPool(FRENCH_MOTES, FRENCH_FIRST_NAMES, FRENCH_SURNAMES, 200) },
+  { code: 'IT', label: 'Italia', weight: 12, names: buildPool(ITALIAN_MOTES, ITALIAN_FIRST_NAMES, ITALIAN_SURNAMES, 200) },
+  { code: 'BE', label: 'Bélgica', weight: 10, names: buildPool(BELGIAN_MOTES, BELGIAN_FIRST_NAMES, BELGIAN_SURNAMES, 200) },
+  { code: 'CH', label: 'Suiza', weight: 10, names: buildPool(SWISS_MOTES, SWISS_FIRST_NAMES, SWISS_SURNAMES, 200) },
+  { code: 'PT', label: 'Portugal', weight: 8, names: buildPool(PORTUGUESE_MOTES, PORTUGUESE_FIRST_NAMES, PORTUGUESE_SURNAMES, 200) },
+];
+
+export function pickNationality(rng) {
+  const tot = NATIONALITIES.reduce((s, n) => s + n.weight, 0);
+  let r = rng() * tot;
+  for (const n of NATIONALITIES) { r -= n.weight; if (r <= 0) return n; }
+  return NATIONALITIES[0];
+}
+
+// para forzar una nacionalidad concreta: TODOS los clubes la usan (cada
+// club ficha siempre de su propio país, nunca una mezcla — ver Club.js)
+export function nationalityByCode(code) {
+  return NATIONALITIES.find((n) => n.code === code) || NATIONALITIES[0];
+}

@@ -1,0 +1,15 @@
+{
+  "name": "petanka",
+  "private": true,
+  "type": "module",
+  "description": "Petanka - juego de petanca ASCII. El juego (public/game) es JS vanilla sin build; Astro solo lo envuelve para dev/build/preview.",
+  "scripts": {
+    "dev": "astro dev",
+    "build": "astro build",
+    "preview": "astro preview",
+    "verify": "node tools/verify.mjs"
+  },
+  "dependencies": {
+    "astro": "^4.16.0"
+  }
+}
