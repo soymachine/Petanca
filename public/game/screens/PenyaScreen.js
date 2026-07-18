@@ -445,7 +445,7 @@ export class PenyaScreen {
       wrapText(ABUELO_DATA[id].trait, 40).forEach((l) => lines.push(['  ' + l, '#d8b8e8']));
     }
     lines.push(['CARRERA:', '#ffb347']);
-    lines.push([`  ${s.career.wins}V ${s.career.losses}D  ·  ${s.torneos} PARTIDAS / ${RETIRE_AT}  ·  sueldo ${upkeepFor(id)}€/sem`, '#9a927a']);
+    lines.push([`  ${s.career.wins}V ${s.career.losses}D  ·  ${s.torneos} PARTIDAS / ${RETIRE_AT}  ·  sueldo ${upkeepFor(id, player.roster)}€/sem`, '#9a927a']);
     if (s.formStreak >= 2) lines.push([`  🔥 racha de ${s.formStreak} victorias seguidas${s.formStreak >= 3 ? ' (llega más firme a la mesa)' : ''}`, '#ffb347']);
     if (s.item) {
       const it = ITEMS[s.item.id];

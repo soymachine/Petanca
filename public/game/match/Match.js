@@ -499,9 +499,11 @@ export class Match {
             // ir a más si el abuelo ya viene muy fatigado o mayor: una
             // lesión de verdad, que le pasa factura el resto del partido y
             // le deja de baja unos días (se resuelve al terminar la partida)
-            let injuryChance = 0;
-            if (st < 15) injuryChance += 0.10;
-            if (abueloState.age >= 75) injuryChance += 0.08;
+            // continuo en vez de dos escalones fijos: cuanto menos STA le
+            // queda y cuantos más años tiene, más suave pero más real crece
+            // el riesgo (antes era +0.10 de golpe bajo 15 STA y +0.08 de
+            // golpe a partir de 75 años, con un salto seco en ambos casos)
+            const injuryChance = Math.max(0, (25 - st) / 250) + Math.max(0, abueloState.age - 70) * 0.01;
             if (!this.training && !this.injuryEvent && Math.random() < injuryChance) {
               this.injuryEvent = { id: this.abuelo, name: this._nameOf(this.abuelo) };
               abueloState.st = Math.max(0, abueloState.st - 20);

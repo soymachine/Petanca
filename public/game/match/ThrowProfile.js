@@ -1,5 +1,29 @@
 import { ABUELO_DATA } from '../data/abuelos.js';
 import { bestBondMultiplier } from '../domain/Chemistry.js';
+import { clamp } from '../core/utils.js';
+
+// fatiga -> temblor: tramo suave hasta los 30 STA (igual que antes), y por
+// debajo una "pared del cansancio" con el doble de pendiente — jugar
+// agotado deja de ser un empeoramiento proporcional y pasa a ser un riesgo
+// real, para que rotar plantilla pese de verdad en vez de ser cosmético.
+function fatiguePenalty(st) {
+  if (st >= 60) return 0;
+  const soft = (60 - Math.max(30, st)) / 60 * 1.2;
+  if (st >= 30) return soft;
+  const softAt30 = (60 - 30) / 60 * 1.2;
+  return softAt30 + (30 - st) / 30 * 1.6;
+}
+
+// moral -> temblor: tramo normal igual para todo el mundo, y dos zonas que
+// aceleran el efecto pasados los ±12 puntos ("estado de gracia" /
+// "crisis anímica") — antes era una recta perfecta en todo el rango,
+// pasar de +1 a +2 pesaba igual que de +19 a +20.
+function moralShakeMult(mo) {
+  const base = 1 - clamp(mo, -12, 12) * 0.0035;
+  if (mo > 12) return base - (mo - 12) * 0.004;
+  if (mo < -12) return base + (-12 - mo) * 0.006;
+  return base;
+}
 
 // Calcula cómo tira el abuelo alineado ahora mismo: temblor, velocidad de la
 // barra de potencia, alcance máximo y longitud de guía. Junta stats, fatiga,
@@ -12,7 +36,7 @@ export class ThrowProfile {
     let shake = 0.055 - s.getStat('pulso') * 0.0038;
 
     const fat = Math.max(0, Math.min(1, (60 - s.st) / 60));
-    shake *= 1 + fat * 1.2;
+    shake *= 1 + fatiguePenalty(s.st);
 
     if (!match.training && match.scoreA > match.scoreP && i !== 5) {
       const press = (1 - s.getStat('temple') / 10) * 0.35;
@@ -33,7 +57,7 @@ export class ThrowProfile {
       if (s.inherited && s.inherited.clima === weatherKey) shake *= 0.95;
     }
 
-    shake *= 1 - s.mo * 0.004;
+    shake *= moralShakeMult(s.mo);
     if (match.jackChoice === 'larga') shake *= 1.15; // boliche largo: cuesta más precisión a los dos bandos
     if (!match.training && match.streak >= 2) shake *= Math.max(0.6, 1 - (match.streak - 1) * 0.08);
     if (!match.training && s.inFormBonus) shake *= 0.92; // racha de forma: llega confiado de casa

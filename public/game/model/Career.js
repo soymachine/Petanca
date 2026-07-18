@@ -82,7 +82,12 @@ export class Career {
       p.pressPromise = null;
     }
 
-    p.boardConfidence = clamp(p.boardConfidence + (won ? 3 : -5), 0, 100);
+    {
+      const mySkill = p.club.avgSkill(p.roster);
+      const oppSkill = opponent.avgSkill();
+      const resultMargin = finalScoreP - finalScoreA;
+      p.boardConfidence = clamp(p.boardConfidence + boardConfidenceDelta(won, resultMargin, mySkill, oppSkill), 0, 100);
+    }
     let ultimatum = false, crisisDemotion = false;
     if (p.boardConfidence <= 0) {
       ultimatum = true;
@@ -181,7 +186,11 @@ export class Career {
       for (const id of p.roster.ids) p.roster.get(id).addMoral(-6);
       p.news.push(`Las arcas de ${p.clubName} están en números rojos: la nómina de ${upkeep}€ pasa factura a la moral de la peña.`);
     }
-    for (const id of p.roster.ids) p.roster.get(id).st = Math.min(100, p.roster.get(id).st + 30 + p.facilities.extraRecoveryOnTravel());
+    for (const id of p.roster.ids) {
+      const s = p.roster.get(id);
+      s.recoverWeekly(p.facilities.extraRecoveryOnTravel());
+      s.moralWeeklyDecay();
+    }
 
     let itemDrop = null;
     if (won && league.level >= 3) {
@@ -253,6 +262,7 @@ export class Career {
     // ¿se acaba la temporada? ascenso de los 2 primeros, descenso de los 2 últimos
     let seasonEnd = null;
     if (league.isSeasonOver) {
+      p.seasonsPlayed++;
       p.boardCrisis = false; // temporada nueva, cuenta atrás de ultimátums a cero
       for (const id of p.roster.ids) p.roster.get(id).age++;
       const rank = league.myRank();
@@ -316,7 +326,7 @@ export class Career {
         const oppTag = firstOpp ? countryTag(firstOpp.country) : '';
         p.news.push(`¡OS CLASIFICÁIS PARA LA COPA DE EUROPA! ${p.clubName} debuta en ${p.euroCup.roundName.toLowerCase()} contra ${firstOpp ? firstOpp.name : '?'}${oppTag}.`);
       }
-      p.boardGoal = boardGoalFor(p.currentLeagueLevel);
+      p.boardGoal = boardGoalFor(p.seasonsPlayed, p.currentLeagueLevel);
       const awards = this._seasonAwards(p);
       if (awards.length) {
         const linea = awards.map((a) => `${STAT_LABEL[a.stat]}: ${this.nameOf(a.id)}`).join('  ·  ');
@@ -464,4 +474,17 @@ function cityAt(level) {
   const map = { 1: 'Albacete', 2: 'Cuenca', 3: 'Zaragoza', 4: 'Sevilla', 5: 'Valencia', 6: 'Bilbao', 7: 'Barcelona', 8: 'Madrid' };
   return map[level] || `nivel ${level}`;
 }
-function boardGoalFor(level) { return BoardObjective.forSeason(level).goal; }
+function boardGoalFor(seasonNum, leagueLevel) { return BoardObjective.forSeason(seasonNum, leagueLevel).goal; }
+
+// cuánto cambia la confianza de la junta tras un partido: además del
+// resultado en bruto, pesa la contundencia (margen) y si el rival era
+// mejor o peor que tú sobre el papel — machacar a un equipo mejor vale
+// mucho más que ganar por la mínima a uno flojo, y perder por goleada
+// duele más que caer en el último suspiro. Antes era un +3/-5 fijo, igual
+// para un partido ajustadísimo que para una manita en cualquier sentido.
+function boardConfidenceDelta(won, margin, mySkill, oppSkill) {
+  const upset = clamp((oppSkill - mySkill) / 3, -1, 1); // >0: el rival era mejor sobre el papel
+  const marginRatio = clamp(Math.abs(margin) / 8, 0, 1);
+  if (won) return Math.round(3 + marginRatio * 2 + Math.max(0, upset) * 4);
+  return -Math.round(5 + marginRatio * 3 - Math.max(0, -upset) * 2);
+}

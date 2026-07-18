@@ -103,13 +103,50 @@ export class AbueloState {
   // stat de grano fino (0-100) para la UI y el reparto de puntos de nivel
   getStatDisplay(k) {
     const cap = this.potentialCap ? this.potentialCap[k] * 10 : 100;
-    return clamp(this._baseStat10(k) * 10 + (this.bonus[k] || 0), 0, cap);
+    return clamp(this._baseStat10(k) * 10 + (this.bonus[k] || 0) - this.ageDeclineFor(k), 0, cap);
   }
 
+  // declive físico por la edad: a partir de los 78 años empieza a notarse,
+  // y crece cuadrático (cada año pasado ese umbral pesa más que el
+  // anterior, no una recta) — el aguante y el pulso (piernas y mano firme)
+  // se resienten antes que la maña o el temple (la cabeza aguanta mejor
+  // que el cuerpo). No toca `bonus` ni `genStats`: el entrenamiento
+  // invertido sigue ahí, solo se resta encima al mostrar/usar la stat.
+  ageDeclineFor(k) {
+    if (this.age < 78) return 0;
+    const over = this.age - 78;
+    const sensitivity = { aguante: 1.3, pulso: 1.0, brazo: 0.9, mana: 0.6, temple: 0.3 };
+    return Math.round(over * over * 0.15 * (sensitivity[k] ?? 1));
+  }
+
+  // moral con rendimientos decrecientes: cuanto más cerca del techo (o del
+  // suelo), más cuesta seguir moviéndose en esa dirección — así un +20 (o
+  // un -20) hay que ganárselo con varios empujones seguidos, no de un tirón,
+  // y no se queda ahí clavado para siempre (ver moralWeeklyDecay).
   addMoral(d, gimnasioBonus = false) {
     if (this.id === 4) d *= 2; // EL RUBIO: presumido
     const floor = this.id === 0 ? 0 : (this.item && this.item.id === 'petaca' ? -10 : -20);
-    this.mo = clamp(this.mo + d, floor, 20);
+    const cap = 20;
+    if (d > 0) d *= clamp((cap - this.mo) / cap, 0.15, 1);
+    else if (d < 0) d *= clamp((this.mo - floor) / (cap - floor), 0.15, 1);
+    this.mo = clamp(this.mo + d, floor, cap);
+  }
+
+  // deriva semanal hacia el neutro: sin nada que la alimente, la moral se
+  // acerca un 8% a 0 cada semana — un chute puntual (fiestas, un amuleto)
+  // ya no dura toda la temporada si no se refuerza.
+  moralWeeklyDecay() {
+    this.mo = Math.round(this.mo - this.mo * 0.08);
+  }
+
+  // recuperación semanal de stamina: los años pasan factura (a partir de
+  // los 65, cada año de más recupera algo menos, con suelo del 55% a edad
+  // muy avanzada) y el aguante ayuda un poco más allá de bajar el coste en
+  // partido — antes era un +30 fijo para todo el mundo, sin distinción.
+  recoverWeekly(baseBonus = 0) {
+    const ageFactor = clamp(1 - Math.max(0, this.age - 65) * 0.01, 0.55, 1);
+    const aguanteHelp = (ABUELO_DATA[this.id].stats.aguante - 5) * 0.6;
+    this.st = clamp(this.st + (30 + baseBonus) * ageFactor + aguanteHelp, 0, 100);
   }
 
   hasImmunity(weatherKey) {
@@ -227,9 +264,13 @@ export class AbueloState {
   }
 
   // probabilidad de fallecer esta temporada: crece con la edad a partir de
-  // los 70, y se mantiene siempre pequeña.
+  // los 70, cada vez más deprisa (término cuadrático, no una recta) — a
+  // los 75 sigue siendo un riesgo pequeño, a los 90 ya pesa de verdad,
+  // acompañando al declive físico de ageDeclineFor en vez de ser una
+  // tirada de dados desconectada de cómo se le ve jugar.
   deathChance() {
-    return clamp((this.age - 70) * 0.0007, 0, 0.018);
+    const over = Math.max(0, this.age - 70);
+    return clamp(over * over * 0.00003 + over * 0.0003, 0, 0.05);
   }
 
   recordMatchResult(won, marginPoints) {

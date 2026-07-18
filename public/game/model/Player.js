@@ -82,7 +82,12 @@ export class Player {
     // data/decisionEvents.js y SeasonClock
     this.seenDecisions = [];
     this.pendingDecisions = []; // [{day, id, ctx}]
-    this.boardGoal = boardObjectiveFor(1);
+    // temporadas de liga completadas: mueve la exigencia de boardObjectiveFor
+    // de forma continua (antes se guiaba por currentLeagueLevel, que se
+    // queda parado en 8 al llegar a Madrid y no refleja cuántas temporadas
+    // llevas jugando de verdad)
+    this.seasonsPlayed = 0;
+    this.boardGoal = boardObjectiveFor(1, 1);
     this.weeklyGoal = rollWeeklyGoal();
 
     // liga y calendario
@@ -218,7 +223,7 @@ export class Player {
       boardConfidence: this.boardConfidence, boardUltimatums: this.boardUltimatums, boardCrisis: this.boardCrisis,
       difficulty: this.difficulty, difficultyChosen: this.difficultyChosen, debugMode: this.debugMode, pressPromise: this.pressPromise,
       friendliesLeft: this.friendliesLeft, cup: this.cup ? this.cup.toJSON() : null, cupTitles: this.cupTitles,
-      bestMarginWin: this.bestMarginWin, chemistry: this.chemistry,
+      bestMarginWin: this.bestMarginWin, chemistry: this.chemistry, seasonsPlayed: this.seasonsPlayed,
       seenDecisions: this.seenDecisions, pendingDecisions: this.pendingDecisions,
       clubName: this.clubName, currentLeagueLevel: this.currentLeagueLevel,
       leagueWorld: this.leagueWorld.toJSON(),
@@ -280,6 +285,10 @@ export class Player {
     p.cupTitles = json.cupTitles || 0;
     p.bestMarginWin = json.bestMarginWin || null;
     p.chemistry = json.chemistry || {};
+    // guardado de antes de este contador: se aproxima con el nivel de liga
+    // actual (razonable — para llegar ahí hace falta haber jugado al menos
+    // esas temporadas) en vez de arrancar de golpe en la exigencia mínima
+    p.seasonsPlayed = json.seasonsPlayed ?? Math.max(1, json.currentLeagueLevel || 1);
     p.seenDecisions = json.seenDecisions || [];
     p.pendingDecisions = json.pendingDecisions || [];
     p.dailyBest = json.dailyBest || {};
