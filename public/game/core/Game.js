@@ -635,6 +635,7 @@ export class Game {
     } else if (cup.roundComplete()) {
       cup.advanceRound();
       if (cup.finished && cup.isChampion()) {
+        p.euroCupTitles++;
         p.boardConfidence = Math.min(100, p.boardConfidence + 25);
         p.addReward(900, 1800);
         p.news.push(`¡¡¡CAMPEONES DE LA COPA DE EUROPA!!! ${p.clubName} se corona tras ganar a ${opponent.name}${rivalTag} en la final (${scoreP}-${scoreA}). ¡La peña entera lo va a recordar toda la vida!`);
@@ -785,7 +786,7 @@ export class Game {
 
     this.career.weeklyNews(league);
     p.freeAgents.refresh();
-    this.state = prevState; // no te saca de la pantalla que estés mirando
+    this.state = prevState; // no te saca de la pantalla que estes mirando
     p.save();
     return result;
   }
