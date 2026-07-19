@@ -163,8 +163,31 @@ export class MatchScreen {
     if (frame % 20 < 15) screen.textCenter(COURT_Y - 2, '📏  MIDIENDO...  📏', '#ffe14d');
   }
 
+  // guía del boliche: solo dirección + potencia, sin efecto ni elevación
+  // elegibles — mismo estilo visual que la guía de bola, pero simplificada
+  _drawJackGuide(M) {
+    const { screen, frame } = this.game;
+    const loft = 0.1, baseSpeed = 55, maxPow = 42, guideLen = 20;
+    let gx = THROW_X, gy = CH / 2;
+    const vx = Math.cos(M.aimAngle), vy = Math.sin(M.aimAngle);
+    for (let i = 0; i < guideLen; i++) {
+      gx += vx * 1.6; gy += vy * 1.6 * 0.5;
+      if (gx > 0 && gx < CW && gy > 0 && gy < CH && i % 2 === 0) screen.put(COURT_X + gx, COURT_Y + gy, '·', '#c9a35d');
+    }
+    screen.put(COURT_X + THROW_X - 2, COURT_Y + CH / 2 - 1, '☺', '#4fc3f7');
+    screen.put(COURT_X + THROW_X - 2, COURT_Y + CH / 2, '/', '#4fc3f7');
+    if (M.phase === 'jackPower') {
+      const v = baseSpeed + M.power * maxPow;
+      const carry = (v * v * Math.sin(2 * loft)) / GRAV;
+      const lx = THROW_X + Math.cos(M.aimAngle) * carry;
+      const ly = CH / 2 + Math.sin(M.aimAngle) * carry * 0.5;
+      if (lx > 0 && lx < CW && ly > 0 && ly < CH && frame % 14 < 9) screen.put(COURT_X + lx, COURT_Y + ly, '✕', '#3d3520');
+    }
+  }
+
   _drawGuide(M) {
     const { screen, frame } = this.game;
+    if (M.phase === 'jackAim' || M.phase === 'jackPower') { this._drawJackGuide(M); return; }
     if (!['aim', 'spin', 'loft', 'power'].includes(M.phase)) return;
     const prof = M.throwProfile();
     const guideLen = prof.guideLen;
@@ -328,8 +351,12 @@ export class MatchScreen {
       let bar = '';
       for (let i = 0; i <= 7; i++) bar += i === idx ? steps[i] : i < idx ? steps[i] : '·';
       screen.text(5, py + 2, `rasa ${bar} bombeada   ${deg.toFixed(0)}°  ${deg < 20 ? '(tiro tenso, para tirar bolas)' : deg > 45 ? '(globo, cae muerta)' : '(media altura)'}`, '#9fd8e8');
+    } else if (M.phase === 'jackAim') {
+      screen.text(5, py + 1, 'BOLICHE — PUNTERÍA  [↑/↓] ajustar dirección   [ENTER] confirmar', '#e8e0c8');
+      const deg = (-M.aimAngle * 57.3).toFixed(1);
+      screen.text(5, py + 2, `dirección: ${deg}°`, '#88e088');
     } else if (M.phase === 'jackPower') {
-      screen.text(5, py + 1, 'BOLICHE   [ENTER/ESPACIO] ¡suelta! — solo cuenta la potencia', '#e8e0c8');
+      screen.text(5, py + 1, 'BOLICHE — POTENCIA  [ENTER/ESPACIO] ¡suelta!   [ESC] volver', '#e8e0c8');
       const w = 60;
       const fill = Math.round(M.power * w);
       let bar = '';
@@ -338,6 +365,8 @@ export class MatchScreen {
       screen.text(5, py + 2, '[', '#e8e0c8');
       screen.text(6, py + 2, bar, pcol);
       screen.text(6 + w, py + 2, `] corto ⟷ largo`, '#e8e0c8');
+    } else if (M.phase === 'jackSim') {
+      screen.text(5, py + 1, 'El boliche rueda...', '#c9b98a');
     } else if (M.phase === 'power') {
       const inSweet = M.sweetSpot !== null && Math.abs(M.power - M.sweetSpot) < M.sweetWidth;
       screen.text(5, py + 1, `POTENCIA  [ENTER/ESPACIO] ¡lanzar!   [ESC] volver${M.sweetSpot !== null ? '   ◆ busca el punto dulce dorado' : ''}`, inSweet ? '#ffe14d' : '#e8e0c8');

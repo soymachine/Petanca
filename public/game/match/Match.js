@@ -98,7 +98,7 @@ export class Match {
     this.score = 0; this.targetsHit = 0; this.success = false; // entrenamientos
     this.measured = false; this.measureBalls = null;
     this.xpGain = {}; // id de abuelo -> XP acumulado por calidad de tirada esta partida
-    this.jackChoice = null; // ya no se elige por menú (ver _placeJack); queda en null siempre
+    this.jackChoice = null; // ya no se elige por menú (ver _throwJack); queda en null siempre
     this.aiMorale = 0; // -1..1, sube ganando manos y baja perdiéndolas — ver resolveMano/AIPlayer
     this.chronicle = []; // hechos reales del partido para la crónica (ver match/Chronicle.js)
     this._worstDeficit = -999; this._worstDeficitScores = null; // para detectar una remontada de verdad
@@ -260,12 +260,32 @@ export class Match {
     this.weather.initParticles();
   }
 
-  // lanzamiento del boliche simplificado: solo potencia, sin puntería ni
-  // efecto — la barra de this.power (0-1) fija linealmente la distancia
-  _placeJack(power) {
-    const jx = clamp(75 + power * 40, 6, CW - 6);
-    const jy = clamp(CH / 2 + gauss() * 1.5, 5, CH - 5);
-    this.jack = new Ball({ x: jx, y: jy, owner: 'J' });
+  // lanzamiento del boliche simplificado: dirección + potencia (sin efecto
+  // ni elevación elegible), pero animado con el mismo motor físico que una
+  // bola — vuelo corto y casi todo rodadura. rollMod alto porque el
+  // boliche pesa mucho menos que una bola y por eso frena antes: a la
+  // misma potencia, siempre rueda menos.
+  _throwJack(angle, power) {
+    const startY = clamp(CH / 2 + gauss() * 0.5, 3, CH - 3);
+    const loft = 0.1;
+    const speed = 55 + power * 42;
+    const vh = speed * Math.cos(loft);
+    this.jack = new Ball({
+      x: THROW_X, y: startY,
+      vx: Math.cos(angle) * vh, vy: Math.sin(angle) * vh,
+      z: 0.01, vz: speed * Math.sin(loft),
+      owner: 'J', moving: true,
+    });
+    this.jack.rollMod = 1.9;
+    this.lastThrown = this.jack;
+    this.trail = [];
+  }
+
+  // se llama cuando el boliche deja de moverse (fase 'jackSim'): decide el
+  // doble boliche si toca y deja listo el ángulo de puntería por defecto
+  // para el primer tiro de bola, apuntando ya hacia donde ha quedado
+  _resolveJackThrow() {
+    this.jack2 = null; this.twinJacks = false;
     if (this.city.diff >= 6 && Math.random() < 0.35) {
       const ang = rnd(0, Math.PI * 2), dist = rnd(14, 22);
       const jx2 = clamp(this.jack.x + Math.cos(ang) * dist, 6, CW - 6);
@@ -395,17 +415,40 @@ export class Match {
       case 'roundStart':
         if (this.phaseT > 1.6 || input.hit('Enter') || input.hit(' ')) {
           if (this.turn === 'P') this.pickThrower();
+          this.phase = 'jackAim'; this.phaseT = 0;
+          this.aimAngle = 0;
+        }
+        break;
+
+      case 'jackAim': {
+        if (input.held('ArrowUp')) this.aimAngle -= 0.9 * dt;
+        if (input.held('ArrowDown')) this.aimAngle += 0.9 * dt;
+        this.aimAngle = clamp(this.aimAngle, -0.5, 0.5);
+        if (input.hit('Enter') || input.hit(' ')) {
           this.phase = 'jackPower'; this.phaseT = 0;
           this.power = 0; this.powerDir = 1;
         }
         break;
+      }
 
       case 'jackPower': {
         this.power += this.powerDir * 1.1 * dt;
         if (this.power >= 1) { this.power = 1; this.powerDir = -1; }
         if (this.power <= 0) { this.power = 0; this.powerDir = 1; }
         if (input.hit('Enter') || input.hit(' ')) {
-          this._placeJack(this.power);
+          this._throwJack(this.aimAngle, this.power);
+          this.phase = 'jackSim'; this.phaseT = 0;
+        }
+        if (input.hit('Escape') || input.hit('Backspace')) { this.phase = 'jackAim'; this.phaseT = 0; }
+        break;
+      }
+
+      case 'jackSim': {
+        const frame = this._frame || 0;
+        physicsWorld.step(this.allBalls(), dt, this.court, this.weather, () => {}, this.trail, this.jack, frame);
+        physicsWorld.step(this.allBalls(), dt, this.court, this.weather, () => {}, this.trail, this.jack, frame);
+        if (!this.jack.moving) {
+          this._resolveJackThrow();
           this.phase = this.turn === 'P' ? 'aim' : 'aiTurn';
           this.phaseT = 0; this.role = 'apuntar';
         }

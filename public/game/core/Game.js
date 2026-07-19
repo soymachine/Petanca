@@ -75,6 +75,9 @@ export class Game {
     this.decisionEvent = null; // { event, ctx } — evento de decisión esperando respuesta (ver data/decisionEvents.js)
     this.simulating = false; // modo Debugger: avanza días solo en segundo plano
 
+    this.showFps = false; // [F3] contador de FPS reales, ver loop()
+    this._fpsFrames = 0; this._fpsTimer = 0; this._fpsValue = 0;
+
     this.frame = 0;
     this.state = 'title';
     this.lastT = performance.now();
@@ -701,9 +704,11 @@ export class Game {
   simulateMatch() {
     const ctx = this.weeklyMatch;
     if (!ctx) return;
-    const opponent = ctx.opponentClub;
+    // en Copa/Copa de Europa, ctx.opponentClub es un objeto plano (sin
+    // avgSkill real: el rival solo existe como entrada de bracket, ver
+    // CupMatchContext) — su nivel vive en ctx.opponentEntry.skill
     const mySkill = this.player.club.avgSkill(this.player.roster);
-    const oppSkill = opponent.avgSkill();
+    const oppSkill = (this.isCupMatch || this.isEuroCupMatch) ? ctx.opponentEntry.skill : ctx.opponentClub.avgSkill();
     const won = Math.random() < mySkill / (mySkill + oppSkill);
     const loserScore = Math.floor(Math.random() * 12);
     const scoreP = won ? 13 : loserScore;
@@ -840,9 +845,20 @@ export class Game {
   }
 
   loop = (now) => {
-    const dt = Math.min(0.05, (now - this.lastT) / 1000);
+    const dtReal = (now - this.lastT) / 1000;
+    const dt = Math.min(0.05, dtReal);
     this.lastT = now;
     this.frame++;
+
+    if (this.input.hit('F3')) this.showFps = !this.showFps;
+    // FPS real (no el dt clampeado de la física): frames por segundo,
+    // recalculado 2 veces por segundo para que el número no tiemble frame
+    // a frame y aun así se note enseguida si el juego va renqueando
+    this._fpsFrames++; this._fpsTimer += dtReal;
+    if (this._fpsTimer >= 0.5) {
+      this._fpsValue = Math.round(this._fpsFrames / this._fpsTimer);
+      this._fpsFrames = 0; this._fpsTimer = 0;
+    }
 
     // modo Debugger: mientras "Simular" esté activo, avanza un día cada
     // pocos frames — rápido, pero visible en la mini-agenda en vez de
@@ -852,6 +868,12 @@ export class Game {
     const screen = this.screens[this.state];
     if (this.state === 'match') screen.update(dt);
     screen.draw();
+
+    if (this.showFps) {
+      const label = `${this._fpsValue} FPS [F3]`;
+      const col = this._fpsValue >= 50 ? '#7ec850' : this._fpsValue >= 30 ? '#ffe14d' : '#ff5c5c';
+      this.screen.text(this.screen.cols - label.length, 0, label, col);
+    }
 
     this.input.drawCursor(this.screen);
     this.screen.render();

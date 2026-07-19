@@ -4,7 +4,7 @@ import { DIFFICULTIES } from '../data/difficulty.js';
 import { CITIES } from '../data/cities.js';
 import { LeagueWorld } from '../domain/LeagueWorld.js';
 import { Cup } from '../domain/Cup.js';
-import { wrapText } from '../core/utils.js';
+import { wrapText, hitRect } from '../core/utils.js';
 
 export class TitleScreen {
   constructor(game) {
@@ -37,12 +37,15 @@ export class TitleScreen {
       return;
     }
 
-    if (frame % 40 < 26) screen.textCenter(34, '▶ [ ENTER ]  EMPEZAR A JUGAR ◀', '#7CFC00');
+    const startLabel = '▶ [ ENTER ]  EMPEZAR A JUGAR ◀';
+    const startRect = { x: Math.floor((screen.cols - startLabel.length) / 2), y: 34, w: startLabel.length, h: 1 };
+    const startHover = hitRect(input.mouse.cx, input.mouse.cy, startRect.x, startRect.y, startRect.w, startRect.h);
+    if (frame % 40 < 26 || startHover) screen.textCenter(34, startLabel, startHover ? '#ffe680' : '#7CFC00');
     screen.textCenter(37, `${player.clubName}   ·   Liga de ${player.league.cityName} (nivel ${player.currentLeagueLevel}/8)   ·   ${player.money}€   V:${player.wins} D:${player.losses}`, '#e8e0c8');
     screen.textCenter(39, `Perfil ${Player.activeSlot()} de ${Player.SLOT_COUNT}   ·   [P] cambiar de perfil${player.wins + player.losses > 0 ? '   ·   [B] borrar partida guardada' : ''}`, '#8a7f66');
     screen.textCenter(43, 'foto: Wikimedia Commons · filtro ASCII casero · hecho con cariño y albero', '#556');
 
-    if (input.hit('Enter') || input.hit(' ')) this.game.state = 'hub';
+    if (input.hit('Enter') || input.hit(' ') || (input.mouse.clicked && startHover)) this.game.state = 'hub';
     if (input.hit('b') || input.hit('B')) {
       this.game.player = Player.resetSave();
       this.diffCursor = 1;

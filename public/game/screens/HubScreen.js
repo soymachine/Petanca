@@ -68,17 +68,23 @@ export class HubScreen {
   // tarjeta de identidad: el escudo "de héroe" (13x13) ocupa toda la
   // altura útil, con el nombre/nivel/renombre/caja al lado — no es
   // clicable, es solo la carta de presentación del club
+  // clic en cualquier punto de la tarjeta: ir a Mi Peña (donde se gestiona
+  // de verdad la plantilla que representa este escudo)
   _drawIdentityCard(x, y, w, h) {
-    const { screen, player } = this.game;
+    const { screen, input, player } = this.game;
     const league = player.league;
-    screen.box(x, y, w, h, '#8a7f66', 'double');
-    screen.text(x + 2, y, ` ${truncate(player.clubName, w - 6)} `, '#ffb347');
+    const over = hitRect(input.mouse.cx, input.mouse.cy, x, y, w, h);
+    screen.box(x, y, w, h, over ? '#ffe680' : '#8a7f66', 'double');
+    screen.text(x + 2, y, ` ${truncate(player.clubName, w - 6)} `, over ? '#ffe680' : '#ffb347');
     const crest = CrestGenerator.generate(player.clubName);
     screen.drawPortrait(crest, x + 2, y + 1);
     const tx = x + 2 + 13 + 2;
     screen.text(tx, y + 2, `Nivel ${league.level}/8`, '#c9c2a8');
     screen.text(tx, y + 4, `Renombre ${player.level}`, '#c8a0e8');
     screen.text(tx, y + 5, `${player.money}€`, '#88e088');
+    screen.text(tx, y + 7, 'clic: ir a', '#8a7f66');
+    screen.text(tx, y + 8, 'Mi Peña', '#8a7f66');
+    if (over && input.mouse.clicked) this.game.state = 'penya';
   }
 
   // mapa de la ciudad de tu liga, a vista de pájaro (igual que antes, algo

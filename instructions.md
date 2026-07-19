@@ -32,6 +32,9 @@ Los archivos generados salen de `/tmp/ascii_convert.py` (ver "Filtro ASCII").
   transparentes), `box` (marcos simple/doble), `drawPhotoArt` (arte fotográfico
   indexado a paleta).
 - Bucle con `requestAnimationFrame`; `dt` limitado a 50 ms.
+- `[F3]` alterna un contador de FPS reales en la esquina superior derecha
+  (`game.showFps`), recalculado 2 veces por segundo; verde ≥50, amarillo
+  ≥30, rojo por debajo.
 - Entrada: teclado (`keys` mantenidas + `pressed` de un frame vía `hit(k)`) y
   ratón (celda calculada desde `getBoundingClientRect`; drag con `dx/dy`,
   `clicked` si el arrastre fue < 3 celdas). El cursor se dibuja como `◤` en la
@@ -70,10 +73,15 @@ distancias reales usan `dy×2` (`dist2d`). Dos regímenes por bola:
 
 ### Lanzamiento del boliche
 
-Al empezar cada mano, antes de tirar la primera bola: minijuego simplificado
-de **solo potencia** (barra oscilante, `power` 0–1 lineal → distancia), sin
-puntería/efecto/elevación. 35% de doble boliche en ciudades difíciles se
-sigue decidiendo con el primer tiro, igual que antes.
+Al empezar cada mano, antes de tirar la primera bola: minijuego de
+**dirección + potencia** (fases `jackAim` → `jackPower`, sin efecto ni
+elevación elegibles), pero animado con el mismo motor físico que una bola
+(`_throwJack`/fase `jackSim`): sale disparado desde el círculo, vuela un
+toque (`loft=0.1`) y rueda por la pista hasta pararse — se ve avanzar de
+verdad, con su propia estela de polvo. Pesa mucho menos que una bola, así
+que `rollMod=1.9` hace que frene antes: a la misma velocidad, rueda más o
+menos la mitad de lejos que una bola normal. 35% de doble boliche en
+ciudades difíciles se sigue decidiendo con el primer tiro, igual que antes.
 
 ### Secuencia de lanzamiento de bola (4 fases)
 
