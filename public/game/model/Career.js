@@ -107,6 +107,9 @@ export class Career {
     }
 
     p.club.recordResult(won);
+    opponent.recordResult(!won);
+    const matchdayIdx = ctx.matchdayIndex ?? league.matchday;
+    league.recordMatchResult(matchdayIdx, p.club.id, opponent.id, finalScoreP, finalScoreA);
     if (won) {
       p.wins++;
       if (!p.citiesWon.includes(league.cityName)) p.citiesWon.push(league.cityName);
@@ -188,7 +191,7 @@ export class Career {
     }
 
     // resto de la jornada: los otros 4 partidos se resuelven por estadísticas
-    this._simulateRestOfMatchday(league, ctx.matchdayIndex ?? league.matchday);
+    this._simulateRestOfMatchday(league, matchdayIdx);
     league.matchday++;
 
     // el resto de ligas (los 7 niveles españoles donde ahora mismo no
@@ -374,6 +377,8 @@ export class Career {
       if (!a || !b || a.isPlayer || b.isPlayer) continue; // el tuyo ya se ha resuelto jugando
       const won = Math.random() < a.avgSkill() / (a.avgSkill() + b.avgSkill());
       a.recordResult(won); b.recordResult(!won);
+      const [scoreA, scoreB] = fakeLeagueScore(won);
+      league.recordMatchResult(idx, aId, bId, scoreA, scoreB);
     }
   }
 
@@ -385,15 +390,26 @@ export class Career {
   _simulateLeagueMatchday(league) {
     if (!league) return;
     if (league.isSeasonOver) { league.startNewSeason(); return; }
-    const fixtures = league.fixturesForMatchday(league.matchday);
+    const idx = league.matchday;
+    const fixtures = league.fixturesForMatchday(idx);
     for (const [aId, bId] of fixtures) {
       const a = league.clubById(aId), b = league.clubById(bId);
       if (!a || !b) continue;
       const won = Math.random() < a.avgSkill() / (a.avgSkill() + b.avgSkill());
       a.recordResult(won); b.recordResult(!won);
+      const [scoreA, scoreB] = fakeLeagueScore(won);
+      league.recordMatchResult(idx, aId, bId, scoreA, scoreB);
     }
     league.matchday++;
   }
+}
+
+// marcador de pega para partidos IA-IA que no se juegan a mano: el ganador
+// se planta en 13 (como cualquier partida real de petanca) y el perdedor
+// saca algo entre 0 y 11 — mismo criterio que Game.simulateMatch()
+function fakeLeagueScore(won) {
+  const loserScore = Math.floor(Math.random() * 12);
+  return won ? [13, loserScore] : [loserScore, 13];
 }
 
 function cityAt(level) {

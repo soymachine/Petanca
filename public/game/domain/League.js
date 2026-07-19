@@ -30,12 +30,18 @@ export class League {
     this.clubs = clubs; // Club[10], incluye el club del jugador
     this.fixtures = roundRobin(clubs.map((c) => c.id));
     this.matchday = 0; // índice de la próxima jornada a jugar (0..8)
+    this.results = []; // results[jornada] = [{a, b, scoreA, scoreB}, ...] jornadas ya jugadas
   }
 
   clubById(id) { return this.clubs.find((c) => c.id === id); }
   get playerClub() { return this.clubs.find((c) => c.isPlayer); }
 
   fixturesForMatchday(idx) { return this.fixtures[idx] || []; }
+  resultsForMatchday(idx) { return this.results[idx] || []; }
+  recordMatchResult(matchdayIdx, aId, bId, scoreA, scoreB) {
+    if (!this.results[matchdayIdx]) this.results[matchdayIdx] = [];
+    this.results[matchdayIdx].push({ a: aId, b: bId, scoreA, scoreB });
+  }
   get isSeasonOver() { return this.matchday >= this.fixtures.length; }
 
   standings() {
@@ -51,15 +57,20 @@ export class League {
     this.matchday = 0;
     for (const c of this.clubs) { c.pts = 0; c.played = 0; c.won = 0; c.lost = 0; }
     this.fixtures = roundRobin(this.clubs.map((c) => c.id));
+    this.results = [];
   }
 
   toJSON() {
-    return { level: this.level, cityName: this.cityName, matchday: this.matchday, clubs: this.clubs.map((c) => c.toJSON()) };
+    return {
+      level: this.level, cityName: this.cityName, matchday: this.matchday,
+      clubs: this.clubs.map((c) => c.toJSON()), results: this.results,
+    };
   }
   static fromJSON(json) {
     const clubs = json.clubs.map((cd) => Club.fromJSON(cd));
     const l = new League(json.level, json.cityName, clubs);
     l.matchday = json.matchday;
+    l.results = json.results || [];
     return l;
   }
 }

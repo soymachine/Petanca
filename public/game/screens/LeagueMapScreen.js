@@ -3,7 +3,7 @@ import { FOREIGN_COUNTRIES, allForeignCityMarkers, foreignCountry } from '../dat
 import { seaCell } from '../core/seaFx.js';
 import { TabsBar } from './TabsBar.js';
 import { Geography } from '../data/geography.js';
-import { hitRect } from '../core/utils.js';
+import { hitRect, clamp } from '../core/utils.js';
 import { STAT_KEYS, STAT_LABEL } from '../data/abuelos.js';
 
 // Niveles de zoom del mapa: el índice 2 es el "normal" (extent=1, los 6
@@ -42,6 +42,16 @@ const ALL_MARKERS = [
   ...allForeignCityMarkers(),
 ];
 
+// Layout: mapa reducido (~50% de su tamaño original) a la izquierda,
+// clasificación en una sola columna a su derecha, y abajo — a todo lo
+// ancho — los partidos de la jornada elegida (con flechas para navegar
+// jornadas anteriores/siguientes).
+const MAP_BOX = { x: 3, y: 4, w: 64, h: 16 };
+const MAP_VIEW = { x: MAP_BOX.x + 1, y: MAP_BOX.y + 1, w: MAP_BOX.w - 2, h: MAP_BOX.h - 2 };
+const STAND_BOX = { x: MAP_BOX.x + MAP_BOX.w + 2, y: 4, w: 68, h: 21 };
+const LEGEND_Y = MAP_BOX.y + MAP_BOX.h + 1;
+const RESULTS_BOX = { x: 3, y: 26, w: 134, h: 18 };
+
 // El mapa de los 6 países del circuito, siempre visible entero: cada
 // ciudad española es una liga jugable (asciendes/desciendes entre ellas);
 // las de los 5 países extranjeros son ligas de fondo, solo consulta — de
@@ -51,10 +61,12 @@ export class LeagueMapScreen {
     this.game = game;
     this.cursor = 0; // índice dentro de ALL_MARKERS
     this.cam = null;
-    this.view = { x: 3, y: 4, w: game.screen.cols - 6, h: 27 };
+    this.view = MAP_VIEW;
     this.zoom = DEFAULT_ZOOM;
     this._geoCache = new Map();
     this._hoverClub = null; // equipo bajo el ratón este frame (modo Debugger), ver draw()
+    this._jornadaIdx = null; // jornada que se está consultando en el panel inferior
+    this._jornadaKey = null; // marca de qué liga es this._jornadaIdx, para resetear al cambiar de liga
   }
 
   // Geography de cada nivel de zoom se construye una vez y se cachea; el
@@ -96,6 +108,14 @@ export class LeagueMapScreen {
     this._camCenterOn(ALL_MARKERS[this.cursor].city);
   }
 
+  // liga (League) del marcador seleccionado, o null si es una liga
+  // extranjera de la que aún no hay datos generados
+  _leagueFor(marker) {
+    const { player } = this.game;
+    if (marker.country === 'ES') return player.leagueWorld.leagueOf(marker.city.diff);
+    return player.foreignLeagues.get(marker.country)?.leagueOf(marker.city.diff) || null;
+  }
+
   draw() {
     const { screen, input, player, frame } = this.game;
     const geo = this._geoFor(this.zoom);
@@ -115,10 +135,10 @@ export class LeagueMapScreen {
     }
     if (inView && input.wheel) this._setZoom(this.zoom - input.wheel);
 
-    screen.box(this.view.x - 1, this.view.y - 1, this.view.w + 2, this.view.h + 2, '#4a5a6a');
-    screen.text(this.view.x + 2, this.view.y - 1, '╡ EL CIRCUITO EUROPEO — arrastra para explorar · rueda = zoom ╞', '#ffb347');
-    const zoomLabel = `[${ZOOM_LEVELS[this.zoom].label}]  [-] alejar  [+] acercar`;
-    screen.text(this.view.x + this.view.w - zoomLabel.length - 1, this.view.y - 1, zoomLabel, '#8fb0c8');
+    screen.box(MAP_BOX.x, MAP_BOX.y, MAP_BOX.w, MAP_BOX.h, '#4a5a6a');
+    screen.text(MAP_BOX.x + 1, MAP_BOX.y, ' EL CIRCUITO ', '#ffb347');
+    const zoomLabel = `[${ZOOM_LEVELS[this.zoom].label}] [-]/[+]`;
+    screen.text(MAP_BOX.x + MAP_BOX.w - zoomLabel.length - 1, MAP_BOX.y, zoomLabel, '#8fb0c8');
 
     for (let r = 0; r < this.view.h; r++) {
       for (let c = 0; c < this.view.w; c++) {
@@ -143,22 +163,26 @@ export class LeagueMapScreen {
       if (sx >= this.view.x && sx < this.view.x + this.view.w && sy >= this.view.y && sy < this.view.y + this.view.h) {
         const glyph = isSel && frame % 20 < 12 ? '◈' : isMine ? '★' : style ? style.glyph : '■';
         screen.put(sx, sy, glyph, col);
-        const label = `${c.name} (${country === 'ES' ? 'niv.' + c.diff : country})`;
-        for (let k = 0; k < label.length; k++) screen.put(sx + 2 + k, sy, label[k], isSel ? '#fff' : col);
+        // etiqueta recortada al recuadro del mapa: ahora hay un panel justo
+        // a la derecha y no debe invadirlo (antes el mapa ocupaba casi todo
+        // el ancho de pantalla y esto nunca se notaba)
+        const label = `${c.name}`;
+        for (let k = 0; k < label.length; k++) {
+          screen.putClipped(sx + 2 + k, sy, label[k], isSel ? '#fff' : col, this.view.x, this.view.y, this.view.w, this.view.h);
+        }
       }
     }
 
-    // leyenda de países: fila libre justo bajo el mapa, antes de la caja
-    // de la clasificación — necesaria ahora que hay 6 colores distintos
-    let lx = this.view.x;
-    const legendY = this.view.y + this.view.h;
-    screen.text(lx, legendY, '■ España', '#8a8a7a'); lx += 10;
+    // leyenda de países: fila libre justo bajo el mapa (a su izquierda; la
+    // clasificación ocupa la misma franja de filas a la derecha)
+    let lx = MAP_BOX.x;
+    screen.text(lx, LEGEND_Y, '■ ES', '#8a8a7a'); lx += 6;
     for (const fc of FOREIGN_COUNTRIES) {
       const s = COUNTRY_STYLE[fc.code];
-      const label = `${s.glyph} ${fc.label}`;
-      screen.text(lx, legendY, label, s.color);
-      lx += label.length + 2;
+      screen.text(lx, LEGEND_Y, s.glyph, s.color);
+      lx += 2;
     }
+    screen.text(MAP_BOX.x, LEGEND_Y + 1, 'arrastra = mover · rueda = zoom', '#5a5347');
 
     if (input.mouse.clicked && inView) {
       let best = null;
@@ -171,10 +195,22 @@ export class LeagueMapScreen {
 
     this._hoverClub = null; // se rellena en _drawStandings si hay un equipo bajo el ratón
     const marker = ALL_MARKERS[this.cursor];
-    if (marker.country === 'ES') this._drawSpanishLeague(marker.city);
-    else this._drawForeignLeague(marker.city, marker.country);
+    const league = this._leagueFor(marker);
 
-    screen.textCenter(46 - 1, '[↑/↓] elegir liga    [ENTER] entrar (solo la tuya)    [ESC] volver al hub', '#c9c2a8');
+    // la jornada consultada se resetea a "la última jugada" (o la primera,
+    // si la temporada no ha arrancado) cada vez que se cambia de liga
+    const key = `${marker.country}-${marker.city.diff}`;
+    if (this._jornadaKey !== key) {
+      this._jornadaKey = key;
+      this._jornadaIdx = league ? Math.max(0, league.matchday - 1) : 0;
+    }
+
+    if (marker.country === 'ES') this._drawSpanishLeague(marker.city, league);
+    else this._drawForeignLeague(marker.city, marker.country, league);
+
+    this._drawJornadaPanel(marker, league);
+
+    screen.textCenter(45, '[↑/↓] elegir liga  [←/→] navegar jornadas  [ENTER] entrar (solo la tuya)  [ESC] volver al hub', '#c9c2a8');
 
     // el tooltip se pinta el último de todo el frame (después de TabsBar,
     // la tabla y el texto de ayuda) para que quede siempre por encima del
@@ -187,80 +223,90 @@ export class LeagueMapScreen {
       const sc = ALL_MARKERS[this.cursor].city;
       const [swx, swy] = this._cityPos(this.zoom, sc);
       const vx = swx - this.cam.x, vy = swy - this.cam.y;
-      if (vx < 4 || vx > this.view.w - 16 || vy < 2 || vy > this.view.h - 2) this._camCenterOn(sc);
+      if (vx < 4 || vx > this.view.w - 10 || vy < 2 || vy > this.view.h - 2) this._camCenterOn(sc);
     }
+    if (league && input.hit('ArrowLeft')) this._jornadaIdx = clamp(this._jornadaIdx - 1, 0, league.fixtures.length - 1);
+    if (league && input.hit('ArrowRight')) this._jornadaIdx = clamp(this._jornadaIdx + 1, 0, league.fixtures.length - 1);
     if (input.hit('+') || input.hit('=')) this._setZoom(this.zoom + 1);
     if (input.hit('-') || input.hit('_')) this._setZoom(this.zoom - 1);
     if ((input.hit('Enter') || input.hit(' ')) && marker.country === 'ES' && marker.city.diff === player.currentLeagueLevel) this.game.state = 'hub';
     if (input.hit('Escape')) this.game.state = 'hub';
   }
 
-  _drawSpanishLeague(c) {
+  _drawSpanishLeague(c, league) {
     const { screen, player } = this.game;
     const isMine = c.diff === player.currentLeagueLevel;
-    const league = player.leagueWorld.leagueOf(c.diff);
-    screen.box(4, 33, 132, 12, c.color || '#8a7f66', 'double');
-    screen.text(7, 34, `⚜ LIGA DE ${c.name} — nivel ${c.diff}/8${isMine ? '  ★ TU LIGA' : ''} ⚜`, isMine ? '#7CFC00' : '#ffb347');
-    screen.text(7, 35, `Pista: ${c.feature.desc.slice(0, 70)}`, '#c9a35d');
-
-    const table = league.standings();
     const canPromote = league.level < 8, canRelegate = league.level > 1;
-    this._drawStandings(table, 37, canPromote, canRelegate);
-
-    screen.text(84, 37, canPromote ? '▲ verde: zona de ascenso' : '', '#7ec850');
-    screen.text(84, 38, canRelegate ? '▼ rojo:  zona de descenso' : '', '#ff5c5c');
+    this._drawStandingsPanel(league, c.color, `⚜ ${c.name} — niv.${c.diff}/8${isMine ? '  ★ TU LIGA' : ''}`, c.feature.desc, canPromote, canRelegate);
 
     if (!isMine) {
-      screen.text(84, 40, player.currentLeagueLevel < c.diff
+      screen.text(STAND_BOX.x + 2, STAND_BOX.y + STAND_BOX.h - 2, player.currentLeagueLevel < c.diff
         ? 'Bloqueada: asciende para llegar aquí.'
         : 'Ya la dejaste atrás: desciende para volver.', '#ff8c5b');
     } else {
-      screen.text(84, 40, '[ENTER] volver al hub de tu liga', '#7CFC00');
+      screen.text(STAND_BOX.x + 2, STAND_BOX.y + STAND_BOX.h - 2, '[ENTER] volver al hub de tu liga', '#7CFC00');
     }
   }
 
   // liga de un país extranjero: misma tabla de clasificación, pero sin
   // ascenso/descenso ni "TU LIGA" — es solo una ventana a lo que se cuece
   // fuera, de cara a saber quién puede tocarte en la Copa de Europa
-  _drawForeignLeague(c, country) {
-    const { screen, player } = this.game;
+  _drawForeignLeague(c, country, league) {
+    const { screen } = this.game;
     const style = COUNTRY_STYLE[country] || { color: '#8fb0c8' };
     const label = (foreignCountry(country) || {}).label || country;
-    const league = player.foreignLeagues.get(country)?.leagueOf(c.diff);
-    screen.box(4, 33, 132, 12, c.color || style.color, 'double');
-    screen.text(7, 34, `⚜ LIGA DE ${c.name} (${label.toUpperCase()}) — nivel ${c.diff} ⚜`, style.color);
-    screen.text(7, 35, `Pista: ${c.feature.desc.slice(0, 70)}`, '#c9a35d');
-    if (!league) { screen.text(7, 37, 'Aún no hay datos de esta liga.', '#8a8a7a'); return; }
-
-    const table = league.standings();
-    this._drawStandings(table, 37, false, false);
-
-    if (c.diff === 8) {
-      screen.text(84, 37, 'Los 4 primeros de aquí entran', style.color);
-      screen.text(84, 38, 'en la Copa de Europa contigo.', style.color);
+    screen.box(STAND_BOX.x, STAND_BOX.y, STAND_BOX.w, STAND_BOX.h, c.color || style.color, 'double');
+    if (!league) {
+      screen.text(STAND_BOX.x + 2, STAND_BOX.y + 2, `⚜ ${c.name} (${label.toUpperCase()})`, style.color);
+      screen.text(STAND_BOX.x + 2, STAND_BOX.y + 4, 'Aún no hay datos de esta liga.', '#8a8a7a');
+      return;
     }
-    screen.text(84, 40, 'Liga extranjera: solo consulta, no se juega.', '#8a8a7a');
+    this._drawStandingsPanel(league, style.color, `⚜ ${c.name} (${label.toUpperCase()}) — niv.${c.diff}`, c.feature.desc, false, false);
+    if (c.diff === 8) {
+      screen.text(STAND_BOX.x + 2, STAND_BOX.y + STAND_BOX.h - 3, 'Los 4 primeros entran en la', style.color);
+      screen.text(STAND_BOX.x + 2, STAND_BOX.y + STAND_BOX.h - 2, 'Copa de Europa contigo.', style.color);
+    } else {
+      screen.text(STAND_BOX.x + 2, STAND_BOX.y + STAND_BOX.h - 2, 'Liga extranjera: solo consulta.', '#8a8a7a');
+    }
   }
 
-  _drawStandings(table, y0, canPromote, canRelegate) {
+  // caja de clasificación en una sola columna: cabecera (nombre de liga +
+  // pista) y debajo, un club por fila (hasta 10)
+  _drawStandingsPanel(league, boxColor, title, pistaDesc, canPromote, canRelegate) {
+    const { screen } = this.game;
+    const b = STAND_BOX;
+    screen.box(b.x, b.y, b.w, b.h, boxColor || '#8a7f66', 'double');
+    screen.text(b.x + 2, b.y + 1, title, '#ffb347');
+    screen.text(b.x + 2, b.y + 2, `Pista: ${pistaDesc.slice(0, b.w - 12)}`, '#c9a35d');
+    if (canPromote || canRelegate) {
+      const bits = [];
+      if (canPromote) bits.push('▲ ascenso');
+      if (canRelegate) bits.push('▼ descenso');
+      screen.text(b.x + 2, b.y + 3, bits.join('   '), '#8a8a7a');
+    }
+    this._drawStandings(league.standings(), b.x + 2, b.y + 5, b.w - 4, canPromote, canRelegate);
+  }
+
+  _drawStandings(table, x, y0, w, canPromote, canRelegate) {
     const { screen, input, player } = this.game;
     const RANK_COL = ['#ffd75e', '#d8d8e0', '#c88a4a'];
     const rowRects = [];
-    const drawEntry = (row, i, tx, ty) => {
+    const nameW = Math.max(10, w - 15);
+    for (let i = 0; i < table.length; i++) {
+      const row = table[i];
+      const ty = y0 + i;
       const isTop3 = i < 3;
       const rankCol = isTop3 ? RANK_COL[i] : '#8a8a7a';
       const zone = (i < 2 && canPromote) ? '▲' : (i >= table.length - 2 && canRelegate) ? '▼' : ' ';
       const zoneCol = zone === '▲' ? '#7ec850' : zone === '▼' ? '#ff5c5c' : '#5a5347';
       const nameCol = row.isPlayer ? '#7CFC00' : '#c9c2a8';
-      screen.text(tx, ty, `${zone}`, zoneCol);
-      screen.text(tx + 2, ty, `${(i + 1 + '').padStart(2)}º`, rankCol);
-      const label = `${row.name}${row.isPlayer ? ' ★' : ''}`.slice(0, 24).padEnd(26);
-      screen.text(tx + 5, ty, label, nameCol);
-      screen.text(tx + 31, ty, `${row.pts} pts`, nameCol);
-      if (!row.isPlayer) rowRects.push({ club: row, x: tx, y: ty, w: 37 });
-    };
-    for (let i = 0; i < Math.min(5, table.length); i++) drawEntry(table[i], i, 7, y0 + i);
-    for (let i = 5; i < table.length; i++) drawEntry(table[i], i, 45, y0 + (i - 5));
+      screen.text(x, ty, zone, zoneCol);
+      screen.text(x + 2, ty, `${(i + 1 + '').padStart(2)}º`, rankCol);
+      const label = `${row.name}${row.isPlayer ? ' ★' : ''}`.slice(0, nameW).padEnd(nameW);
+      screen.text(x + 6, ty, label, nameCol);
+      screen.text(x + 6 + nameW + 1, ty, `${row.pts} pts`, nameCol);
+      if (!row.isPlayer) rowRects.push({ club: row, x, y: ty, w });
+    }
 
     // modo Debugger: pasar el ratón por un equipo rival muestra su
     // plantilla real (nombre, stats, valor) — para poder debugar el
@@ -271,6 +317,56 @@ export class LeagueMapScreen {
       const hovered = rowRects.find((r) => hitRect(input.mouse.cx, input.mouse.cy, r.x, r.y, r.w, 1));
       if (hovered) this._hoverClub = hovered.club;
     }
+  }
+
+  // panel inferior a todo lo ancho: partidos de la jornada consultada
+  // (resultados si ya se jugó, o el emparejamiento si está por jugar),
+  // navegable con [←/→] independientemente de la liga elegida arriba
+  _drawJornadaPanel(marker, league) {
+    const { screen } = this.game;
+    const b = RESULTS_BOX;
+    screen.box(b.x, b.y, b.w, b.h, '#4a5a6a', 'double');
+    if (!league) {
+      screen.text(b.x + 2, b.y + 1, 'Aún no hay datos de esta liga.', '#8a8a7a');
+      return;
+    }
+    const total = league.fixtures.length;
+    const idx = clamp(this._jornadaIdx ?? 0, 0, total - 1);
+    const played = idx < league.matchday;
+    const isCurrent = idx === Math.max(0, league.matchday - 1) && league.matchday > 0;
+
+    const arrowCol = idx > 0 ? '#ffe680' : '#3a4a3a';
+    const arrowCol2 = idx < total - 1 ? '#ffe680' : '#3a4a3a';
+    screen.text(b.x + 2, b.y + 1, '◀', arrowCol);
+    screen.text(b.x + b.w - 3, b.y + 1, '▶', arrowCol2);
+    const title = `JORNADA ${idx + 1}/${total} — ${marker.city.name}${isCurrent ? ' (última jugada)' : ''}`;
+    screen.textCenter(b.y + 1, title, '#ffb347');
+    screen.textCenter(b.y + 2, played ? 'RESULTADOS' : (idx === league.matchday ? 'POR JUGAR' : 'PRÓXIMOS PARTIDOS'), played ? '#7ec850' : '#8fb0c8');
+
+    const fixtures = league.fixturesForMatchday(idx);
+    const results = played ? league.resultsForMatchday(idx) : [];
+    const resultFor = (aId, bId) => results.find((r) => (r.a === aId && r.b === bId) || (r.a === bId && r.b === aId));
+
+    const rowY0 = b.y + 4;
+    const midX = b.x + Math.floor(b.w / 2); // centro de la caja (coincide con el de pantalla: caja casi a todo lo ancho)
+    const nameW = 38;
+    fixtures.forEach(([aId, bId], i) => {
+      const clubA = league.clubById(aId), clubB = league.clubById(bId);
+      if (!clubA || !clubB) return;
+      const ty = rowY0 + i * 2;
+      const r = resultFor(aId, bId);
+      const nameA = (clubA.isPlayer ? '★ ' : '') + clubA.name;
+      const nameB = clubB.name + (clubB.isPlayer ? ' ★' : '');
+      const colA = clubA.isPlayer ? '#7CFC00' : '#c9c2a8';
+      const colB = clubB.isPlayer ? '#7CFC00' : '#c9c2a8';
+      const mid = r ? `${r.a === aId ? r.scoreA : r.scoreB} - ${r.a === aId ? r.scoreB : r.scoreA}` : 'vs';
+      const half = Math.ceil(mid.length / 2);
+      screen.text(midX - half - 2 - nameW, ty, nameA.slice(0, nameW).padStart(nameW), colA);
+      screen.text(midX - half, ty, mid, r ? '#ffe680' : '#8a8a7a');
+      screen.text(midX + (mid.length - half) + 2, ty, nameB.slice(0, nameW).padEnd(nameW), colB);
+    });
+
+    screen.text(b.x + 2, b.y + b.h - 2, '[←] jornada anterior    [→] jornada siguiente', '#8a7f66');
   }
 
   _drawClubTooltip(club, mx, my) {

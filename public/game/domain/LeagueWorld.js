@@ -46,6 +46,7 @@ export class LeagueWorld {
       to.matchday = 0;
       for (const c of to.clubs) { c.pts = 0; c.played = 0; c.won = 0; c.lost = 0; }
       to.fixtures = rebuildFixtures(to);
+      to.results = [];
     }
   }
 
