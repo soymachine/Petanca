@@ -358,6 +358,14 @@ export class Career {
         p.news.push(`PREMIOS DE LA PEÑA — fin de temporada: ${linea}.`);
       }
       seasonEnd = { rank, promoted, relegated, table, awards, cityName: league.cityName };
+      // resumen permanente para la subsección Históricos (CapitulosScreen):
+      // a diferencia de `annals` (solo los hitos más gordos), aquí entra
+      // TODA temporada cerrada, gane, quede a medias o baje de categoría
+      p.seasonHistory.push({
+        season: p.seasonsPlayed, cityName: league.cityName, level: fromLevel, rank,
+        promoted, relegated,
+        awards: awards.map((a) => ({ stat: a.stat, name: this.nameOf(a.id) })),
+      });
     }
 
     const claimed = p.campaign.checkAndClaim(p.snapshotForCampaign());
