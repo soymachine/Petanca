@@ -1,12 +1,21 @@
+import { clamp } from '../core/utils.js';
+
 // Expectativa de la junta directiva de la peña para cada temporada de liga.
-export function boardObjectiveFor(seasonNum) {
-  // se endurece poco a poco con las temporadas
-  const rankGoal = seasonNum <= 2 ? 4 : seasonNum <= 4 ? 3 : 2;
+// La exigencia crece de forma continua con las temporadas jugadas (antes
+// eran 3 escalones fijos que se quedaban parados en "2º" para siempre a
+// partir de la quinta temporada — en una carrera larga de 10-15
+// temporadas, como las que invitan a jugar el Panteón y las generaciones,
+// la junta dejaba de apretar). El premio/multa también escala con el
+// nivel de liga: la junta de Madrid no paga (ni multa) lo mismo que la de
+// Albacete, cosa que antes era el mismo importe fijo en toda la partida.
+export function boardObjectiveFor(seasonNum, leagueLevel = 1) {
+  const rankGoal = clamp(Math.round(5 - Math.log2(seasonNum + 1)), 1, 4);
+  const scale = 1 + (leagueLevel - 1) * 0.18;
   return {
     rankGoal,
     desc: `La junta espera que acabéis entre los ${rankGoal} primeros de la liga.`,
-    rewardMoney: 200,
-    penaltyMoney: 80,
+    rewardMoney: Math.round(200 * scale),
+    penaltyMoney: Math.round(80 * scale),
   };
 }
 

@@ -1,5 +1,6 @@
 import { rnd, clamp, gauss, dist2d } from '../core/utils.js';
-import { ABUELO_DATA } from '../data/abuelos.js';
+import { ABUELO_DATA, STAT_LABEL } from '../data/abuelos.js';
+import { drillFor } from '../data/trainingDrills.js';
 import { BOLAS } from '../data/bolas.js';
 import { CLIMAS, avisoClima, cambioClima } from '../data/climas.js';
 import { RIVALS, ROUND_NAMES } from '../data/cities.js';
@@ -11,6 +12,8 @@ import { PhysicsWorld } from '../physics/PhysicsWorld.js';
 import { ThrowProfile } from './ThrowProfile.js';
 import { AIPlayer } from './AIPlayer.js';
 import { Narrator } from './Narrator.js';
+import { chemistryLevel, gamesFor } from '../domain/Chemistry.js';
+import { archetypeFor } from '../data/rivalArchetypes.js';
 
 const physicsWorld = new PhysicsWorld();
 
@@ -19,16 +22,29 @@ const physicsWorld = new PhysicsWorld();
 // clima, se fuerza igualmente de vez en cuando (ver _startRound más abajo)
 const FORCED_WIND_FEATURES = ['cierzo', 'fohn', 'atlantic'];
 
+// frase de acierto por drill de entrenamiento — ver throwDone
+const GOOD_THROW_FLAVOR = {
+  ARRIME: '¡Arrime de libro!',
+  EFECTO: '¡La rodea de libro!',
+  PRESION: '¡Aguanta el pulso pese a los nervios!',
+  FONDO: '¡Sigue firme pese al desgaste!',
+};
+
 // Una partida: el estado-máquina de fases (puntería, efecto, elevación,
 // potencia, simulación...) más las reglas de puntuación de la petanca.
 // No dibuja nada: MatchScreen lee sus propiedades públicas para pintarlas.
 export class Match {
-  constructor({ tournament, roster, team, training = null, sweetBonus = 0, trainBonus = 1 }) {
+  constructor({ tournament, roster, team, training = null, practice = false, sweetBonus = 0, trainBonus = 1, chemistry = {} }) {
     this.tournament = tournament;
     this.roster = roster;
-    this.training = training; // null | 'ARRIME' | 'TIRO'
+    this.training = training; // null | 'ARRIME' | 'TIRO' | 'EFECTO' | 'PRESION' | 'FONDO' — ver data/trainingDrills.js
+    // modo Practicar: mismo minijuego, pero gratis y sin premio de stat —
+    // ver Game.startPractice/onMatchFinished (dailyBest en vez de train())
+    this.practice = !!practice;
     this._sweetBonus = sweetBonus;
     this._trainBonus = trainBonus;
+    this.chemistry = chemistry; // Player.chemistry — ver domain/Chemistry.js
+    this.pairMoment = false; // extra puntual: el compañero ha dejado la bola a huevo
 
     if (training) {
       this.city = { name: 'EL DESCAMPADO', color: '#8a8', diff: 0 };
@@ -53,6 +69,7 @@ export class Match {
       this.rival = r.rivalName || RIVALS[r.rivalIdx];
       this.rivalPortrait = r.rivalPortrait || null; // retrato generado (liga) en vez de curado (RIVAL_FACES)
       this.rivalMini = r.rivalMini || null; // versión pequeña para el HUD ajustado del partido
+      this.rivalArchetype = archetypeFor(r.archetypeKey || this.rival).id;
       this.target = TARGET;
       this.teamP = team.slice();
       tournament.markUsed(team);
@@ -65,7 +82,7 @@ export class Match {
     this.round = 1;
     this.phase = 'roundStart'; this.phaseT = 0;
     this.balls = []; this.jack = null; this.jack2 = null; this.twinJacks = false;
-    this.ballsLeftP = training ? (training === 'ARRIME' ? 3 : 4) : ballsPerPlayer(this.teamP.length) * this.teamP.length;
+    this.ballsLeftP = training ? (drillFor(training)?.balls ?? 3) : ballsPerPlayer(this.teamP.length) * this.teamP.length;
     this.ballsLeftA = training ? 0 : ballsPerPlayer(this.teamP.length) * this.teamP.length;
     this.turn = 'P';
     this.aimAngle = 0; this.spin = 0; this.loft = 0.6; this.power = 0; this.powerDir = 1;
@@ -81,6 +98,11 @@ export class Match {
     this.score = 0; this.targetsHit = 0; this.success = false; // entrenamientos
     this.measured = false; this.measureBalls = null;
     this.xpGain = {}; // id de abuelo -> XP acumulado por calidad de tirada esta partida
+    this.jackChoice = null; // ya no se elige por menú (ver _placeJack); queda en null siempre
+    this.aiMorale = 0; // -1..1, sube ganando manos y baja perdiéndolas — ver resolveMano/AIPlayer
+    this.chronicle = []; // hechos reales del partido para la crónica (ver match/Chronicle.js)
+    this._worstDeficit = -999; this._worstDeficitScores = null; // para detectar una remontada de verdad
+    this._maxStreakSeen = 0;
 
     this.court = new Court(this.feature);
     const forecastMain = training ? 'SOL' : tournament.currentRound.forecast.main;
@@ -89,11 +111,13 @@ export class Match {
       ? { atRound: 2 + Math.floor(rnd(0, 2)), to: tournament.currentRound.forecast.changeTo, warned: false }
       : null;
 
-    this.narr = training
-      ? (training === 'ARRIME'
-          ? 'ARRIME: suma 16 puntos acercándote a la diana con 3 bolas. Premio: +1 PULSO.'
-          : 'TIRO: derriba las 3 bolas viejas en 4 lanzamientos. Premio: +1 BRAZO.')
-      : `${this.rival} te espera en la pista. ${roundFlavor(this.stage)}`;
+    if (training) {
+      const drill = drillFor(training);
+      const rewardTxt = this.practice ? ' Modo práctica: gratis, sin coste ni premio de stat.' : ` Premio: +1 ${STAT_LABEL[drill.stat].toUpperCase()}.`;
+      this.narr = drill.desc + rewardTxt;
+    } else {
+      this.narr = `${this.rival} te espera en la pista. ${roundFlavor(this.stage)}`;
+    }
 
     this.court.setupFeature(this.weather.type, this.city.diff);
     if (FORCED_WIND_FEATURES.includes(this.feature) && this.weather.type !== 'VIENTO' && Math.random() < 0.4) {
@@ -104,11 +128,13 @@ export class Match {
   }
 
   // el entrenamiento no pasa por el flujo de "mano" del torneo: se lanza
-  // directo a apuntar, sin aviso de clima ni desgaste de calor.
+  // directo a apuntar, sin aviso de clima ni desgaste de calor. ARRIME,
+  // EFECTO, PRESIÓN y FONDO comparten el mismo terreno (diana alrededor
+  // del boliche); EFECTO además coloca una bola bloqueando la línea recta
+  // (hay que rodearla con efecto, ver throwDone) y TIRO es el único que
+  // usa un terreno propio (bolas viejas que derribar).
   _setupTraining() {
-    if (this.training === 'ARRIME') {
-      this.jack = new Ball({ x: rnd(80, 110), y: rnd(7, CH - 7), owner: 'J' });
-    } else {
+    if (this.training === 'TIRO') {
       this.jack = new Ball({ x: 130, y: 1, owner: 'J' });
       for (let k = 0; k < 3; k++) {
         const tx = rnd(78, 112), ty = rnd(5, CH - 5);
@@ -116,6 +142,13 @@ export class Match {
         b.ox = tx; b.oy = ty;
         this.balls.push(b);
       }
+    } else if (this.training === 'EFECTO') {
+      this.jack = new Ball({ x: rnd(88, 108), y: rnd(9, 13), owner: 'J' });
+      const mid = new Ball({ x: (THROW_X + this.jack.x) / 2, y: this.jack.y, owner: 'T' });
+      mid.ox = mid.x; mid.oy = mid.y;
+      this.balls.push(mid);
+    } else {
+      this.jack = new Ball({ x: rnd(80, 110), y: rnd(7, CH - 7), owner: 'J' });
     }
     this.court.weather = this.weather.type;
     this.phase = 'aim'; this.phaseT = 0;
@@ -202,6 +235,7 @@ export class Match {
         this.weather.type = this.weatherChange.to;
         this.weather.roll(this.city.diff, this.feature);
         this.narr = `¡${CLIMAS[this.weather.type].label}! ` + cambioClima(this.weather.type);
+        this.chronicle.push({ t: 'clima', data: { to: this.weather.type } });
         this.weatherChange = null;
       }
     }
@@ -271,6 +305,7 @@ export class Match {
     this.phase = 'sim';
     this.timeoutUsedThisThrow = false;
     this.lastWasFault = false;
+    this.pairMoment = false; // el extra de "momento de pareja" solo vale para este tiro
   }
 
   // XP por calidad de tirada: cada bola propia de la mano que se acaba de
@@ -313,14 +348,31 @@ export class Match {
       this.narr = Narrator.line('manoP', ctx);
       if (this.streak === 2) this.narr = '¡Racha! Dos manos seguidas. ' + this.narr;
       else if (this.streak >= 3) this.narr = `¡RACHA x${this.streak}! Está imparable. ` + this.narr;
+      this.aiMorale = clamp(this.aiMorale - 0.2 - (r.points >= 2 ? 0.15 : 0), -1, 1);
     } else if (r.winner === 'A') {
       this.scoreA += r.points; if (this.tournament) this.tournament.pointsAgainst += r.points; this.streak = 0;
       ctx.scoreA = this.scoreA;
       this.narr = Narrator.line('manoA', ctx);
+      this.aiMorale = clamp(this.aiMorale + 0.2 + (r.points >= 2 ? 0.15 : 0), -1, 1);
     } else this.narr = Narrator.line('nula', ctx);
+    if (!this.training && r.winner !== null) {
+      if (this.aiMorale <= -0.7) this.narr += ' El rival aprieta los dientes: se le nota el nervio.';
+      else if (this.aiMorale >= 0.7) this.narr += ` ${this.rival} tira con la confianza de quien manda.`;
+    }
     this.phase = (this.scoreP >= this.target || this.scoreA >= this.target) ? 'matchEnd' : 'roundEnd';
     this.phaseT = 0;
     this.decisive = r.winner === 'P' && (r.points >= 2 || this.phase === 'matchEnd');
+
+    // hechos para la crónica de fin de partido (ver match/Chronicle.js): se
+    // guarda el peor momento (para detectar una remontada de verdad) y la
+    // racha más larga vista, no cada mano suelta — la mano decisiva sí se
+    // marca aquí, justo cuando se sabe que es la que cierra el partido
+    if (!this.training) {
+      const deficit = this.scoreA - this.scoreP;
+      if (deficit > this._worstDeficit) { this._worstDeficit = deficit; this._worstDeficitScores = { scoreA: this.scoreA, scoreP: this.scoreP }; }
+      if (this.streak > this._maxStreakSeen) this._maxStreakSeen = this.streak;
+      if (this.phase === 'matchEnd' && this.decisive) this.chronicle.push({ t: 'decisiva', data: { points: r.points } });
+    }
   }
 
   _nameOf(id) { return this._nameProvider ? this._nameProvider(id) : `abuelo ${id}`; }
@@ -407,13 +459,16 @@ export class Match {
             // ir a más si el abuelo ya viene muy fatigado o mayor: una
             // lesión de verdad, que le pasa factura el resto del partido y
             // le deja de baja unos días (se resuelve al terminar la partida)
-            let injuryChance = 0;
-            if (st < 15) injuryChance += 0.10;
-            if (abueloState.age >= 75) injuryChance += 0.08;
+            // continuo en vez de dos escalones fijos: cuanto menos STA le
+            // queda y cuantos más años tiene, más suave pero más real crece
+            // el riesgo (antes era +0.10 de golpe bajo 15 STA y +0.08 de
+            // golpe a partir de 75 años, con un salto seco en ambos casos)
+            const injuryChance = Math.max(0, (25 - st) / 250) + Math.max(0, abueloState.age - 70) * 0.01;
             if (!this.training && !this.injuryEvent && Math.random() < injuryChance) {
               this.injuryEvent = { id: this.abuelo, name: this._nameOf(this.abuelo) };
               abueloState.st = Math.max(0, abueloState.st - 20);
               this.narr = `¡SE HA RESENTIDO! ${this._nameOf(this.abuelo)} se dobla al pisar el círculo, cansado. Sigue cojeando, pero sigue en pie.`;
+              this.chronicle.push({ t: 'lesion', data: { name: this._nameOf(this.abuelo) } });
             } else {
               this.narr = `¡FALTA DE PIE! ${this._nameOf(this.abuelo)} pisa el círculo del cansancio que lleva. Bola nula.`;
             }
@@ -477,14 +532,36 @@ export class Match {
           this.jack2 = null; this.twinJacks = false;
         }
 
-        if (this.training === 'ARRIME') {
-          const d = dist2d(this.lastThrown.x, this.lastThrown.y, this.jack.x, this.jack.y);
-          const gained = Math.max(0, Math.round(10 - d));
-          this.score += gained;
-          this.narr = gained > 6 ? `¡Arrime de libro! +${gained} puntos.`
-            : gained > 0 ? `Se queda a ${d.toFixed(1)} pasos. +${gained} puntos.`
-            : 'Demasiado lejos. Eso no puntúa.';
-          if (this.ballsLeftP === 0) { this.success = this.score >= 16; this.phase = 'trainEnd'; this.phaseT = 0; }
+        // ARRIME/EFECTO/PRESIÓN/FONDO comparten la misma fórmula de arrime
+        // (10-distancia por bola, hasta el objetivo del drill); solo TIRO
+        // (más abajo) puntúa por derribos en vez de por cercanía. EFECTO
+        // además puede "bloquear" la bola si choca con la que corta la
+        // línea recta (hay que rodearla con efecto) — se detecta con
+        // wasHit, reseteado cada tiro para no arrastrar el choque anterior.
+        if (this.training && this.training !== 'TIRO') {
+          const drill = drillFor(this.training);
+          const obstacle = this.training === 'EFECTO' ? this.balls.find((b) => b.owner === 'T') : null;
+          const blocked = !!(obstacle && obstacle.wasHit);
+          if (obstacle) obstacle.wasHit = false;
+          if (blocked) {
+            this.narr = '¡Choque con la bola que bloquea! No cuenta esta bola.';
+          } else {
+            const d = dist2d(this.lastThrown.x, this.lastThrown.y, this.jack.x, this.jack.y);
+            const gained = Math.max(0, Math.round(10 - d));
+            this.score += gained;
+            this.narr = gained > 6 ? `${GOOD_THROW_FLAVOR[this.training]} +${gained} puntos.`
+              : gained > 0 ? `Se queda a ${d.toFixed(1)} pasos. +${gained} puntos.`
+              : 'Demasiado lejos. Eso no puntúa.';
+          }
+          // si quedan más bolas, el obstáculo vuelve a su sitio de partida:
+          // debe cortar la línea recta en TODAS las tiradas del drill, no
+          // solo en la primera (si no, tras el primer golpe quedaría
+          // apartado y el resto de bolas ya no tendrían nada que rodear)
+          if (obstacle && this.ballsLeftP > 0) {
+            obstacle.x = obstacle.ox; obstacle.y = obstacle.oy;
+            obstacle.vx = 0; obstacle.vy = 0; obstacle.vz = 0; obstacle.z = 0; obstacle.moving = false;
+          }
+          if (this.ballsLeftP === 0) { this.success = this.score >= drill.target; this.phase = 'trainEnd'; this.phaseT = 0; }
           else { this.phase = 'aim'; this.phaseT = 0; }
           break;
         }
@@ -508,13 +585,29 @@ export class Match {
           if (tight && !this.measured) {
             this.measured = true;
             this.measureBalls = { p: pB.b, a: aB.b, pd: pB.d, ad: aB.d };
+            this.chronicle.push({ t: 'medicion', data: {} });
             this.phase = 'measuring'; this.phaseT = 0;
             break;
           }
           this.resolveMano();
         } else {
           this.turn = t;
-          if (t === 'P') this.pickThrower();
+          this.pairMoment = false;
+          if (t === 'P') {
+            const prevThrower = this.lastThrown && this.lastThrown.owner === 'P' ? this.lastThrown.thrower : null;
+            this.pickThrower();
+            // momento de pareja: el compañero (no uno mismo) acaba de dejar
+            // la bola muy cerca del boliche, y hay vínculo de verdad entre
+            // los dos (ver domain/Chemistry.js) — un extra puntual solo
+            // para este próximo tiro, no acumulable con el siguiente
+            if (prevThrower !== null && prevThrower !== this.abuelo && this.teamP.includes(prevThrower)) {
+              const lvl = chemistryLevel(gamesFor(this.chemistry, prevThrower, this.abuelo));
+              if (lvl >= 2 && dist2d(this.lastThrown.x, this.lastThrown.y, this.jack.x, this.jack.y) < 3) {
+                this.pairMoment = true;
+                this.narr = `${this._nameOf(prevThrower)} deja la bola a huevo: ${this._nameOf(this.abuelo)} tira con la confianza de la pareja.`;
+              }
+            }
+          }
           this.phase = t === 'P' ? 'aim' : 'aiTurn';
           this.phaseT = 0; this.spin = 0; this.role = 'apuntar';
         }
@@ -531,8 +624,11 @@ export class Match {
 
       case 'trainEnd':
         if (this.phaseT > 0.8 && (input.hit('Enter') || input.hit(' '))) {
-          if (this.success) {
-            const k = this.training === 'ARRIME' ? 'pulso' : 'brazo';
+          // en modo Practicar no hay premio de stat (ver Game.startPractice):
+          // el único registro que queda es la marca personal (dailyBest),
+          // que se guarda fuera de Match.js porque vive en Player, no en Roster
+          if (this.success && !this.practice) {
+            const k = drillFor(this.training).stat;
             const mentorBonus = this.roster.mentorBonusFor ? this.roster.mentorBonusFor(this.abuelo, k) : 0;
             this.roster.get(this.abuelo).train(k, (this._trainBonus || 1) + mentorBonus);
           }
@@ -543,6 +639,8 @@ export class Match {
       case 'matchEnd':
         if (this.phaseT > 1.2 && (input.hit('Enter') || input.hit(' '))) {
           const won = this.scoreP >= this.target;
+          if (won && this._worstDeficit >= 2) this.chronicle.push({ t: 'remontada', data: this._worstDeficitScores });
+          if (this._maxStreakSeen >= 3) this.chronicle.push({ t: 'racha', data: { streak: this._maxStreakSeen } });
           for (const id of this.teamP) {
             const a = ABUELO_DATA[id];
             const s = this.roster.get(id);

@@ -16,6 +16,9 @@ export class BarScreen {
   draw() {
     const { screen, input } = this.game;
     screen.clear();
+    // el modal de compra cierra con ESC: hay que consumir la tecla antes de
+    // que TabsBar la vea, o el atajo global "ESC = Inicio" se dispara igual
+    if (this.buying && input.hit('Escape')) { this.buying = null; input.pressed.Escape = false; }
     TabsBar.draw(this.game, 'bar');
     screen.textCenter(4, '═══ EL BAR DE LA PEÑA ═══', '#ffb347');
     screen.textCenter(5, 'humo, carajillos y la tele con el volumen a tope', '#8a7f66');

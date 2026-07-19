@@ -4,6 +4,8 @@ import { CLIMAS } from '../data/climas.js';
 import { RIVAL_FACES } from '../data/art/rivalFaces.js';
 import { wrapText, hitRect } from '../core/utils.js';
 import { countryTag } from '../data/countries.js';
+import { chemistryLevel, gamesFor } from '../domain/Chemistry.js';
+import { archetypeFor } from '../data/rivalArchetypes.js';
 
 const WARMUP_COST = 15;
 const PANEL_Y = 3, PANEL_H = 16;
@@ -63,6 +65,12 @@ export class LineupScreen {
       screen.text(p.x + 2, PANEL_Y + PANEL_H - 3, `Nivel ${r.aiLevel}/10   ·   ${opponent.pts} pts${euroTag}`, '#c9c2a8');
       if (isDerby) screen.text(p.x + 2, PANEL_Y + PANEL_H - 2, `¡EL DERBI! (${player.derbyHistory.wins}-${player.derbyHistory.losses})`, frame % 20 < 14 ? '#ffb347' : '#a08050');
       else if (isNemesis) screen.text(p.x + 2, PANEL_Y + PANEL_H - 2, '¡TU NÉMESIS! Véngate.', frame % 20 < 14 ? '#ff8c5b' : '#a05838');
+      // estilo de juego del capitán rival: solo si ya se lo has visto hacer
+      // (ver domain/Club.seenArchetype) — partidos de liga solamente, en
+      // copa el rival es un cruce puntual y no llega a "conocerse"
+      if (!ctx.isCup && !ctx.isFriendly && opponent.seenArchetype) {
+        screen.text(p.x + 2, PANEL_Y + PANEL_H - 1, archetypeFor(opponent.name).label, '#c8a0e8');
+      }
     }
 
     // --- PISTA: mini icono de cancha + ciudad + descripción ---
@@ -138,7 +146,15 @@ export class LineupScreen {
       const over = hitRect(input.mouse.cx, input.mouse.cy, rowRect.x, rowRect.y, rowRect.w, rowRect.h);
       if (over) rowHover = { id, k };
       if (sel || over) screen.text(rowRect.x, yy, ' '.repeat(rowRect.w), '#3a4a3a');
+      // vínculo con quien ya esté elegido para este partido (ver
+      // domain/Chemistry.js): un corazón junto al nombre si la pareja
+      // llega con algo de rodaje, más lleno cuanto más fuerte el vínculo
+      const bondLvl = ctx.teamSel.filter((oid) => oid !== id)
+        .reduce((best, oid) => Math.max(best, chemistryLevel(gamesFor(player.chemistry, id, oid))), 0);
+      const bondIcon = bondLvl >= 3 ? '♥' : bondLvl >= 1 ? '♡' : '';
+      const bondCol = bondLvl >= 3 ? '#ff8fc0' : '#a8e8c8';
       screen.text(PX + 1, yy, `${picked ? '✓ ' : '  '}${this.game.displayName(id)}`, picked ? '#ffe680' : (sel || over) ? '#fff' : '#c9c2a8');
+      if (bondIcon) screen.text(PX + 21, yy, bondIcon, bondCol);
       screen.text(PX + 24, yy, `STA ${'▮'.repeat(Math.round(s.st / 12.5))}${'▯'.repeat(8 - Math.round(s.st / 12.5))} ${Math.round(s.st)}`, stCol);
       screen.text(PX + 48, yy, `MOR ${s.mo >= 0 ? '+' : ''}${s.mo}`, s.mo >= 0 ? '#88e088' : '#ef9f9f');
       screen.text(PX + 60, yy, `${CLIMAS[r.forecast.main].icon}${affStr}`, affCol);

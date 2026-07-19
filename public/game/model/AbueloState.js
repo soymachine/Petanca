@@ -1,12 +1,16 @@
 import { clamp, gauss, rnd } from '../core/utils.js';
-import { ABUELO_DATA } from '../data/abuelos.js';
+import { ABUELO_DATA, STAT_KEYS } from '../data/abuelos.js';
 
-// curva de nivel: nivel 1 cuesta 30 XP, nivel 2 50, nivel 3 70... y cada
-// subida da más puntos que la anterior (10, 15, 20...) — constantes
-// pensadas para retocarse fácil si el ritmo no cuaja jugando
+// curva de nivel: nivel 1 cuesta 89 XP, nivel 2 126, nivel 3 171... el
+// término cuadrático hace que la distancia entre niveles crezca cada vez
+// más (+37, +45, +53, +61...), no solo el coste base — así los niveles
+// altos cuestan de verdad, no es una recta con más margen. Los puntos por
+// nivel (10, 15, 20... en la escala vieja) se reparten al 85% para que
+// subir de nivel siga siendo un premio, pero menos generoso que antes.
+// Constantes pensadas para retocarse fácil si el ritmo no cuaja jugando.
 const LEVEL_CAP = 12;
-function xpToNextLevel(level) { return 30 + level * 20; }
-function pointsForLevel(level) { return 10 + (level - 1) * 5; }
+function xpToNextLevel(level) { return 60 + level * 25 + level * level * 4; }
+function pointsForLevel(level) { return Math.round((10 + (level - 1) * 5) * 0.85); }
 
 // Estado vivo de un abuelo de la peña: stamina, moral, entrenamiento
 // acumulado, amuleto, generación (nietos) y estadísticas de carrera.
@@ -37,6 +41,18 @@ export class AbueloState {
     // techo por stat (1..10) de un fichaje Sin Equipo: null si no aplica
     // (fichaje normal, sin techo más allá del tope general de 100)
     this.potentialCap = data.potentialCap ?? null;
+    // eco heredado del abuelo saliente en el último relevo (ver
+    // retireToGrandchild): {clima: 'LLUVIA'} o {stat: 'pulso'} — null si
+    // este hueco aún va por su primera generación
+    this.inherited = data.inherited ?? null;
+    // deuda de sangre: {clubId, label} si el abuelo murió con una revancha
+    // pendiente (némesis activa o derbi en contra) — se salda ganando a
+    // ese club con el nieto alineado (ver Career.settleDebts)
+    this.debt = data.debt ?? null;
+    // presagio de la edad ya disparado (ver data/agingFlavor.js /
+    // Game.js._maybeAgingForeshadow): como mucho una vez por generación,
+    // para no repetir el mismo aviso cada semana
+    this.agingFlavorSeen = data.agingFlavorSeen ?? false;
   }
 
   static fromJSON(id, json) {
@@ -57,7 +73,8 @@ export class AbueloState {
       torneos: this.torneos, genStats: this.genStats, career: this.career, mentorOf: this.mentorOf,
       age: this.age, signed: this.signed, formStreak: this.formStreak, injuredUntil: this.injuredUntil,
       legacy: this.legacy, xp: this.xp, level: this.level, points: this.points,
-      potentialCap: this.potentialCap,
+      potentialCap: this.potentialCap, inherited: this.inherited, debt: this.debt,
+      agingFlavorSeen: this.agingFlavorSeen,
     };
   }
 
@@ -91,13 +108,50 @@ export class AbueloState {
   // stat de grano fino (0-100) para la UI y el reparto de puntos de nivel
   getStatDisplay(k) {
     const cap = this.potentialCap ? this.potentialCap[k] * 10 : 100;
-    return clamp(this._baseStat10(k) * 10 + (this.bonus[k] || 0), 0, cap);
+    return clamp(this._baseStat10(k) * 10 + (this.bonus[k] || 0) - this.ageDeclineFor(k), 0, cap);
   }
 
+  // declive físico por la edad: a partir de los 78 años empieza a notarse,
+  // y crece cuadrático (cada año pasado ese umbral pesa más que el
+  // anterior, no una recta) — el aguante y el pulso (piernas y mano firme)
+  // se resienten antes que la maña o el temple (la cabeza aguanta mejor
+  // que el cuerpo). No toca `bonus` ni `genStats`: el entrenamiento
+  // invertido sigue ahí, solo se resta encima al mostrar/usar la stat.
+  ageDeclineFor(k) {
+    if (this.age < 78) return 0;
+    const over = this.age - 78;
+    const sensitivity = { aguante: 1.3, pulso: 1.0, brazo: 0.9, mana: 0.6, temple: 0.3 };
+    return Math.round(over * over * 0.15 * (sensitivity[k] ?? 1));
+  }
+
+  // moral con rendimientos decrecientes: cuanto más cerca del techo (o del
+  // suelo), más cuesta seguir moviéndose en esa dirección — así un +20 (o
+  // un -20) hay que ganárselo con varios empujones seguidos, no de un tirón,
+  // y no se queda ahí clavado para siempre (ver moralWeeklyDecay).
   addMoral(d, gimnasioBonus = false) {
     if (this.id === 4) d *= 2; // EL RUBIO: presumido
     const floor = this.id === 0 ? 0 : (this.item && this.item.id === 'petaca' ? -10 : -20);
-    this.mo = clamp(this.mo + d, floor, 20);
+    const cap = 20;
+    if (d > 0) d *= clamp((cap - this.mo) / cap, 0.15, 1);
+    else if (d < 0) d *= clamp((this.mo - floor) / (cap - floor), 0.15, 1);
+    this.mo = clamp(this.mo + d, floor, cap);
+  }
+
+  // deriva semanal hacia el neutro: sin nada que la alimente, la moral se
+  // acerca un 8% a 0 cada semana — un chute puntual (fiestas, un amuleto)
+  // ya no dura toda la temporada si no se refuerza.
+  moralWeeklyDecay() {
+    this.mo = Math.round(this.mo - this.mo * 0.08);
+  }
+
+  // recuperación semanal de stamina: los años pasan factura (a partir de
+  // los 65, cada año de más recupera algo menos, con suelo del 55% a edad
+  // muy avanzada) y el aguante ayuda un poco más allá de bajar el coste en
+  // partido — antes era un +30 fijo para todo el mundo, sin distinción.
+  recoverWeekly(baseBonus = 0) {
+    const ageFactor = clamp(1 - Math.max(0, this.age - 65) * 0.01, 0.55, 1);
+    const aguanteHelp = (ABUELO_DATA[this.id].stats.aguante - 5) * 0.6;
+    this.st = clamp(this.st + (30 + baseBonus) * ageFactor + aguanteHelp, 0, 100);
   }
 
   hasImmunity(weatherKey) {
@@ -151,20 +205,37 @@ export class AbueloState {
     return spend;
   }
 
+  // mejor stat (grano fino) del abuelo saliente, antes de que el relevo
+  // resetee bonus/genStats — es lo que hereda el nieto si no le toca eco
+  // climático (ver retireToGrandchild)
+  _bestOutgoingStat() {
+    let best = STAT_KEYS[0], bestVal = this.getStatDisplay(best);
+    for (const k of STAT_KEYS) {
+      const v = this.getStatDisplay(k);
+      if (v > bestVal) { bestVal = v; best = k; }
+    }
+    return best;
+  }
+
   // releva al abuelo por su nieto: stats nuevas, misma cara, cansancio a cero.
   // También es lo que ocurre (con otro tono) cuando el abuelo fallece: el
   // testigo pasa a la familia y el hueco de la peña sigue vivo. Antes de
   // relevar, se guarda un resumen de la generación saliente — si no, no
-  // queda ni rastro de quién jugó antes en ese hueco.
-  retireToGrandchild(reason = 'retiro') {
+  // queda ni rastro de quién jugó antes en ese hueco. `debt`, si se pasa
+  // (solo en un relevo por fallecimiento con revancha pendiente — ver
+  // Game.js), es lo que arrastra el nieto hasta que la salde (ver
+  // Career.settleDebts).
+  retireToGrandchild(reason = 'retiro', debt = null) {
     this.legacy.push({
       gen: this.gen, name: this.signed ? this.signed.name : null, age: this.age,
       wins: this.career.wins, losses: this.career.losses, bestStreak: this.career.bestStreak,
       reason,
     });
-    const ks = ['pulso', 'brazo', 'mana', 'temple', 'aguante'];
+    const outgoingBestStat = this._bestOutgoingStat();
+    const immuneClimas = Object.keys(ABUELO_DATA[this.id].clima).filter((k) => ABUELO_DATA[this.id].clima[k] === 1);
+
     const genStats = {};
-    for (const k of ks) {
+    for (const k of STAT_KEYS) {
       const base = ABUELO_DATA[this.id].stats[k];
       genStats[k] = clamp(base + Math.round(gauss() * 2) + (k === 'aguante' ? 1 : 0), 3, 9);
     }
@@ -180,12 +251,32 @@ export class AbueloState {
     this.signed = null;
     this.career = { wins: 0, losses: 0, bestStreak: 0, closestWin: null };
     this.formStreak = 0;
+
+    // herencia: un eco del abuelo saliente, elegido al azar entre una
+    // afinidad climática suavizada (si era inmune a algo) o un empujón en
+    // su mejor stat — nunca las dos a la vez, para que sea un rasgo con
+    // sabor y no una acumulación de bonus gratis
+    let inherited;
+    if (immuneClimas.length && Math.random() < 0.5) {
+      inherited = { clima: immuneClimas[Math.floor(Math.random() * immuneClimas.length)] };
+    } else {
+      this.bonus[outgoingBestStat] = (this.bonus[outgoingBestStat] || 0) + 10;
+      inherited = { stat: outgoingBestStat };
+    }
+    this.inherited = inherited;
+    this.debt = debt;
+    this.agingFlavorSeen = false; // generación nueva, todavía nada que presagiar
+    return { inherited, debt };
   }
 
   // probabilidad de fallecer esta temporada: crece con la edad a partir de
-  // los 70, y se mantiene siempre pequeña.
+  // los 70, cada vez más deprisa (término cuadrático, no una recta) — a
+  // los 75 sigue siendo un riesgo pequeño, a los 90 ya pesa de verdad,
+  // acompañando al declive físico de ageDeclineFor en vez de ser una
+  // tirada de dados desconectada de cómo se le ve jugar.
   deathChance() {
-    return clamp((this.age - 70) * 0.0007, 0, 0.018);
+    const over = Math.max(0, this.age - 70);
+    return clamp(over * over * 0.00003 + over * 0.0003, 0, 0.05);
   }
 
   recordMatchResult(won, marginPoints) {

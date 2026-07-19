@@ -79,11 +79,27 @@ export class Roster {
 
   totalUpkeep() {
     // cuota de socio: cada abuelo cuesta un poco de mantenimiento por torneo
-    return this.ids.reduce((sum, id) => sum + upkeepFor(id), 0);
+    return this.ids.reduce((sum, id) => sum + upkeepFor(id, this), 0);
   }
 }
 
-export function upkeepFor(id) {
-  // los más caros de fichar también piden más ronda de vinos
-  return 5 + Math.round(ABUELO_DATA[id].price / 100);
+// cuota de socio de un hueco: antes era siempre el precio FUNDACIONAL del
+// hueco (ABUELO_DATA[id].price), ignorando por completo si ahí juega ahora
+// un fichaje carísimo o un Sin Equipo cualquiera — un crack de 2000€ y el
+// abuelo original de 0€ pagaban la misma cuota. Ahora, si el hueco lo
+// ocupa un fichaje, la cuota refleja lo que vale de verdad ahora mismo
+// (media de sus 5 stats de grano fino) promediado con su potencial si
+// viene de Sin Equipo (se paga también por la promesa, no solo por el
+// rendimiento actual) — y el nivel ganado jugando añade un poco más en
+// cualquier caso, fichaje o no.
+export function upkeepFor(id, roster) {
+  if (!roster) return 5 + Math.round(ABUELO_DATA[id].price / 100); // compat: llamadas antiguas sin roster
+  const s = roster.get(id);
+  if (!s.signed) return 5 + Math.round(ABUELO_DATA[id].price / 100) + Math.round(s.level * 1.5);
+  const avgStat = STAT_KEYS.reduce((sum, k) => sum + s.getStatDisplay(k), 0) / STAT_KEYS.length;
+  const potentialAvg = s.potentialCap
+    ? (STAT_KEYS.reduce((sum, k) => sum + s.potentialCap[k], 0) / STAT_KEYS.length) * 10
+    : avgStat;
+  const effectivePrice = 50 + ((avgStat + potentialAvg) / 2) * 4.5;
+  return 5 + Math.round(effectivePrice / 100) + Math.round(s.level * 1.5);
 }

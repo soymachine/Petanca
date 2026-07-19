@@ -1,4 +1,4 @@
-import { FACILITIES } from '../data/facilities.js';
+import { FACILITIES, TRAINING_FACILITY_FOR } from '../data/facilities.js';
 
 const byId = (id) => FACILITIES.find((f) => f.id === id);
 
@@ -41,7 +41,10 @@ export class FacilityManager {
   trainingCost() { return 30 - (this.currentTier('luz')?.staSaved || 0); }
   extraRecoveryOnTravel() { return this.currentTier('cobertizo')?.recovery || 0; }
   sweetSpotWidthBonus() { return this.currentTier('marcador')?.sweetBonus || 0; }
-  trainingStatBonus() { return this.currentTier('gimnasio')?.statBonus || 1; }
+  // cada stat de entreno tiene su propia instalación (antes un único
+  // "gimnasio" multiplicaba el premio de cualquier entrenamiento por
+  // igual) — ver TRAINING_FACILITY_FOR y data/trainingDrills.js
+  trainingStatBonus(stat) { return this.currentTier(TRAINING_FACILITY_FOR[stat])?.statBonus || 1; }
   matchMoneyMultiplier() { return this.currentTier('grada')?.moneyMult || 1; }
   sponsorMultiplier() { return this.currentTier('cartel')?.sponsorMult || 1; }
   eventChanceMultiplier() { return this.currentTier('botiquin')?.eventMult || 1; }

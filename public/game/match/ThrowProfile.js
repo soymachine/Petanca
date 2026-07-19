@@ -1,4 +1,30 @@
 import { ABUELO_DATA } from '../data/abuelos.js';
+import { bestBondMultiplier } from '../domain/Chemistry.js';
+import { clamp } from '../core/utils.js';
+import { drillFor } from '../data/trainingDrills.js';
+
+// fatiga -> temblor: tramo suave hasta los 30 STA (igual que antes), y por
+// debajo una "pared del cansancio" con el doble de pendiente — jugar
+// agotado deja de ser un empeoramiento proporcional y pasa a ser un riesgo
+// real, para que rotar plantilla pese de verdad en vez de ser cosmético.
+function fatiguePenalty(st) {
+  if (st >= 60) return 0;
+  const soft = (60 - Math.max(30, st)) / 60 * 1.2;
+  if (st >= 30) return soft;
+  const softAt30 = (60 - 30) / 60 * 1.2;
+  return softAt30 + (30 - st) / 30 * 1.6;
+}
+
+// moral -> temblor: tramo normal igual para todo el mundo, y dos zonas que
+// aceleran el efecto pasados los ±12 puntos ("estado de gracia" /
+// "crisis anímica") — antes era una recta perfecta en todo el rango,
+// pasar de +1 a +2 pesaba igual que de +19 a +20.
+function moralShakeMult(mo) {
+  const base = 1 - clamp(mo, -12, 12) * 0.0035;
+  if (mo > 12) return base - (mo - 12) * 0.004;
+  if (mo < -12) return base + (-12 - mo) * 0.006;
+  return base;
+}
 
 // Calcula cómo tira el abuelo alineado ahora mismo: temblor, velocidad de la
 // barra de potencia, alcance máximo y longitud de guía. Junta stats, fatiga,
@@ -11,11 +37,30 @@ export class ThrowProfile {
     let shake = 0.055 - s.getStat('pulso') * 0.0038;
 
     const fat = Math.max(0, Math.min(1, (60 - s.st) / 60));
-    shake *= 1 + fat * 1.2;
+    shake *= 1 + fatiguePenalty(s.st);
 
     if (!match.training && match.scoreA > match.scoreP && i !== 5) {
       const press = (1 - s.getStat('temple') / 10) * 0.35;
       shake *= 1 + press * (match.feature === 'pressure' ? 1.7 : 1);
+    }
+    // drill de PRESIÓN: no hay marcador de verdad que apriete, así que la
+    // presión se simula creciendo con cada bola de la tanda (empieza
+    // tranquilo, la última es casi un "todo o nada") — mismo trato de
+    // inmunidad que la presión de partido de verdad (i !== 5, "nervios de
+    // acero"), y el propio temple amortigua cuánto sube
+    if (match.training === 'PRESION' && i !== 5) {
+      const drillLen = drillFor('PRESION').balls;
+      const stage = clamp((drillLen - match.ballsLeftP) / drillLen, 0, 1);
+      const press = (1 - s.getStat('temple') / 10) * 0.5;
+      shake *= 1 + press * (0.3 + stage * 1.3);
+    }
+    // drill de FONDO: el pulso se resiente a medida que se acumulan
+    // tiradas seguidas sin descanso — el aguante amortigua cuánto crece
+    if (match.training === 'FONDO') {
+      const drillLen = drillFor('FONDO').balls;
+      const done = drillLen - match.ballsLeftP;
+      const fatigueGrowth = Math.max(0, done * (0.07 - s.getStat('aguante') * 0.006));
+      shake *= 1 + fatigueGrowth;
     }
     if (i === 8 && match.firstManoWon === true) shake *= 0.8; // FERMÍN supersticioso
     if (i === 9 && !match.training) shake *= match.stage === 2 ? 0.85 : match.stage === 0 ? 1.15 : 1; // BLAS
@@ -27,13 +72,25 @@ export class ThrowProfile {
       const affinity = ABUELO_DATA[i].clima[weatherKey] || 0;
       if (s.hasImmunity(weatherKey)) shake *= 0.94;
       else if (affinity < 0) shake *= 1.16;
+      // eco heredado del abuelo saliente (ver AbueloState.retireToGrandchild):
+      // un 5% menos de temblor con ese clima concreto, aunque no llegue a inmunidad
+      if (s.inherited && s.inherited.clima === weatherKey) shake *= 0.95;
     }
 
-    shake *= 1 - s.mo * 0.004;
+    shake *= moralShakeMult(s.mo);
+    if (match.jackChoice === 'larga') shake *= 1.15; // boliche largo: cuesta más precisión a los dos bandos
     if (!match.training && match.streak >= 2) shake *= Math.max(0.6, 1 - (match.streak - 1) * 0.08);
     if (!match.training && s.inFormBonus) shake *= 0.92; // racha de forma: llega confiado de casa
     if (s.item && s.item.id === 'guantes') shake *= 0.92;
     if (match.warmedUp) shake *= 0.93; // llegó calentado antes de un partido importante
+
+    // compenetración de parejas: cuanto más rodados juntos, más firme tira
+    // uno delante del otro (ver domain/Chemistry.js); el "momento de
+    // pareja" es un extra puntual justo tras un buen arrime del compañero
+    if (!match.training && match.teamP && match.teamP.length > 1) {
+      shake *= bestBondMultiplier(match.chemistry, i, match.teamP);
+      if (match.pairMoment) shake *= 0.92;
+    }
 
     let barSpeed = 1.7 * (1 - s.getStat('temple') * 0.035) * (1 + fat * 0.5);
     if (s.item && s.item.id === 'reloj') barSpeed *= 0.8;

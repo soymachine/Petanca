@@ -18,7 +18,7 @@ export class PressScreen {
     screen.textCenter(10, `Un periodista del pueblo os para antes del partido contra ${ctx.opponent.name}:`, '#c9c2a8');
     screen.textCenter(12, ctx.isEuropean ? '"¿Cómo veis este cruce europeo?"' : ctx.isCup ? '"¿Cómo veis este cruce de Copa?"' : '"¿Cómo veis el partido de este domingo?"', '#e8ddb8');
     if ((ctx.isDerby || ctx.isNemesis) && ctx.opponent.captain) {
-      screen.textCenter(14, `Desde ${ctx.opponent.name}: ${rivalPersonalityLine(ctx.opponent)}`, '#c8a0e8');
+      screen.textCenter(14, `Desde ${ctx.opponent.name}: ${rivalPersonalityLine(ctx.opponent, player.publicImage)}`, '#c8a0e8');
     }
 
     const w = 25, gap = 2, total = PRESS_OPTIONS.length * w + (PRESS_OPTIONS.length - 1) * gap;
@@ -41,6 +41,7 @@ export class PressScreen {
     if (input.hit('Enter') || input.hit(' ')) {
       const opt = PRESS_OPTIONS[this.cursor];
       for (const id of player.roster.ids) player.roster.get(id).addMoral(opt.moraleNow);
+      player.nudgePublicImage(opt.imageDelta || 0);
       player.pressPromise = { optionId: opt.id, loseBonus: opt.loseBonus, opponentId: ctx.opponent.id };
       player.news.push(`RUEDA DE PRENSA: ${opt.line} ${opt.result}`);
       player.save();

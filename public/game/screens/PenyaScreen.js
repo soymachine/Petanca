@@ -8,6 +8,10 @@ import { TransferPool } from '../domain/TransferPool.js';
 import { SCOUT_TEMPLATES } from '../data/scouts.js';
 import { FOREIGN_COUNTRIES } from '../data/countries.js';
 import { generateScoutPortrait } from '../data/art/scoutPortraits.js';
+import { resetChemistryFor, bondLabel } from '../domain/Chemistry.js';
+import { CrestGenerator } from '../portraits/CrestGenerator.js';
+import { TRAINING_DRILLS } from '../data/trainingDrills.js';
+import { archetypeForAbuelo } from '../data/abueloArchetypes.js';
 
 const TABLE_X = 4, TABLE_Y0 = 10;
 const TABLE_W = 132;
@@ -66,6 +70,7 @@ export class PenyaScreen {
     this.mScroll = 0;
     this.allocating = null; // id del abuelo con el overlay de reparto de puntos abierto
     this.allocCursor = 0;
+    this.trainDrillPick = null; // modal: { abueloId, cursor } — qué minijuego de entreno agendarle
     this._rDrag = false; // arrastrando la barra de scroll de Plantilla
     this._mDrag = false; // arrastrando la barra de scroll de Mercado
     this.mSort = { key: 'nivel', dir: -1 }; // orden del Mercado: nivel de más a menos, por defecto
@@ -73,6 +78,7 @@ export class PenyaScreen {
     this.oCursor = 0;
     this.assignCountryFor = null; // modal: { scoutId, cursor } — a qué país lo pones a ojear
     this.assignScoutFor = null; // modal: { seedKey, name, cursor } — qué ojeador vigila a este jugador
+    this.panteonCursor = 0; // qué hueco de la plantilla se mira en el Panteón
   }
 
   // nivel 0-100 de una fila del mercado, tal y como se le puede mostrar al
@@ -134,15 +140,35 @@ export class PenyaScreen {
   draw() {
     const { screen, input } = this.game;
     screen.clear();
+    // una modal con su propio cierre por ESC tiene que consumir la tecla
+    // ANTES de que TabsBar la vea, o el atajo global "ESC = Inicio" se
+    // dispara el mismo frame y te saca de la pantalla sin querer
+    if (input.hit('Escape')) {
+      if (this.allocating !== null) { this.allocating = null; input.pressed.Escape = false; }
+      else if (this.trainDrillPick) { this.trainDrillPick = null; input.pressed.Escape = false; }
+      else if (this.assignScoutFor) { this.assignScoutFor = null; input.pressed.Escape = false; }
+      else if (this.assignCountryFor) { this.assignCountryFor = null; input.pressed.Escape = false; }
+    }
     TabsBar.draw(this.game, 'penya');
     screen.textCenter(4, '═══ MI PEÑA ═══', '#ffb347');
-    const sections = ['plantilla', 'mercado', 'ojeadores'];
-    const clicked = drawTabRow(screen, input, TABLE_X, 6, ['PLANTILLA', 'MERCADO', 'OJEADORES'], sections.indexOf(this.section));
-    screen.text(TABLE_X + 52, 6, '[Q] cambiar de pestaña', '#8a7f66');
+
+    // escudo + nombre del club, en la esquina libre de la cabecera: la fila
+    // 8 la usa el texto de ayuda de cada sección y la 9 ya es la caja de la
+    // tabla, así que solo quedan las filas 3-7 para el mini (5x9, ver
+    // CrestGenerator) — el escudo grande no cabría de ninguna manera aquí
+    const crestX = screen.cols - 11, crestY = 3;
+    screen.drawPortrait(CrestGenerator.generateMini(this.game.player.clubName), crestX, crestY);
+    const clubLabel = truncate(this.game.player.clubName, 30);
+    screen.text(crestX - 1 - clubLabel.length, crestY + 2, clubLabel, '#ffb347');
+
+    const sections = ['plantilla', 'mercado', 'ojeadores', 'panteon'];
+    const clicked = drawTabRow(screen, input, TABLE_X, 6, ['PLANTILLA', 'MERCADO', 'OJEADORES', 'PANTEÓN'], sections.indexOf(this.section));
+    screen.text(TABLE_X + 66, 6, '[Q] cambiar de pestaña', '#8a7f66');
 
     if (this.section === 'plantilla') this._drawPlantilla();
     else if (this.section === 'mercado') this._drawMercado();
-    else this._drawOjeadores();
+    else if (this.section === 'ojeadores') this._drawOjeadores();
+    else this._drawPanteon();
 
     if (clicked !== null) this.section = sections[clicked];
     else if (input.hit('q') || input.hit('Q')) this.section = sections[(sections.indexOf(this.section) + 1) % sections.length];
@@ -156,7 +182,7 @@ export class PenyaScreen {
       const statLabel = STAT_LABEL[player.roster.mentorStatOf(this._pendingMentor)];
       screen.textCenter(8, `¿A QUIÉN ENSEÑA ${this.game.displayName(this._pendingMentor).toUpperCase()}? · su fuerte es ${statLabel} — solo ayuda extra si el pupilo entrena eso · [ENTER] elegir · [M] cancelar`, '#c8a0e8');
     } else {
-      screen.textCenter(8, '[↑/↓] elegir · [ENTER] fichar (fundacional) · [A/T] entrenar · [G] retirar · [M] mentor · [P] repartir puntos · ratón = detalle', '#c9c2a8');
+      screen.textCenter(8, '[↑/↓] elegir · [ENTER] fichar (fundacional) · [T] entrenar · [G] retirar · [M] mentor · [P] repartir puntos · ratón = detalle', '#c9c2a8');
     }
 
     const visibleRows = Math.min(ids.length, MAX_VISIBLE_ROWS);
@@ -229,6 +255,10 @@ export class PenyaScreen {
       this._drawAllocator(this.allocating);
       return;
     }
+    if (this.trainDrillPick) {
+      this._drawTrainDrillModal();
+      return;
+    }
 
     const s = player.roster.get(this.cursor);
 
@@ -244,17 +274,30 @@ export class PenyaScreen {
     if (input.hit('p') || input.hit('P')) { this.allocating = this.cursor; this.allocCursor = 0; }
 
     if (s.st >= player.facilities.trainingCost() && !this.game.trainingScheduledFor(this.cursor) && !s.isInjured(player.seasonClock.day)) {
-      if (input.hit('a') || input.hit('A')) this.game.scheduleTraining(this.cursor, 'ARRIME');
-      if (input.hit('t') || input.hit('T')) this.game.scheduleTraining(this.cursor, 'TIRO');
+      if (input.hit('t') || input.hit('T')) this.trainDrillPick = { abueloId: this.cursor, cursor: 0 };
     }
     if (s.torneos >= RETIRE_AT && (input.hit('g') || input.hit('G'))) {
-      s.retireToGrandchild();
+      const hadLegend = resetChemistryFor(player, this.cursor);
+      const { inherited } = s.retireToGrandchild();
+      player.news.push(this._inheritanceNews(this.cursor, inherited));
+      if (hadLegend) player.news.push(`FIN DE UNA ERA: la pareja de leyenda de ${this.game.displayName(this.cursor)} se deshace con el relevo. Al nieto le toca hacerse un hueco desde cero.`);
       player.save();
     }
     if (input.hit('m') || input.hit('M')) {
       this.mentorMode = true;
       this._pendingMentor = this.cursor;
     }
+  }
+
+  // titular del relevo generacional: cita el eco heredado (ver
+  // AbueloState.retireToGrandchild) con el nombre de la familia del hueco
+  _inheritanceNews(id, inherited) {
+    const name = this.game.displayName(id);
+    if (inherited.clima) {
+      const cl = CLIMAS[inherited.clima];
+      return `RELEVO EN LA PEÑA: el nieto de ${name} coge el testigo. Dicen que ${cl.label.toLowerCase()} tampoco le hace mella — ha salido a su abuelo.`;
+    }
+    return `RELEVO EN LA PEÑA: el nieto de ${name} coge el testigo. Se le nota de familia el ${STAT_LABEL[inherited.stat].toLowerCase()}.`;
   }
 
   _levelInfo(s) {
@@ -384,6 +427,39 @@ export class PenyaScreen {
     if (input.hit('Escape') || input.hit('p') || input.hit('P')) this.allocating = null;
   }
 
+  // qué minijuego de entreno agendarle: 5 drills desde que se dejó de
+  // poder solo con [A]rrime/[T]iro directos (con 5 opciones ya no caben
+  // en teclas sueltas sin chocar con [P] repartir puntos, [G] retirar...)
+  _drawTrainDrillModal() {
+    const { screen, input, player } = this.game;
+    const { abueloId } = this.trainDrillPick;
+    const w = 62, h = 6 + TRAINING_DRILLS.length * 2;
+    const x = Math.floor((screen.cols - w) / 2), y = 11;
+    this._fillBlack(x, y, w, h);
+    screen.box(x, y, w, h, '#ffe14d', 'double');
+    screen.text(x + 2, y, ` ¿QUÉ ENTRENA ${this.game.displayName(abueloId).toUpperCase()}? `, '#ffe680');
+
+    let ry = y + 2;
+    TRAINING_DRILLS.forEach((d, i) => {
+      const sel = i === this.trainDrillPick.cursor;
+      const overRow = input.mouse.cy === ry && input.mouse.cx >= x + 2 && input.mouse.cx < x + w - 2;
+      if (sel || overRow) screen.text(x + 2, ry, ' '.repeat(w - 4), '#3a2a10');
+      const label = `${d.label.padEnd(10)} +1 ${STAT_LABEL[d.stat].toUpperCase().padEnd(8)} ${d.desc}`;
+      screen.text(x + 2, ry, label.slice(0, w - 4), sel || overRow ? '#fff' : '#c9c2a8');
+      if (overRow && input.mouse.clicked) this.trainDrillPick.cursor = i;
+      ry += 2;
+    });
+
+    screen.text(x + 2, y + h - 2, '[↑/↓] elegir   [ENTER] agendar   [ESC] cancelar', '#c9c2a8');
+
+    if (input.hit('ArrowUp')) this.trainDrillPick.cursor = (this.trainDrillPick.cursor + TRAINING_DRILLS.length - 1) % TRAINING_DRILLS.length;
+    if (input.hit('ArrowDown')) this.trainDrillPick.cursor = (this.trainDrillPick.cursor + 1) % TRAINING_DRILLS.length;
+    if (input.hit('Enter') || input.hit(' ')) {
+      this.game.scheduleTraining(abueloId, TRAINING_DRILLS[this.trainDrillPick.cursor].id);
+      this.trainDrillPick = null;
+    }
+  }
+
   _drawTooltip(id, mx, my) {
     const { screen, player } = this.game;
     const f = this.game.faces[id];
@@ -391,6 +467,27 @@ export class PenyaScreen {
 
     const lines = [];
     lines.push([this.game.displayName(id), '#ffe680']);
+    // nivel granular: la barra visual de siempre (más fina aquí que en la
+    // tabla, 20 segmentos en vez de 5) más los números exactos de XP —
+    // en la fila de la tabla no cabían, aquí sí hay sitio para verlos
+    lines.push(['NIVEL:', '#ffb347']);
+    if (s.isMaxLevel()) {
+      lines.push([`  Nv.${s.level}  ${'▓'.repeat(20)}  NIVEL MÁXIMO`, '#a8d8ff']);
+    } else {
+      const pct = Math.max(0, Math.min(1, s.xp / s.xpToNextLevel()));
+      const filled = Math.round(pct * 20);
+      const bar = `${'▓'.repeat(filled)}${'░'.repeat(20 - filled)}`;
+      lines.push([`  Nv.${s.level}  ${bar}  ${s.xp}/${s.xpToNextLevel()} XP`, '#a8d8ff']);
+    }
+    if (s.points > 0) lines.push([`  ${s.points} puntos por repartir (clic en el nivel de la tabla)`, '#ffd75e']);
+    // arquetipo propio: se gana entrenando en serio una stat (a diferencia
+    // del arquetipo rival, que es fijo de serie) — ver data/abueloArchetypes.js
+    const archetype = archetypeForAbuelo(s);
+    if (archetype) {
+      lines.push(['ARQUETIPO:', '#ffb347']);
+      lines.push([`  ${archetype.label}`, '#c8a0e8']);
+      wrapText(archetype.desc, 40).forEach((l) => lines.push(['  ' + l, '#9a927a']));
+    }
     lines.push(['CLIMA:', '#ffb347']);
     for (const [k, v] of Object.entries(ABUELO_DATA[id].clima)) {
       const cl = CLIMAS[k];
@@ -407,11 +504,20 @@ export class PenyaScreen {
       wrapText(ABUELO_DATA[id].trait, 40).forEach((l) => lines.push(['  ' + l, '#d8b8e8']));
     }
     lines.push(['CARRERA:', '#ffb347']);
-    lines.push([`  ${s.career.wins}V ${s.career.losses}D  ·  ${s.torneos} PARTIDAS / ${RETIRE_AT}  ·  sueldo ${upkeepFor(id)}€/sem`, '#9a927a']);
+    lines.push([`  ${s.career.wins}V ${s.career.losses}D  ·  ${s.torneos} PARTIDAS / ${RETIRE_AT}  ·  sueldo ${upkeepFor(id, player.roster)}€/sem`, '#9a927a']);
     if (s.formStreak >= 2) lines.push([`  🔥 racha de ${s.formStreak} victorias seguidas${s.formStreak >= 3 ? ' (llega más firme a la mesa)' : ''}`, '#ffb347']);
     if (s.item) {
       const it = ITEMS[s.item.id];
       lines.push([`  objeto: ${it.name}`, '#ffd9a0']);
+    }
+    if (s.debt) lines.push([`  ⚔ cuenta pendiente con ${s.debt.label} — se salda ganándole con él en el equipo`, '#ff8c5b']);
+    const bonds = player.roster.ids
+      .filter((oid) => oid !== id)
+      .map((oid) => [oid, bondLabel(player.chemistry, id, oid)])
+      .filter(([, label]) => label);
+    if (bonds.length) {
+      lines.push(['VÍNCULOS:', '#ffb347']);
+      for (const [oid, label] of bonds) lines.push([`  con ${this.game.displayName(oid)}: ${label}`, '#a8e8c8']);
     }
     const already = this.game.trainingScheduledFor(id);
     lines.push(['AGENDAR:', '#ffb347']);
@@ -816,6 +922,7 @@ export class PenyaScreen {
   _drawScoutAssign() {
     const { screen, input, player } = this.game;
     const staff = player.scoutStaff.hired;
+    const modalOpen = !!this.assignCountryFor;
     screen.box(4, 11, 132, 17, '#8a7f66');
     screen.text(7, 12, 'ASIGNAR OJEADORES', '#ffb347');
     if (!staff.length) {
@@ -849,11 +956,17 @@ export class PenyaScreen {
         statusCol = '#8a7f66';
       }
       screen.text(46, yy, truncate(statusTxt, 84), statusCol);
-      if (overRow && input.mouse.clicked) this.oCursor = i;
+      if (!modalOpen && overRow && input.mouse.clicked) this.oCursor = i;
       yy += 2;
     });
 
     screen.text(7, yy + 1, '[↑/↓] elegir · ratón = seleccionar   [ENTER] ojear un país   [U] dejar libre', '#c9c2a8');
+
+    // con el modal de país abierto, el foco es suyo: si esta lista también
+    // procesara el teclado, se comería el ENTER (y lo limpiaría) antes de
+    // que _drawAssignCountryModal() llegara a leerlo, y asignar país nunca
+    // llegaba a confirmarse de verdad — ver _drawAssignCountryModal
+    if (modalOpen) return;
 
     if (input.hit('ArrowUp')) this.oCursor = (this.oCursor + staff.length - 1) % staff.length;
     if (input.hit('ArrowDown')) this.oCursor = (this.oCursor + 1) % staff.length;
@@ -895,5 +1008,87 @@ export class PenyaScreen {
       this.assignCountryFor = null;
     }
     if (input.hit('Escape')) { this.assignCountryFor = null; input.pressed.Escape = false; }
+  }
+
+  // ============================= PANTEÓN =============================
+  // las generaciones pasadas de cada hueco (AbueloState.legacy ya las
+  // guardaba desde hace versiones, pero no se veían en ningún sitio), la
+  // herencia/deuda de la generación actual, y el libro de récords del club.
+  _recordsSummary() {
+    const { player } = this.game;
+    let bestStreak = 0, totalGen = 0;
+    for (const id of player.roster.ids) {
+      const s = player.roster.get(id);
+      totalGen += s.gen;
+      bestStreak = Math.max(bestStreak, s.career.bestStreak);
+      for (const leg of s.legacy) bestStreak = Math.max(bestStreak, leg.bestStreak || 0);
+    }
+    return { bestStreak, totalGen };
+  }
+
+  _drawPanteon() {
+    const { screen, input, player } = this.game;
+    const ids = player.roster.ids;
+    screen.textCenter(8, 'generaciones que han pasado por cada hueco de la peña, y lo que queda para el recuerdo', '#8a7f66');
+
+    if (!ids.length) {
+      screen.text(TABLE_X, 12, 'Aún no tienes a nadie en la peña.', '#8a8a7a');
+      return;
+    }
+    if (!ids.includes(this.panteonCursor)) this.panteonCursor = ids[0];
+
+    const leftX = 4, leftY = 10, leftW = 40, leftH = 24;
+    screen.box(leftX, leftY, leftW, leftH, '#8a7f66');
+    screen.text(leftX + 2, leftY, ' HUECOS DE LA PEÑA ', '#ffb347');
+    ids.forEach((id, i) => {
+      const y = leftY + 2 + i * 2;
+      if (y > leftY + leftH - 2) return;
+      const s = player.roster.get(id);
+      const sel = id === this.panteonCursor;
+      screen.text(leftX + 2, y, `${sel ? '▶' : ' '} ${this.game.displayName(id)}`, sel ? '#fff' : '#c9c2a8');
+      screen.text(leftX + 2, y + 1, `  gen. ${s.gen + 1}ª  ·  ${s.legacy.length} antecesor${s.legacy.length === 1 ? '' : 'es'}`, '#8a7f66');
+    });
+    screen.text(leftX + 2, leftY + leftH - 1, '[↑/↓] elegir hueco', '#8a7f66');
+
+    const rightX = leftX + leftW + 4, rightY = leftY, rightW = 130 - leftW - 4, rightH = leftH;
+    screen.box(rightX, rightY, rightW, rightH, '#8a7f66');
+    const id = this.panteonCursor;
+    const s = player.roster.get(id);
+    screen.text(rightX + 2, rightY, ` ${this.game.displayName(id).toUpperCase()} — GENERACIÓN ACTUAL (${s.gen + 1}ª) `, '#ffe680');
+    let yy = rightY + 2;
+    screen.text(rightX + 2, yy, `${s.career.wins}V ${s.career.losses}D  ·  racha máxima ${s.career.bestStreak}`, '#c9c2a8'); yy++;
+    if (s.inherited) {
+      const label = s.inherited.clima
+        ? `le afecta menos la ${CLIMAS[s.inherited.clima].label.toLowerCase()} — ha salido a su abuelo`
+        : `heredó ${STAT_LABEL[s.inherited.stat].toLowerCase()} de familia`;
+      screen.text(rightX + 2, yy, `herencia: ${label}`, '#a8e8c8'); yy++;
+    }
+    if (s.debt) { screen.text(rightX + 2, yy, `⚔ cuenta pendiente con ${s.debt.label}`, '#ff8c5b'); yy++; }
+    yy++;
+    if (!s.legacy.length) {
+      screen.text(rightX + 2, yy, 'Primera generación en este hueco: aún no hay antecesores que contar.', '#8a8a7a');
+    } else {
+      screen.text(rightX + 2, yy, 'GENERACIONES ANTERIORES:', '#ffb347'); yy++;
+      for (const leg of s.legacy.slice().reverse()) {
+        if (yy > rightY + rightH - 2) break;
+        const reasonTxt = leg.reason === 'fallecimiento' ? 'falleció' : 'se retiró con honores';
+        const legName = leg.name || this.game.faces[id].name;
+        screen.text(rightX + 2, yy, `${leg.gen + 1}ª gen. — ${legName}, ${reasonTxt} a los ${leg.age} años (${leg.wins}V ${leg.losses}D, racha ${leg.bestStreak})`, '#c9b98a');
+        yy++;
+      }
+    }
+
+    const recX = 4, recY = leftY + leftH + 2, recW = 130, recH = 8;
+    screen.box(recX, recY, recW, recH, '#8a7f66');
+    screen.text(recX + 2, recY, ' LIBRO DE RÉCORDS DEL CLUB ', '#ffb347');
+    const rec = this._recordsSummary();
+    const bmw = player.bestMarginWin;
+    screen.text(recX + 2, recY + 2, `mayor paliza dada: ${bmw ? `${bmw.margin} puntos de diferencia vs ${bmw.rival} (${bmw.cityName})` : '—'}`, '#c9c2a8');
+    screen.text(recX + 2, recY + 3, `racha histórica: ${rec.bestStreak || '—'}`, '#c9c2a8');
+    screen.text(recX + 2, recY + 4, `títulos de liga: ${player.seasonTitles}  ·  Copas de España: ${player.cupTitles}  ·  campanadas europeas: ${player.euroUpsets}`, '#c9c2a8');
+    screen.text(recX + 2, recY + 5, `generaciones que han pasado por la peña: ${rec.totalGen || '—'}`, '#c9c2a8');
+
+    if (input.hit('ArrowUp')) { const i = ids.indexOf(this.panteonCursor); this.panteonCursor = ids[(i + ids.length - 1) % ids.length]; }
+    if (input.hit('ArrowDown')) { const i = ids.indexOf(this.panteonCursor); this.panteonCursor = ids[(i + 1) % ids.length]; }
   }
 }

@@ -4,6 +4,11 @@ import { RIVAL_PHOTO_POOL } from '../data/art/rivalPhotoPool.js';
 
 let nextId = 1;
 
+function ageValueFactor(age) {
+  const distFromPeak = Math.max(0, Math.abs(age - 60) - 5);
+  return clamp(1 - distFromPeak * 0.012, 0.55, 1);
+}
+
 // Un jugador IA de cualquier club de cualquier liga: retrato de una foto
 // real (Wikimedia Commons) filtrada a ASCII, igual que los abuelos
 // protagonistas — se reparte de una pool pequeña entre los ~90 jugadores.
@@ -42,8 +47,14 @@ export class RivalPlayer {
   // scoutearlo, en el valor real
   get level100() { return Math.round(this.avgSkill * 10); }
 
+  // curva de edad continua en vez de un escalón: en esta liga de jubilados
+  // el pico de valor está en la plenitud del veterano (55-65, experiencia
+  // sin declive físico serio todavía) y decae suave hacia los extremos.
+  // El escalón de antes (+40€ de golpe por debajo de 45 años) además era
+  // código muerto en la práctica: RivalPlayer.generate() solo genera
+  // edades 60-80, así que esa rama nunca llegaba a activarse.
   get value() {
-    return Math.round(50 + this.avgSkill * 45 + (this.age < 45 ? 40 : 0));
+    return Math.round((50 + this.avgSkill * 45) * ageValueFactor(this.age));
   }
 
   // genera un jugador nuevo con un nivel medio dado (1..10 aprox.), con

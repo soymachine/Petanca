@@ -10,6 +10,10 @@ import { advanceScoutingWeek, currentMarketSeedKeys } from '../domain/Scouting.j
 import { EuropeanCup } from '../domain/EuropeanCup.js';
 import { rivalPersonalityLine } from '../data/rivalPersonality.js';
 import { countryTag } from '../data/countries.js';
+import { chemistryKey, chemistryLevel, CHEMISTRY_LEVELS } from '../domain/Chemistry.js';
+import { Chronicle } from '../match/Chronicle.js';
+import { composeBiography } from '../data/biografias.js';
+import { boardPresidentFor, boardAdj } from '../data/boardPresident.js';
 
 function maybeDropItem(roster, candidates) {
   const eligible = candidates.filter((i) => !roster.get(i).item);
@@ -37,7 +41,7 @@ export class Career {
 
   // Cierra el partido de liga de la jornada: premio, moral, patrocinio,
   // campaña, hemeroteca, y — si era la última jornada — ascenso/descenso.
-  finishWeeklyMatch(ctx, won, finalScoreP, finalScoreA) {
+  finishWeeklyMatch(ctx, won, finalScoreP, finalScoreA, chronicleFacts = null) {
     const p = this.player;
     const league = ctx.league;
     const opponent = ctx.opponentClub;
@@ -68,18 +72,24 @@ export class Career {
       p.news.push(won
         ? `¡EL DERBI! ${p.clubName} se lleva el partido contra su eterno rival, ${opponent.name} (${p.derbyHistory.wins}-${p.derbyHistory.losses} en el historial).`
         : `EL DERBI se lo lleva ${opponent.name}. Se aprieta los dientes hasta la próxima (${p.derbyHistory.wins}-${p.derbyHistory.losses}).`);
-      if (opponent.captain) p.news.push(`DESDE ${opponent.name}: ${rivalPersonalityLine(opponent)}`);
+      if (opponent.captain) p.news.push(`DESDE ${opponent.name}: ${rivalPersonalityLine(opponent, p.publicImage)}`);
     }
 
+    const promiseBroken = !!(p.pressPromise && p.pressPromise.opponentId === opponent.id && !won && p.pressPromise.loseBonus < 0);
     if (p.pressPromise && p.pressPromise.opponentId === opponent.id) {
-      if (!won && p.pressPromise.loseBonus < 0) {
+      if (promiseBroken) {
         for (const id of p.roster.ids) p.roster.get(id).addMoral(p.pressPromise.loseBonus);
         p.news.push(`LA PRENSA NO OLVIDA: tras lo dicho antes del partido, la derrota sienta especialmente mal.`);
       }
       p.pressPromise = null;
     }
 
-    p.boardConfidence = clamp(p.boardConfidence + (won ? 3 : -5), 0, 100);
+    {
+      const mySkill = p.club.avgSkill(p.roster);
+      const oppSkill = opponent.avgSkill();
+      const resultMargin = finalScoreP - finalScoreA;
+      p.boardConfidence = clamp(p.boardConfidence + boardConfidenceDelta(won, resultMargin, mySkill, oppSkill), 0, 100);
+    }
     let ultimatum = false, crisisDemotion = false;
     if (p.boardConfidence <= 0) {
       ultimatum = true;
@@ -93,16 +103,18 @@ export class Career {
         crisisDemotion = league.level > 1;
         money -= 250;
         p.boardConfidence = 45;
+        const pres = boardPresidentFor(p.clubName);
         if (crisisDemotion) {
-          p.news.push(`CRISIS EN LA JUNTA: segundo ultimátum de la temporada. Os bajan de categoría sin miramientos, a ${cityAt(league.level - 1)}, y multa de 250€.`);
+          p.news.push(`${pres.name.toUpperCase()} YA NO AGUANTA MÁS: segundo ultimátum de la temporada. Os bajan de categoría sin miramientos, a ${cityAt(league.level - 1)}, y multa de 250€.`);
         } else {
-          p.news.push(`CRISIS EN LA JUNTA: segundo ultimátum de la temporada. Ya no quedan categorías más abajo, pero la multa es de 250€ y la paciencia sigue bajo mínimos.`);
+          p.news.push(`${pres.name.toUpperCase()} YA NO AGUANTA MÁS: segundo ultimátum de la temporada. Ya no quedan categorías más abajo, pero la multa es de 250€ y la paciencia sigue bajo mínimos.`);
         }
       } else {
         p.boardCrisis = true;
         money -= 100;
         p.boardConfidence = 35;
-        p.news.push(`ULTIMÁTUM DE LA JUNTA: la paciencia se ha agotado. Multa de 100€ — como vuelva a pasar esta temporada, no será solo dinero.`);
+        const pres = boardPresidentFor(p.clubName);
+        p.news.push(`ULTIMÁTUM DE ${pres.name.toUpperCase()}: ${pres.tone}. La paciencia se ha agotado — multa de 100€, como vuelva a pasar esta temporada no será solo dinero.`);
       }
     }
 
@@ -110,24 +122,49 @@ export class Career {
     opponent.recordResult(!won);
     const matchdayIdx = ctx.matchdayIndex ?? league.matchday;
     league.recordMatchResult(matchdayIdx, p.club.id, opponent.id, finalScoreP, finalScoreA);
+    opponent.seenArchetype = true; // ya te has visto las caras: el estilo de juego queda a la vista para siempre
+    // marcador de hoy, para poder enseñarlo al hacer rollover sobre este
+    // día ya jugado en la Agenda (ver AgendaScreen._dayEntry)
+    p.matchResults[p.seasonClock.day] = { kind: 'league', scoreP: finalScoreP, scoreA: finalScoreA, won, oppName: opponent.name, isDerby };
+    const resultNews = chronicleFacts
+      ? Chronicle.compose(chronicleFacts, {
+          won, scoreP: finalScoreP, scoreA: finalScoreA, rivalName: opponent.name,
+          clubName: p.clubName, venueLabel: `la liga de ${league.cityName}`, promiseBroken,
+          publicImage: p.publicImage,
+        })
+      : (won
+          ? `${p.clubName} gana ${finalScoreP}-${finalScoreA} a ${opponent.name} en la liga de ${league.cityName}.`
+          : `${opponent.name} se lleva la jornada ${finalScoreA}-${finalScoreP} frente a ${p.clubName}.`);
     if (won) {
       p.wins++;
       if (!p.citiesWon.includes(league.cityName)) p.citiesWon.push(league.cityName);
       if (revenge) p.nemesisDefeats++;
-      p.news.push(`${p.clubName} gana ${finalScoreP}-${finalScoreA} a ${opponent.name} en la liga de ${league.cityName}.`);
+      p.news.push(resultNews);
+      const winMargin = finalScoreP - finalScoreA;
+      if (!p.bestMarginWin || winMargin > p.bestMarginWin.margin) {
+        p.bestMarginWin = { margin: winMargin, rival: opponent.name, cityName: league.cityName };
+      }
     } else {
       p.losses++;
       p.nemesis = { rival: opponent.name, rivalIdx: 0, city: opponent.id };
-      p.news.push(`${opponent.name} se lleva la jornada ${finalScoreA}-${finalScoreP} frente a ${p.clubName}.`);
+      p.news.push(resultNews);
     }
 
+    // XP de participación de ESTE partido por abuelo (aparte de la de
+    // calidad de tirada, que Game.js suma después desde Match.xpGain): se
+    // guarda para poder enseñarla en ResultScreen, no solo aplicarla
+    const xpPerAbuelo = {};
     for (const id of p.roster.ids) {
       if (ctx.usados.includes(id)) {
         if (won) p.roster.get(id).addMoral(8);
-        this._grantXp(p, id, won ? 6 + 10 : 6);
+        const gained = won ? 6 + 10 : 6;
+        this._grantXp(p, id, gained);
+        xpPerAbuelo[id] = (xpPerAbuelo[id] || 0) + gained;
       }
       else p.roster.get(id).addMoral(-4);
     }
+    this.settleDebts(p, ctx.usados, opponent.id, won);
+    this.trackChemistry(p, ctx.usados, won);
     if (won) {
       for (const id of ctx.usados) {
         const streak = p.roster.get(id).formStreak;
@@ -160,7 +197,11 @@ export class Career {
       for (const id of p.roster.ids) p.roster.get(id).addMoral(-6);
       p.news.push(`Las arcas de ${p.clubName} están en números rojos: la nómina de ${upkeep}€ pasa factura a la moral de la peña.`);
     }
-    for (const id of p.roster.ids) p.roster.get(id).st = Math.min(100, p.roster.get(id).st + 30 + p.facilities.extraRecoveryOnTravel());
+    for (const id of p.roster.ids) {
+      const s = p.roster.get(id);
+      s.recoverWeekly(p.facilities.extraRecoveryOnTravel());
+      s.moralWeeklyDecay();
+    }
 
     let itemDrop = null;
     if (won && league.level >= 3) {
@@ -232,8 +273,10 @@ export class Career {
     // ¿se acaba la temporada? ascenso de los 2 primeros, descenso de los 2 últimos
     let seasonEnd = null;
     if (league.isSeasonOver) {
+      p.seasonsPlayed++;
       p.boardCrisis = false; // temporada nueva, cuenta atrás de ultimátums a cero
       for (const id of p.roster.ids) p.roster.get(id).age++;
+      this._ageRivalWorld(p, league);
       const rank = league.myRank();
       const table = league.standings();
       let boardResult = null;
@@ -242,11 +285,15 @@ export class Career {
         boardResult = bo.settle(rank);
         money += boardResult.amount;
         p.boardConfidence = clamp(p.boardConfidence + (boardResult.met ? 20 : -25), 0, 100);
+        const pres = boardPresidentFor(p.clubName);
         p.news.push(boardResult.met
-          ? `La junta directiva respira: cumplís el objetivo. +${boardResult.amount}€.`
-          : `La junta directiva no está contenta: no llegáis al objetivo. ${boardResult.amount}€.`);
+          ? `${pres.name} respira: cumplís el objetivo. +${boardResult.amount}€.`
+          : `${pres.name} no queda ${boardAdj(pres, 'contento', 'contenta')}: no llegáis al objetivo. ${boardResult.amount}€.`);
       }
-      if (rank === 1) p.seasonTitles++;
+      if (rank === 1) {
+        p.seasonTitles++;
+        p.addAnnal(`¡CAMPEONES DE LA LIGA DE ${league.cityName}! ${p.clubName} corona la temporada en lo más alto de su categoría.`);
+      }
 
       const promoted = rank <= 2 && league.level < 8;
       const relegated = rank >= 9 && league.level > 1;
@@ -256,6 +303,10 @@ export class Career {
         p.currentLeagueLevel = league.level + 1;
         p.leagueWorld.movePlayer(fromLevel, p.currentLeagueLevel, p.clubName);
         p.news.push(`¡ASCENSO! ${p.clubName} sube a la liga de ${cityAt(p.currentLeagueLevel)} tras acabar ${rank}º.`);
+        if (p.currentLeagueLevel === 8 && !p.reachedTopFlight) {
+          p.reachedTopFlight = true;
+          p.addAnnal(`${p.clubName} PISA MADRID POR PRIMERA VEZ: ascenso a la máxima categoría de la liga federada.`);
+        }
       } else if (relegated) {
         p.relegations++;
         p.currentLeagueLevel = Math.max(1, league.level - 1);
@@ -269,6 +320,11 @@ export class Career {
       // arranca con matchday 0: hay que retomar el offset semana↔jornada
       // para que el calendario siga encontrando los domingos de partido
       p.seasonClock.markSeasonStart();
+      // la Agenda solo deja retroceder hasta la primera semana de la
+      // temporada EN CURSO: los resultados de la que se acaba de cerrar ya
+      // no se pueden consultar navegando hacia atrás, así que no hace
+      // falta arrastrarlos (evitaría crecer sin límite en el guardado)
+      p.matchResults = {};
       p.friendliesLeft = 3;
       if (!p.cup || p.cup.finished) {
         p.cup = Cup.generate(p.leagueWorld, p.club, p.club.avgSkill(p.roster));
@@ -295,7 +351,7 @@ export class Career {
         const oppTag = firstOpp ? countryTag(firstOpp.country) : '';
         p.news.push(`¡OS CLASIFICÁIS PARA LA COPA DE EUROPA! ${p.clubName} debuta en ${p.euroCup.roundName.toLowerCase()} contra ${firstOpp ? firstOpp.name : '?'}${oppTag}.`);
       }
-      p.boardGoal = boardGoalFor(p.currentLeagueLevel);
+      p.boardGoal = boardGoalFor(p.seasonsPlayed, p.currentLeagueLevel);
       const awards = this._seasonAwards(p);
       if (awards.length) {
         const linea = awards.map((a) => `${STAT_LABEL[a.stat]}: ${this.nameOf(a.id)}`).join('  ·  ');
@@ -312,7 +368,7 @@ export class Career {
 
     const ups = p.addReward(xp, money);
     p.save();
-    return { won, xp, money, ups, revenge, stormWin, itemDrop, betResult, sponsorResult, seasonEnd, weeklyGoalResult, ultimatum, crisisDemotion };
+    return { won, xp, money, ups, revenge, stormWin, itemDrop, betResult, sponsorResult, seasonEnd, weeklyGoalResult, ultimatum, crisisDemotion, xpPerAbuelo };
   }
 
   // otorga XP a un abuelo y anuncia en las noticias cada subida de nivel
@@ -321,6 +377,77 @@ export class Career {
     const ups = p.roster.get(id).addXp(amount);
     for (const up of ups) {
       p.news.push(`¡${this.nameOf(id)} sube a nivel ${up.level}! ${up.points} puntos por repartir en Mi Peña.`);
+    }
+  }
+
+  // el mundo también envejece: los clubes IA de la liga española completa
+  // y de las 3 de fondo de cada país extranjero pierden y ganan jugadores
+  // por edad, igual que tu propia peña (ver Club.ageAndRenew). Si el
+  // capitán que se retira era el del derbi o el del némesis, se anuncia —
+  // esas son las dos únicas relaciones que el jugador sigue de cerca, así
+  // que son las únicas que merecen una noticia entre cientos de clubes.
+  _ageRivalWorld(p, league) {
+    const derbyBefore = p.derbyClub ? p.derbyClub.captain : null;
+    const nemesisClub = p.nemesis ? league.clubById(p.nemesis.city) : null;
+    const nemesisCaptainBefore = nemesisClub ? nemesisClub.captain : null;
+
+    for (const [, lg] of p.leagueWorld.leagues) {
+      for (const c of lg.clubs) {
+        if (c.isPlayer) continue;
+        const retired = c.ageAndRenew();
+        if (!retired) continue;
+        if (derbyBefore && retired.id === derbyBefore.id) {
+          p.news.push(`EL DERBI CAMBIA DE CARA: el capitán de siempre en ${p.derbyClub.name} cuelga la petanca. Toma el relevo alguien con ganas de hacerse un nombre.`);
+        } else if (nemesisCaptainBefore && retired.id === nemesisCaptainBefore.id) {
+          p.news.push(`VUESTRO NÉMESIS TAMBIÉN CAMBIA DE CARA: se retira quien capitaneaba ${nemesisClub.name}. La rivalidad sigue, pero con otra mano al frente.`);
+        }
+      }
+    }
+    for (const world of p.foreignLeagues.values()) {
+      for (const [, lg] of world.leagues) for (const c of lg.clubs) c.ageAndRenew();
+    }
+  }
+
+  // liquida la deuda de sangre de cualquiera de los `usados` que arrastre
+  // una cuenta pendiente con el club rival de este partido (ver
+  // AbueloState.retireToGrandchild / Game.js._startWeeklyMatch) — solo si
+  // se ha ganado; el nieto la salda con moral, XP y una noticia con sabor.
+  settleDebts(p, usados, opponentId, won) {
+    if (!won) return;
+    for (const id of usados) {
+      const s = p.roster.get(id);
+      if (!s.debt || s.debt.clubId !== opponentId) continue;
+      const label = s.debt.label;
+      s.debt = null;
+      s.addMoral(10);
+      this._grantXp(p, id, 40);
+      p.news.push(`DEUDA SALDADA: ${this.nameOf(id)} por fin ajusta cuentas con ${label}. Su abuelo puede descansar tranquilo.`);
+    }
+  }
+
+  // suma un partido jugado juntos a cada pareja de `usados`; anuncia cada
+  // subida de nivel de vínculo con nombre, y da un pequeño extra de moral a
+  // la pareja de leyenda cada vez que gana junta (ver domain/Chemistry.js)
+  trackChemistry(p, usados, won) {
+    for (let i = 0; i < usados.length; i++) {
+      for (let j = i + 1; j < usados.length; j++) {
+        const a = usados[i], b = usados[j];
+        const key = chemistryKey(a, b);
+        const before = p.chemistry[key] || 0;
+        const after = before + 1;
+        p.chemistry[key] = after;
+        const lvlBefore = chemistryLevel(before), lvlAfter = chemistryLevel(after);
+        if (lvlAfter > lvlBefore && CHEMISTRY_LEVELS[lvlAfter].label) {
+          p.news.push(`COMPENETRACIÓN: ${this.nameOf(a)} y ${this.nameOf(b)} ${CHEMISTRY_LEVELS[lvlAfter].label}. Se les nota en la pista.`);
+          if (lvlAfter === CHEMISTRY_LEVELS.length - 1) {
+            p.addAnnal(`PAREJA DE LEYENDA: ${this.nameOf(a)} y ${this.nameOf(b)} alcanzan la compenetración máxima tras años rodados juntos.`);
+          }
+        }
+        if (won && lvlAfter === CHEMISTRY_LEVELS.length - 1) {
+          p.roster.get(a).addMoral(1);
+          p.roster.get(b).addMoral(1);
+        }
+      }
     }
   }
 
@@ -351,6 +478,15 @@ export class Career {
         `RUMOR: ${cand.name} anda mirando ofertas, según cuentan. Habrá que echar un ojo al Mercado.`,
       ];
       p.news.push(templates[Math.floor(Math.random() * templates.length)]);
+    }
+
+    // reportaje sobre un abuelo concreto: racha, vínculo, mentoría,
+    // herencia, veteranía o nivel — para que la Hemeroteca hable de
+    // personas y no solo de resultados y cotilleo genérico (ver
+    // data/biografias.js, que reutiliza datos ya trackeados en otro sitio)
+    if (Math.random() <= 0.08) {
+      const bio = composeBiography(p, (id) => this.nameOf(id));
+      if (bio) p.news.push(bio);
     }
   }
 
@@ -416,4 +552,17 @@ function cityAt(level) {
   const map = { 1: 'Albacete', 2: 'Cuenca', 3: 'Zaragoza', 4: 'Sevilla', 5: 'Valencia', 6: 'Bilbao', 7: 'Barcelona', 8: 'Madrid' };
   return map[level] || `nivel ${level}`;
 }
-function boardGoalFor(level) { return BoardObjective.forSeason(level).goal; }
+function boardGoalFor(seasonNum, leagueLevel) { return BoardObjective.forSeason(seasonNum, leagueLevel).goal; }
+
+// cuánto cambia la confianza de la junta tras un partido: además del
+// resultado en bruto, pesa la contundencia (margen) y si el rival era
+// mejor o peor que tú sobre el papel — machacar a un equipo mejor vale
+// mucho más que ganar por la mínima a uno flojo, y perder por goleada
+// duele más que caer en el último suspiro. Antes era un +3/-5 fijo, igual
+// para un partido ajustadísimo que para una manita en cualquier sentido.
+function boardConfidenceDelta(won, margin, mySkill, oppSkill) {
+  const upset = clamp((oppSkill - mySkill) / 3, -1, 1); // >0: el rival era mejor sobre el papel
+  const marginRatio = clamp(Math.abs(margin) / 8, 0, 1);
+  if (won) return Math.round(3 + marginRatio * 2 + Math.max(0, upset) * 4);
+  return -Math.round(5 + marginRatio * 3 - Math.max(0, -upset) * 2);
+}

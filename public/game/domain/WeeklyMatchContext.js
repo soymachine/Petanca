@@ -23,6 +23,7 @@ export class WeeklyMatchContext {
     this.rounds = [{
       aiLevel, rivalIdx: 0,
       rivalName: opponentClub.name + (captain ? ` (${captain.name})` : ''),
+      archetypeKey: opponentClub.name,
       rivalPortrait: captain ? captain.portrait : null,
       rivalMini: captain ? captain.miniPortrait : null,
       forecast: { main, changeProb: Math.random() < 0.3 ? rnd(0.4, 0.8) : 0, changeTo },

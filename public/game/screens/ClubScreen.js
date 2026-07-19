@@ -1,19 +1,32 @@
-import { wrapText, hitRect, drawTabRow } from '../core/utils.js';
+import { wrapText, hitRect, drawTabRow, truncate } from '../core/utils.js';
 import { TabsBar } from './TabsBar.js';
 import { SHIRT_SPONSOR_POOL } from '../data/sponsors.js';
+import { boardPresidentFor, boardAdj } from '../data/boardPresident.js';
+import { TRAINING_DRILLS } from '../data/trainingDrills.js';
+import { STAT_LABEL } from '../data/abuelos.js';
 
-const SECTIONS = ['facilities', 'sponsor'];
-const SECTION_LABEL = { facilities: 'DESCAMPADO', sponsor: 'PATROCINIOS' };
+const SECTIONS = ['facilities', 'sponsor', 'junta'];
+const SECTION_LABEL = { facilities: 'DESCAMPADO', sponsor: 'PATROCINIOS', junta: 'LA JUNTA' };
 
-// Gestión del club: mejoras del descampado y patrocinios. Los ojeadores
-// (contratar y asignar) viven ahora en Mi Peña, junto al Mercado que
-// vigilan — ver PenyaScreen.js.
+// Gestión del club: mejoras del descampado, patrocinios y la junta
+// directiva (objetivos, confianza, presidente). Los ojeadores (contratar
+// y asignar) viven ahora en Mi Peña, junto al Mercado que vigilan — ver
+// PenyaScreen.js.
 export class ClubScreen {
-  constructor(game) { this.game = game; this.cursor = 0; this.section = 'facilities'; }
+  constructor(game) {
+    this.game = game; this.cursor = 0; this.section = 'facilities';
+    this.practiceCursor = 0; // qué drill se mira en el panel de Practicar
+    this.practiceStep = null; // null | 'abuelo' — abre el selector de abuelo
+    this.practiceAbueloCursor = 0;
+  }
 
   draw() {
     const { screen, input } = this.game;
     screen.clear();
+    // el selector de abuelo de Practicar tiene su propio cierre por ESC:
+    // hay que consumirlo ANTES de que TabsBar vea el atajo global "ESC =
+    // Inicio", o se sale de El Club sin querer (mismo patrón que Mi Peña)
+    if (input.hit('Escape') && this.practiceStep) { this.practiceStep = null; input.pressed.Escape = false; }
     TabsBar.draw(this.game, 'club');
     screen.textCenter(4, '═══ EL CLUB ═══', '#ffb347');
     const clicked = drawTabRow(screen, input, 4, 6, SECTIONS.map((s) => SECTION_LABEL[s]), SECTIONS.indexOf(this.section), { activeColor: '#ffe680', color: '#ffe680' });
@@ -21,15 +34,16 @@ export class ClubScreen {
     const nomina = this.game.player.roster.totalUpkeep();
     screen.text(110, 6, `nómina semanal: ${nomina}€`, '#c98080');
 
-    if (this.section === 'facilities') this._drawFacilities();
-    else this._drawSponsor();
+    if (this.section === 'facilities') { this._drawFacilities(); this._drawPractice(); }
+    else if (this.section === 'sponsor') this._drawSponsor();
+    else this._drawJunta();
 
     if (clicked !== null) { this.section = SECTIONS[clicked]; this.cursor = 0; }
-    else if (input.hit('q') || input.hit('Q')) {
+    else if (!this.practiceStep && (input.hit('q') || input.hit('Q'))) {
       this.section = SECTIONS[(SECTIONS.indexOf(this.section) + 1) % SECTIONS.length];
       this.cursor = 0;
     }
-    if (this.section === 'facilities') this._inputFacilities();
+    if (this.section === 'facilities' && !this.practiceStep) this._inputFacilities();
   }
 
   _drawFacilities() {
@@ -37,15 +51,19 @@ export class ClubScreen {
     const list = player.facilities.list();
     screen.box(4, 8, 132, 20, '#8a7f66');
     screen.text(7, 9, 'MEJORAS DEL DESCAMPADO', '#ffb347');
-    const half = Math.ceil(list.length / 2);
+    // 3 columnas en vez de 2: con las 5 instalaciones de entreno por stat
+    // (antes solo "gimnasio"), la lista pasó de 7 a 11 y ya no cabía en
+    // 2 columnas de 4 filas sin salirse de la caja
+    const cols = 3;
+    const perCol = Math.ceil(list.length / cols);
     this._facRects = [];
     let hover = null;
     list.forEach((it, i) => {
-      const col = i < half ? 0 : 1;
-      const row = i < half ? i : i - half;
-      const cx = 8 + col * 64;
+      const col = Math.floor(i / perCol);
+      const row = i % perCol;
+      const cx = 8 + col * 43;
       const yy = 11 + row * 4;
-      const rx = cx - 3, ry = yy - 1, rw = 60, rh = 4;
+      const rx = cx - 3, ry = yy - 1, rw = 40, rh = 4;
       this._facRects.push({ x: rx, y: ry, w: rw, h: rh });
       const sel = i === this.cursor;
       const over = hitRect(input.mouse.cx, input.mouse.cy, rx, ry, rw, rh);
@@ -57,8 +75,8 @@ export class ClubScreen {
       else if (over) screen.box(rx, ry, rw, rh, '#ffe680');
       const maxed = !it.next;
       const nameCol = sel ? '#fff' : over ? '#ffe680' : it.level > 0 ? '#88c8e8' : '#8a8a8a';
-      const levelTag = it.level > 0 ? ` (nivel ${it.level}/${it.maxLevel})` : '';
-      screen.text(cx, yy, `${it.name}${levelTag}`, nameCol);
+      const levelTag = it.level > 0 ? ` (nv.${it.level}/${it.maxLevel})` : '';
+      screen.text(cx, yy, truncate(`${it.name}${levelTag}`, 36), nameCol);
       if (maxed) {
         screen.text(cx, yy + 1, '★ AL MÁXIMO', '#ffe14d');
       } else {
@@ -66,7 +84,7 @@ export class ClubScreen {
         screen.text(cx, yy + 1, label, player.money >= it.next.price ? '#7ec850' : '#ff5c5c');
       }
       const desc = maxed ? it.current.desc : it.next.desc;
-      wrapText(desc, 54).slice(0, 2).forEach((l, k) => screen.text(cx, yy + 2 + k, l, '#9a927a'));
+      wrapText(desc, 36).slice(0, 2).forEach((l, k) => screen.text(cx, yy + 2 + k, l, '#9a927a'));
     });
     if (hover !== null && input.mouse.clicked) this.cursor = hover;
     screen.text(7, 28, '[↑/↓] mirar · ratón = seleccionar   [ENTER] instalar/mejorar', '#c9c2a8');
@@ -79,6 +97,60 @@ export class ClubScreen {
     if (input.hit('Enter') || input.hit(' ')) {
       const it = list[this.cursor];
       if (it.next && player.money >= it.next.price) { player.money -= it.next.price; player.facilities.buy(it.id); player.save(); }
+    }
+  }
+
+  // PRACTICAR: los mismos 5 minijuegos que el entreno de verdad, pero
+  // gratis, sin límite y sin premio de stat — solo para coger soltura con
+  // los controles (apuntar/efecto/potencia) sin gastar un entreno de
+  // verdad. La única marca que queda es la mejor puntuación (dailyBest,
+  // ver Game.onMatchFinished), puramente cosmética.
+  //
+  // Solo se elige con el ratón (clic en la fila) en vez de con flechas:
+  // esta caja convive en pantalla con la lista de instalaciones de arriba
+  // (que SÍ usa flechas) y ambas leyendo el mismo Input a la vez haría que
+  // una tecla moviera los dos cursores de golpe — mismo tipo de choque que
+  // ya se arregló antes en Mi Peña con el modal de ojeadores.
+  _drawPractice() {
+    const { screen, input, player } = this.game;
+    const x = 4, y = 30, w = 132, h = 13;
+    screen.box(x, y, w, h, '#5a8a5a', 'double');
+    screen.text(x + 2, y, ' PRACTICAR — gratis, sin coste ni límite ', '#7ec850');
+
+    if (this.practiceStep === 'abuelo') { this._drawPracticeAbueloPicker(x, y, w, h); return; }
+
+    let ry = y + 2;
+    TRAINING_DRILLS.forEach((d, i) => {
+      const overRow = hitRect(input.mouse.cx, input.mouse.cy, x + 2, ry, w - 4, 1);
+      const best = player.dailyBest[d.id] || 0;
+      const bestTxt = d.hits ? `mejor: ${best}/${d.target} derribos` : `mejor: ${best} pts`;
+      const label = `${overRow ? '▶' : ' '} ${d.label.padEnd(10)} ${STAT_LABEL[d.stat].padEnd(8)} ${bestTxt}`;
+      screen.text(x + 2, ry, label, overRow ? '#fff' : '#c9c2a8');
+      if (overRow && input.mouse.clicked) { this.practiceStep = 'abuelo'; this.practiceCursor = i; this.practiceAbueloCursor = 0; }
+      ry += 2;
+    });
+    screen.text(x + 2, y + h - 2, 'clic en un minijuego para elegir abuelo y practicar', '#8a7f66');
+  }
+
+  _drawPracticeAbueloPicker(x, y, w, h) {
+    const { screen, input, player } = this.game;
+    const drill = TRAINING_DRILLS[this.practiceCursor];
+    screen.text(x + 2, y + 2, `¿QUIÉN PRACTICA ${drill.label}? (sin coste de stamina)`, '#ffe680');
+    const ids = player.roster.ids;
+    this.practiceAbueloCursor = ((this.practiceAbueloCursor % ids.length) + ids.length) % ids.length;
+    ids.forEach((id, i) => {
+      const sel = i === this.practiceAbueloCursor;
+      const s = player.roster.get(id);
+      const ry = y + 4 + i * 2;
+      if (ry > y + h - 3) return;
+      screen.text(x + 4, ry, `${sel ? '▶' : ' '} ${this.game.displayName(id)}`.padEnd(30) + `${STAT_LABEL[drill.stat]} ${s.getStat(drill.stat)}`, sel ? '#fff' : '#c9c2a8');
+    });
+    screen.text(x + 2, y + h - 2, '[↑/↓] elegir   [ENTER] practicar   [ESC] volver', '#c9c2a8');
+    if (input.hit('ArrowUp')) this.practiceAbueloCursor = (this.practiceAbueloCursor + ids.length - 1) % ids.length;
+    if (input.hit('ArrowDown')) this.practiceAbueloCursor = (this.practiceAbueloCursor + 1) % ids.length;
+    if (input.hit('Enter') || input.hit(' ')) {
+      this.game.startPractice(ids[this.practiceAbueloCursor], drill.id);
+      this.practiceStep = null;
     }
   }
 
@@ -138,6 +210,53 @@ export class ClubScreen {
         player.news.push(`${s.name} se convierte en el nuevo patrocinador de camiseta de ${player.clubName}. +${s.signBonus}€.`);
         player.save();
       }
+    }
+  }
+
+  // toda la información de la junta directiva en un sitio: quién es el
+  // presidente (nombre/arquetipo/tono ya deterministas por club, ver
+  // data/boardPresident.js), la confianza y sus ultimátums, y el detalle
+  // completo de los objetivos de temporada y semanal — Inicio solo enseña
+  // un resumen clicable de esto último (ver HubScreen._drawBoardCard)
+  _drawJunta() {
+    const { screen, player } = this.game;
+    const pres = boardPresidentFor(player.clubName);
+
+    screen.box(4, 8, 64, 20, '#8a7f66');
+    screen.text(7, 9, 'LA JUNTA DIRECTIVA', '#ffb347');
+    screen.text(7, 11, pres.name, '#ffe680');
+    screen.text(7, 12, `presidente${boardAdj(pres, '', 'a')} ${pres.archetype}`, '#c9a35d');
+    wrapText(`"${pres.tone}."`, 56).forEach((l, i) => screen.text(7, 14 + i, l, '#9a927a'));
+
+    const confCol = player.boardConfidence <= 25 ? '#ff5c5c' : player.boardConfidence <= 50 ? '#ffe14d' : '#88e088';
+    const filled = Math.round((player.boardConfidence / 100) * 40);
+    const bar = `${'▓'.repeat(filled)}${'░'.repeat(40 - filled)}`;
+    screen.text(7, 19, 'Confianza:', '#8a7f66');
+    screen.text(7, 20, bar, confCol);
+    screen.text(7, 21, `${player.boardConfidence}/100`, confCol);
+
+    screen.text(7, 23, `Ultimátums esta temporada: ${player.boardUltimatums}`, player.boardUltimatums > 0 ? '#ff8c5b' : '#8a8a7a');
+    if (player.boardCrisis) {
+      screen.text(7, 25, '⚠ un ultimátum más y os bajan de categoría sin miramientos.', '#ff5c5c');
+    } else {
+      screen.text(7, 25, 'La junta no ha tenido que dar ningún ultimátum esta temporada.', '#8a8a7a');
+    }
+
+    const bx = 72;
+    screen.box(bx, 8, 64, 20, '#8a7f66');
+    screen.text(bx + 3, 9, 'OBJETIVOS', '#ffb347');
+    screen.text(bx + 3, 11, 'DE TEMPORADA', '#c9a35d');
+    wrapText(player.boardGoal.desc, 56).forEach((l, i) => screen.text(bx + 3, 12 + i, l, '#c8a0e8'));
+    screen.text(bx + 3, 15, `Si se cumple: +${player.boardGoal.rewardMoney}€`, '#7ec850');
+    screen.text(bx + 3, 16, `Si no: -${player.boardGoal.penaltyMoney}€`, '#ff8c5b');
+
+    screen.text(bx + 3, 19, 'DE ESTA SEMANA', '#c9a35d');
+    if (player.weeklyGoal) {
+      wrapText(player.weeklyGoal.desc, 56).forEach((l, i) => screen.text(bx + 3, 20 + i, l, '#c8a0e8'));
+      screen.text(bx + 3, 23, `Si se cumple: +${player.weeklyGoal.reward}€`, '#7ec850');
+      if (player.weeklyGoal.penalty > 0) screen.text(bx + 3, 24, `Si no: -${player.weeklyGoal.penalty}€`, '#ff8c5b');
+    } else {
+      screen.text(bx + 3, 20, 'Sin objetivo semanal activo ahora mismo.', '#8a8a7a');
     }
   }
 }

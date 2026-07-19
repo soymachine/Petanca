@@ -16,6 +16,14 @@ import { WeeklyMatchContext } from '../domain/WeeklyMatchContext.js';
 import { CupMatchContext } from '../domain/CupMatchContext.js';
 import { FriendlyMatchContext } from '../domain/FriendlyMatchContext.js';
 import { DIFFICULTIES } from '../data/difficulty.js';
+import { CLIMAS } from '../data/climas.js';
+import { STAT_LABEL } from '../data/abuelos.js';
+import { drillFor } from '../data/trainingDrills.js';
+import { resetChemistryFor } from '../domain/Chemistry.js';
+import { Chronicle } from '../match/Chronicle.js';
+import { DECISION_EVENTS, decisionEventById, fillDecisionText } from '../data/decisionEvents.js';
+import { AGING_FLAVOR } from '../data/agingFlavor.js';
+import { clamp } from './utils.js';
 
 import { TitleScreen } from '../screens/TitleScreen.js';
 import { AgendaScreen } from '../screens/AgendaScreen.js';
@@ -64,6 +72,7 @@ export class Game {
     this.calendarEvent = null;
     this.deathEvent = null;
     this.transferOffer = null;
+    this.decisionEvent = null; // { event, ctx } — evento de decisión esperando respuesta (ver data/decisionEvents.js)
     this.simulating = false; // modo Debugger: avanza días solo en segundo plano
 
     this.frame = 0;
@@ -170,7 +179,7 @@ export class Game {
   advanceDay() {
     const clock = this.player.seasonClock;
     const league = this.player.league;
-    const result = clock.advanceToNextEvent(league, () => negotiationMarket.rollOffer(this.player.roster.ids));
+    const result = clock.advanceToNextEvent(league, () => negotiationMarket.rollOffer(this.player.roster.ids), () => this._rollDecision());
     this.player.save();
     if (!result) return;
     if (result.type === 'match') this._startWeeklyMatch();
@@ -181,6 +190,9 @@ export class Game {
       this.startTraining(result.abueloId, result.drill);
     } else if (result.type === 'negotiation') {
       this.transferOffer = result.offer;
+    } else if (result.type === 'decision') {
+      this.decisionEvent = { event: result.event, ctx: result.ctx };
+      this.state = 'agenda';
     }
     this.career.weeklyNews(league);
     this.player.freeAgents.refresh();
@@ -193,7 +205,7 @@ export class Game {
   advanceOneDay() {
     const clock = this.player.seasonClock;
     const league = this.player.league;
-    const result = clock.advanceOneDay(league, () => negotiationMarket.rollOffer(this.player.roster.ids));
+    const result = clock.advanceOneDay(league, () => negotiationMarket.rollOffer(this.player.roster.ids), () => this._rollDecision());
     this.player.save();
     return result;
   }
@@ -210,10 +222,84 @@ export class Game {
       this.startTraining(result.abueloId, result.drill);
     } else if (result.type === 'negotiation') {
       this.transferOffer = result.offer;
+    } else if (result.type === 'decision') {
+      this.decisionEvent = { event: result.event, ctx: result.ctx };
     }
     this.career.weeklyNews(league);
     this.player.freeAgents.refresh();
     this.player.save();
+  }
+
+  // --- eventos de decisión (ver data/decisionEvents.js) ---
+
+  // elige qué toca hoy: una secuela ya agendada (prioridad) o, con poca
+  // probabilidad, un evento nuevo del pool (sin repetir hasta agotarlo)
+  _rollDecision() {
+    const p = this.player;
+    const day = p.seasonClock.day;
+    const idx = p.pendingDecisions.findIndex((pd) => pd.day === day);
+    if (idx >= 0) {
+      const pd = p.pendingDecisions[idx];
+      p.pendingDecisions.splice(idx, 1);
+      const ev = decisionEventById(pd.id);
+      return ev ? { event: ev, ctx: pd.ctx } : null;
+    }
+    if (Math.random() > 0.06) return null;
+    let pool = DECISION_EVENTS.filter((e) => e.weight > 0 && !p.seenDecisions.includes(e.id) && (!e.cond || e.cond(p)));
+    if (!pool.length) {
+      p.seenDecisions = []; // se agotó el pool: vuelve a estar todo disponible
+      pool = DECISION_EVENTS.filter((e) => e.weight > 0 && (!e.cond || e.cond(p)));
+    }
+    if (!pool.length) return null;
+    const total = pool.reduce((s, e) => s + e.weight, 0);
+    let r = Math.random() * total;
+    let chosen = pool[pool.length - 1];
+    for (const e of pool) { r -= e.weight; if (r <= 0) { chosen = e; break; } }
+    return { event: chosen, ctx: this._buildDecisionCtx(chosen) };
+  }
+
+  _buildDecisionCtx(event) {
+    const p = this.player;
+    if (!event.pick || !p.roster.ids.length) return {};
+    const ids = p.roster.ids;
+    let abueloId;
+    if (event.pick === 'oldest') abueloId = ids.reduce((a, b) => (p.roster.get(a).age >= p.roster.get(b).age ? a : b));
+    else if (event.pick === 'youngest') abueloId = ids.reduce((a, b) => (p.roster.get(a).age <= p.roster.get(b).age ? a : b));
+    else abueloId = ids[Math.floor(Math.random() * ids.length)];
+    return { abueloId };
+  }
+
+  // aplica la opción elegida: efectos, noticia, y siembra la secuela (si la
+  // opción tiene una) en la cola de Player.pendingDecisions
+  resolveDecision(optionIndex) {
+    const de = this.decisionEvent;
+    if (!de) return;
+    const opt = de.event.options[optionIndex];
+    if (!opt) return;
+    const p = this.player;
+    this._applyDecisionEffects(opt.effects, de.ctx);
+    if (!p.seenDecisions.includes(de.event.id)) p.seenDecisions.push(de.event.id);
+    if (opt.sequel) {
+      p.pendingDecisions.push({ day: p.seasonClock.day + opt.sequel.inWeeks * 7, id: opt.sequel.id, ctx: de.ctx });
+    }
+    p.news.push(fillDecisionText(opt.resultText, de.ctx, (id) => this.displayName(id)));
+    this.decisionEvent = null;
+    p.save();
+  }
+
+  _applyDecisionEffects(effects, ctx) {
+    if (!effects) return;
+    const p = this.player;
+    if (effects.money) p.money += effects.money;
+    if (effects.boardConfidence) p.boardConfidence = clamp(p.boardConfidence + effects.boardConfidence, 0, 100);
+    const targets = (t) => {
+      if (t === 'all') return p.roster.ids;
+      return (ctx.abueloId !== undefined && ctx.abueloId !== null && p.roster.has(ctx.abueloId)) ? [ctx.abueloId] : [];
+    };
+    if (effects.moral) for (const id of targets(effects.moral.target)) p.roster.get(id).addMoral(effects.moral.d);
+    if (effects.stamina) for (const id of targets(effects.stamina.target)) { const s = p.roster.get(id); s.st = clamp(s.st + effects.stamina.d, 0, 100); }
+    if (effects.xp) for (const id of targets(effects.xp.target)) p.roster.get(id).addXp(effects.xp.amount);
+    if (effects.item) for (const id of targets(effects.item.target || 'abuelo')) p.roster.get(id).item = { id: effects.item.itemId };
   }
 
   // amistoso de pretemporada: solo disponible al empezar temporada (jornada
@@ -300,6 +386,17 @@ export class Game {
     }
   }
 
+  // libro de récords del Panteón: la mayor paliza dada en cualquier
+  // competición jugada en vivo (la liga ya se registra aparte, en
+  // Career.finishWeeklyMatch, porque solo ahí se conoce el marcador final
+  // antes de que la jornada mueva el resto de resultados)
+  _maybeRecordMargin(margin, rivalName, cityName) {
+    const p = this.player;
+    if (!p.bestMarginWin || margin > p.bestMarginWin.margin) {
+      p.bestMarginWin = { margin, rival: rivalName, cityName };
+    }
+  }
+
   // XP por calidad de tirada acumulada durante el partido (this.match.xpGain,
   // ver Match.js) — aplica a cualquier tipo de partido jugado en vivo
   _applyThrowXp() {
@@ -333,9 +430,28 @@ export class Game {
     if (diedId !== null) {
       const name = this.displayName(diedId);
       const age = this.player.roster.get(diedId).age;
-      this.player.roster.get(diedId).retireToGrandchild('fallecimiento');
+      // deuda de sangre: si se va con una revancha pendiente (némesis activa,
+      // o el derbi en contra en el historial), el nieto hereda las ganas de
+      // saldarla — ver Career.settleDebts, que la liquida al ganarle a ese club
+      let debt = null;
+      if (this.player.nemesis) debt = { clubId: this.player.nemesis.city, label: this.player.nemesis.rival };
+      else if (this.player.derbyClub && this.player.derbyHistory.losses > this.player.derbyHistory.wins) {
+        debt = { clubId: this.player.derbyClub.id, label: this.player.derbyClub.name };
+      }
+      const wasForeshadowed = this.player.roster.get(diedId).agingFlavorSeen;
+      const hadLegend = resetChemistryFor(this.player, diedId);
+      const { inherited } = this.player.roster.get(diedId).retireToGrandchild('fallecimiento', debt);
+      const echo = inherited.clima
+        ? `Dicen que ha salido a su abuelo: tampoco le hace mella la ${CLIMAS[inherited.clima].label.toLowerCase()}.`
+        : `Se le nota de familia el ${STAT_LABEL[inherited.stat].toLowerCase()}.`;
+      const debtTxt = debt ? ` El nieto se guarda una cuenta pendiente con ${debt.label}.` : '';
+      // si ya se le veía venir (ver _maybeAgingForeshadow), el titular lo
+      // cita en vez de sonar a sorpresa — cierra el presagio con el desenlace
+      const foreshadowTxt = wasForeshadowed ? ' Llevaba tiempo avisando de que el cuerpo no daba para más.' : '';
       this.deathEvent = { id: diedId, text: `${name} nos dejó a los ${age} años. El testigo pasa a su nieto.` };
-      this.player.news.push(`IN MEMORIAM: se nos fue ${name}, a los ${age} años. Su nieto recoge el testigo en la peña.`);
+      this.player.news.push(`IN MEMORIAM: se nos fue ${name}, a los ${age} años.${foreshadowTxt} Su nieto recoge el testigo en la peña. ${echo}${debtTxt}`);
+      this.player.addAnnal(`IN MEMORIAM — ${name} (${age} años). El testigo pasa a su nieto en la peña.`);
+      if (hadLegend) this.player.news.push(`FIN DE UNA ERA: la pareja de leyenda de ${name} se deshace con su marcha. Al nieto le toca hacerse un hueco desde cero.`);
     } else {
       this.calendarEvent = calendar.rollEvent(this.player.roster.ids, (id) => this.displayName(id), evChance);
       if (this.calendarEvent) {
@@ -343,6 +459,7 @@ export class Game {
         if (this.calendarEvent.staPenalty) s.st = Math.max(0, s.st - this.calendarEvent.staPenalty);
         if (this.calendarEvent.moralBonus) s.addMoral(this.calendarEvent.moralBonus);
       }
+      this._maybeAgingForeshadow();
     }
     const league = this.player.league;
     const fixtures = league.fixturesForMatchday(league.matchday);
@@ -368,6 +485,27 @@ export class Game {
     }
   }
 
+  // presagio de la edad: sin efecto mecánico, solo una línea de aviso para
+  // que la muerte (Calendar.rollDeath) no llegue de sopetón cuando el
+  // declive físico (AbueloState.ageDeclineFor) ya lleva tiempo notándose.
+  // Solo se comprueba en semanas "tranquilas" (sin muerte ni imprevisto ya
+  // resuelto esta jornada) para no amontonar noticias, y como mucho una
+  // vez por generación (ver AbueloState.agingFlavorSeen).
+  _maybeAgingForeshadow() {
+    if (Math.random() > 0.04) return;
+    const p = this.player;
+    const candidates = p.roster.ids.filter((id) => {
+      const s = p.roster.get(id);
+      return !s.agingFlavorSeen && s.ageDeclineFor('aguante') > 15;
+    });
+    if (!candidates.length) return;
+    const id = candidates[Math.floor(Math.random() * candidates.length)];
+    const s = p.roster.get(id);
+    s.agingFlavorSeen = true;
+    const line = AGING_FLAVOR[Math.floor(Math.random() * AGING_FLAVOR.length)];
+    p.news.push(line.replace('{n}', this.displayName(id)));
+  }
+
   // --- Copa de España: cruce agendado en el calendario ---
   _startCupMatch() {
     const cup = this.player.cup;
@@ -385,15 +523,21 @@ export class Game {
     this.state = 'press';
   }
 
-  _finishCupMatch(won, scoreP, scoreA) {
+  _finishCupMatch(won, scoreP, scoreA, chronicleFacts = null) {
     const p = this.player;
     const cup = p.cup;
     const opponent = cup.playerOpponent();
+    const roundName = cup.roundName;
     cup.resolvePlayerPairing(won);
     this._grantMatchXp(this.weeklyMatch, won, 10, 15);
+    this.career.settleDebts(p, this.weeklyMatch.usados, opponent.id, won);
+    this.career.trackChemistry(p, this.weeklyMatch.usados, won);
+    if (won) this._maybeRecordMargin(scoreP - scoreA, opponent.name, p.league.cityName);
+    p.matchResults[p.seasonClock.day] = { kind: 'cup', scoreP, scoreA, won, oppName: opponent.name, roundName };
 
+    const promiseBroken = !!(p.pressPromise && p.pressPromise.opponentId === opponent.id && !won && p.pressPromise.loseBonus < 0);
     if (p.pressPromise && p.pressPromise.opponentId === opponent.id) {
-      if (!won && p.pressPromise.loseBonus < 0) {
+      if (promiseBroken) {
         for (const id of p.roster.ids) p.roster.get(id).addMoral(p.pressPromise.loseBonus);
         p.news.push('LA PRENSA NO OLVIDA: tras lo dicho antes del partido, la eliminación sienta especialmente mal.');
       }
@@ -401,7 +545,10 @@ export class Game {
     }
 
     if (!won) {
-      p.news.push(`COPA DE ESPAÑA: ${p.clubName} cae ante ${opponent.name} en ${cup.roundName.toLowerCase()} (${scoreP}-${scoreA}). Se acaba el sueño por esta vez.`);
+      const resultNews = chronicleFacts
+        ? Chronicle.compose(chronicleFacts, { won, scoreP, scoreA, rivalName: opponent.name, clubName: p.clubName, venueLabel: `${cup.roundName.toLowerCase()} de la Copa de España`, promiseBroken, publicImage: p.publicImage })
+        : `COPA DE ESPAÑA: ${p.clubName} cae ante ${opponent.name} en ${cup.roundName.toLowerCase()} (${scoreP}-${scoreA}). Se acaba el sueño por esta vez.`;
+      p.news.push(resultNews);
       p.addReward(40, 30);
     } else if (cup.roundComplete()) {
       cup.advanceRound();
@@ -410,6 +557,7 @@ export class Game {
         p.boardConfidence = Math.min(100, p.boardConfidence + 15);
         p.addReward(400, 800);
         p.news.push(`¡¡¡CAMPEONES DE LA COPA DE ESPAÑA!!! ${p.clubName} se corona tras ganar a ${opponent.name} en la final (${scoreP}-${scoreA}). ¡Fiesta en el pueblo!`);
+        p.addAnnal(`CAMPEONES DE LA COPA DE ESPAÑA: ${p.clubName} gana la final a ${opponent.name} (${scoreP}-${scoreA}).`);
       } else {
         p.addReward(80, 120);
         const nextOpp = cup.playerOpponent();
@@ -444,13 +592,18 @@ export class Game {
     this.state = 'press';
   }
 
-  _finishEuroCupMatch(won, scoreP, scoreA) {
+  _finishEuroCupMatch(won, scoreP, scoreA, chronicleFacts = null) {
     const p = this.player;
     const cup = p.euroCup;
     const opponent = cup.playerOpponent();
     const rivalTag = countryTag(opponent.country);
+    const roundName = cup.roundName;
     cup.resolvePlayerPairing(won);
     this._grantMatchXp(this.weeklyMatch, won, 15, 25);
+    this.career.settleDebts(p, this.weeklyMatch.usados, opponent.id, won);
+    this.career.trackChemistry(p, this.weeklyMatch.usados, won);
+    if (won) this._maybeRecordMargin(scoreP - scoreA, `${opponent.name}${rivalTag}`, p.league.cityName);
+    p.matchResults[p.seasonClock.day] = { kind: 'eurocup', scoreP, scoreA, won, oppName: `${opponent.name}${rivalTag}`, roundName };
 
     // dar la campanada: ganar a un club de un país con más strength que el
     // tuyo (Francia/Italia/Bélgica) pesa más para el prestigio de mánager
@@ -458,10 +611,12 @@ export class Game {
     if (won && strengthFor(opponent.country) > 1) {
       p.euroUpsets++;
       p.news.push(`DAIS LA CAMPANADA: ${p.clubName} tumba a ${opponent.name}${rivalTag}, de un país con más nivel que el vuestro. La comarca no habla de otra cosa.`);
+      p.addAnnal(`CAMPANADA EUROPEA: ${p.clubName} tumba a ${opponent.name}${rivalTag}, de un país de más nivel, en ${cup.roundName.toLowerCase()}.`);
     }
 
+    const promiseBroken = !!(p.pressPromise && p.pressPromise.opponentId === opponent.id && !won && p.pressPromise.loseBonus < 0);
     if (p.pressPromise && p.pressPromise.opponentId === opponent.id) {
-      if (!won && p.pressPromise.loseBonus < 0) {
+      if (promiseBroken) {
         for (const id of p.roster.ids) p.roster.get(id).addMoral(p.pressPromise.loseBonus);
         p.news.push('LA PRENSA NO OLVIDA: tras lo dicho antes del partido, la eliminación sienta especialmente mal.');
       }
@@ -469,7 +624,10 @@ export class Game {
     }
 
     if (!won) {
-      p.news.push(`COPA DE EUROPA: ${p.clubName} cae ante ${opponent.name}${rivalTag} en ${cup.roundName.toLowerCase()} (${scoreP}-${scoreA}). Se acaba la aventura europea por esta vez.`);
+      const resultNews = chronicleFacts
+        ? Chronicle.compose(chronicleFacts, { won, scoreP, scoreA, rivalName: `${opponent.name}${rivalTag}`, clubName: p.clubName, venueLabel: `${cup.roundName.toLowerCase()} de la Copa de Europa`, promiseBroken, publicImage: p.publicImage })
+        : `COPA DE EUROPA: ${p.clubName} cae ante ${opponent.name}${rivalTag} en ${cup.roundName.toLowerCase()} (${scoreP}-${scoreA}). Se acaba la aventura europea por esta vez.`;
+      p.news.push(resultNews);
       p.addReward(80, 60);
     } else if (cup.roundComplete()) {
       cup.advanceRound();
@@ -477,6 +635,7 @@ export class Game {
         p.boardConfidence = Math.min(100, p.boardConfidence + 25);
         p.addReward(900, 1800);
         p.news.push(`¡¡¡CAMPEONES DE LA COPA DE EUROPA!!! ${p.clubName} se corona tras ganar a ${opponent.name}${rivalTag} en la final (${scoreP}-${scoreA}). ¡La peña entera lo va a recordar toda la vida!`);
+        p.addAnnal(`CAMPEONES DE LA COPA DE EUROPA: ${p.clubName} gana la final a ${opponent.name}${rivalTag} (${scoreP}-${scoreA}).`);
       } else {
         p.addReward(180, 260);
         const nextOpp = cup.playerOpponent();
@@ -502,6 +661,7 @@ export class Game {
     this.match = new Match({
       tournament: this.weeklyMatch, roster: this.player.roster, team: finalTeam,
       sweetBonus: this.player.facilities.sweetSpotWidthBonus(),
+      chemistry: this.player.chemistry,
     });
     this.match.setNameProvider((id) => this.displayName(id));
     this.player.captain = finalTeam[0];
@@ -512,10 +672,23 @@ export class Game {
   startTraining(id, drill) {
     this.match = new Match({
       tournament: null, roster: this.player.roster, team: [id], training: drill,
-      trainBonus: this.player.facilities.trainingStatBonus(),
+      trainBonus: this.player.facilities.trainingStatBonus(drillFor(drill).stat),
     });
     this.match.setNameProvider((id2) => this.displayName(id2));
     this.player.roster.get(id).st = Math.max(0, this.player.roster.get(id).st - this.player.facilities.trainingCost());
+    this.player.save();
+    this.state = 'match';
+  }
+
+  // modo Practicar: el mismo minijuego, pero gratis (sin coste de STA, sin
+  // ocupar un día de la Agenda) y sin premio de stat — solo para coger
+  // soltura con los controles. Ver Match.practice / onMatchFinished.
+  startPractice(id, drill) {
+    this.match = new Match({
+      tournament: null, roster: this.player.roster, team: [id], training: drill, practice: true,
+      trainBonus: this.player.facilities.trainingStatBonus(drillFor(drill).stat),
+    });
+    this.match.setNameProvider((id2) => this.displayName(id2));
     this.player.save();
     this.state = 'match';
   }
@@ -560,7 +733,7 @@ export class Game {
     const clock = p.seasonClock;
     const league = p.league;
     const prevState = this.state;
-    const result = clock.advanceOneDay(league, () => negotiationMarket.rollOffer(p.roster.ids));
+    const result = clock.advanceOneDay(league, () => negotiationMarket.rollOffer(p.roster.ids), () => this._rollDecision());
 
     if (result.type === 'match') {
       const fixtures = league.fixturesForMatchday(result.matchdayIndex);
@@ -598,6 +771,11 @@ export class Game {
       clock.clearTraining(result.day);
     } else if (result.type === 'negotiation') {
       this.transferOffer = null;
+    } else if (result.type === 'decision') {
+      // en modo Debugger nadie va a estar mirando el modal: se elige
+      // siempre la primera opción y se sigue sin bloquear la simulación
+      this.decisionEvent = { event: result.event, ctx: result.ctx };
+      this.resolveDecision(0);
     }
 
     this.career.weeklyNews(league);
@@ -613,8 +791,19 @@ export class Game {
   onMatchFinished() {
     const M = this.match;
     if (M.training) {
+      // en modo Practicar no hay premio de stat (gratis, sin coste): lo
+      // único que queda de la sesión es la marca personal — revive
+      // Player.dailyBest, que existía desde hace tiempo pero no lo usaba
+      // nadie. TIRO se mide en derribos, el resto en puntos de arrime.
+      if (M.practice) {
+        const val = drillFor(M.training).hits ? M.targetsHit : M.score;
+        this.player.dailyBest[M.training] = Math.max(this.player.dailyBest[M.training] || 0, val);
+        this.screens.club.section = 'facilities';
+        this.state = 'club';
+      } else {
+        this.state = 'hub';
+      }
       this.player.save();
-      this.state = 'hub';
       return;
     }
     if (M.injuryEvent) {
@@ -630,14 +819,23 @@ export class Game {
       return;
     }
     if (this.isEuroCupMatch) {
-      this._finishEuroCupMatch(!!M._won, M.scoreP, M.scoreA);
+      this._finishEuroCupMatch(!!M._won, M.scoreP, M.scoreA, M.chronicle);
       return;
     }
     if (this.isCupMatch) {
-      this._finishCupMatch(!!M._won, M.scoreP, M.scoreA);
+      this._finishCupMatch(!!M._won, M.scoreP, M.scoreA, M.chronicle);
       return;
     }
-    this.outcome = this.career.finishWeeklyMatch(this.weeklyMatch, !!M._won, M.scoreP, M.scoreA);
+    this.outcome = this.career.finishWeeklyMatch(this.weeklyMatch, !!M._won, M.scoreP, M.scoreA, M.chronicle);
+    // suma la XP de calidad de tirada (M.xpGain, aplicada arriba en
+    // _applyThrowXp) a la de participación que ya trae el outcome, para
+    // poder enseñar en ResultScreen el total real ganado por cada abuelo
+    const xpPerAbuelo = { ...this.outcome.xpPerAbuelo };
+    for (const idStr of Object.keys(M.xpGain || {})) {
+      const id = Number(idStr);
+      xpPerAbuelo[id] = (xpPerAbuelo[id] || 0) + M.xpGain[idStr];
+    }
+    this.outcome.xpPerAbuelo = xpPerAbuelo;
     this.state = 'result';
   }
 

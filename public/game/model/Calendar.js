@@ -42,11 +42,14 @@ export class Calendar {
   }
 
   // lesión de varios días: probabilidad baja e independiente de rollEvent,
-  // solo afecta a quien no esté ya de baja
+  // solo afecta a quien no esté ya de baja. El riesgo crece con la edad del
+  // candidato (antes era un 5% fijo para cualquiera, sin distinción).
   rollInjury(roster, getState, currentDay, nameOf, chanceMultiplier = 1) {
     const sanos = roster.filter((id) => !getState(id).isInjured(currentDay));
-    if (!sanos.length || Math.random() > 0.05 * chanceMultiplier) return null;
+    if (!sanos.length) return null;
     const id = sanos[Math.floor(rnd(0, sanos.length))];
+    const ageFactor = 1 + Math.max(0, getState(id).age - 70) * 0.03;
+    if (Math.random() > 0.05 * chanceMultiplier * ageFactor) return null;
     const inj = INJURIES[Math.floor(rnd(0, INJURIES.length))];
     const days = Math.round(rnd(inj.min, inj.max));
     getState(id).injuredUntil = currentDay + days;

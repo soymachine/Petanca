@@ -13,13 +13,35 @@ export const RIVAL_TAUNTS = [
   { archetype: 'rencoroso', line: '"{captain} todavía se acuerda de la última vez. Esta se la guardaba."' },
 ];
 
+// pullas que ya no hablan de SU propio club, sino de la fama que te has
+// labrado tú a base de ruedas de prensa (ver Player.publicImage) — solo
+// entran en juego pasados los ±25 puntos, cuando esa fama ya es de sobra
+// conocida en el circuito
+const IMAGE_TAUNTS_BRAVO = [
+  '"Menuda fama de bocazas tiene el mánager de enfrente. A ver si esta vez calla la boca en la pista."',
+  '{captain} sonríe: "Con lo que promete siempre, cualquier día le toca tragarse sus palabras."',
+  '"Aquí no nos achantamos con fanfarronadas ajenas. Que hable la pista, como siempre."',
+];
+const IMAGE_TAUNTS_HUMBLE = [
+  '"El de enfrente nunca se moja. Prudente, o que no las tiene todas consigo."',
+  '{captain} se lo toma con calma: "Ni promete ni amenaza. Bueno, pues que hable la pista."',
+  '"Tanta cautela no engaña a nadie: sabemos que quieren ganar igual que todos."',
+];
+
 export function rivalPersonalityFor(club) {
   const idx = Math.abs(hashStr(club.name)) % RIVAL_TAUNTS.length;
   return RIVAL_TAUNTS[idx];
 }
 
-export function rivalPersonalityLine(club) {
+export function rivalPersonalityLine(club, publicImage = 0) {
   const captain = club.captain;
-  const t = rivalPersonalityFor(club);
-  return t.line.replace('{captain}', captain ? captain.name : 'su capitán').replace('{club}', club.name);
+  let line;
+  if (publicImage >= 25) {
+    line = IMAGE_TAUNTS_BRAVO[Math.abs(hashStr(club.name + 'bravo')) % IMAGE_TAUNTS_BRAVO.length];
+  } else if (publicImage <= -25) {
+    line = IMAGE_TAUNTS_HUMBLE[Math.abs(hashStr(club.name + 'humble')) % IMAGE_TAUNTS_HUMBLE.length];
+  } else {
+    line = rivalPersonalityFor(club).line;
+  }
+  return line.replace('{captain}', captain ? captain.name : 'su capitán').replace('{club}', club.name);
 }

@@ -19,6 +19,7 @@ export class CupMatchContext {
     this.rounds = [{
       aiLevel, rivalIdx: 0,
       rivalName: `${opponentEntry.name} (${cup.roundName})`,
+      archetypeKey: opponentEntry.name,
       rivalPortrait: captainPortrait ? captainPortrait.portrait : null,
       rivalMini: captainPortrait ? captainPortrait.miniPortrait : null,
       forecast: { main, changeProb: Math.random() < 0.3 ? rnd(0.4, 0.8) : 0, changeTo },

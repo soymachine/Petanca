@@ -1,5 +1,9 @@
 import { TabsBar } from './TabsBar.js';
 import { countryTag } from '../data/countries.js';
+import { wrapText } from '../core/utils.js';
+import { fillDecisionText } from '../data/decisionEvents.js';
+import { TRAINING_DRILLS } from '../data/trainingDrills.js';
+import { STAT_LABEL } from '../data/abuelos.js';
 
 const WD_SHORT = { lunes: 'LUN', martes: 'MAR', miércoles: 'MIÉ', jueves: 'JUE', viernes: 'VIE', sábado: 'SÁB', domingo: 'DOM' };
 const AY = 10, PAGE_W = 55, PAGE_GAP = 5, PAGE_H = 33;
@@ -17,12 +21,26 @@ const MAX_PAGE_AHEAD = 12; // tope de semanas que se puede pasar hacia delante
 // páginas (◀/▶) permite ver semanas futuras sin tocar el avance real del
 // calendario — para planificar fichajes/entrenos con partidos ya a la vista.
 export class AgendaScreen {
-  constructor(game) { this.game = game; this.schedule = null; this.playing = null; this.pageOffset = 0; }
+  constructor(game) {
+    this.game = game; this.schedule = null; this.playing = null; this.pageOffset = 0; this.decisionCursor = 0;
+    // qué semana ocupa la página izquierda cuando pageOffset es 0 ("la
+    // pareja de semanas de casa"). Normalmente coincide con la semana de
+    // hoy, PERO durante el avance automático se mantiene fija hasta que
+    // las DOS semanas del libro (izquierda y derecha) quedan en el pasado
+    // — si no, cada vez que el reloj cruza a la semana siguiente el libro
+    // se desplazaría de una en una, y la derecha nunca llegaría a verse
+    // completa antes de desaparecer. Ver draw().
+    this.leftWeek = null;
+  }
 
   draw() {
     const { screen, input, player, frame } = this.game;
     screen.clear();
     if (this.schedule && input.hit('Escape')) { this.schedule = null; input.pressed.Escape = false; }
+    // un evento de decisión no se puede cancelar con ESC (hay que elegir
+    // una opción), pero tampoco debe dejar pasar la tecla al atajo global
+    // "ESC = Inicio" de TabsBar, o se sale de la Agenda sin resolverlo
+    if (this.game.decisionEvent && input.hit('Escape')) { input.pressed.Escape = false; }
     TabsBar.draw(this.game, 'agenda');
     screen.textCenter(4, '═══ AGENDA DE LA PEÑA ═══', '#ffb347');
 
@@ -33,6 +51,10 @@ export class AgendaScreen {
       this.friendlyResult = { ...this.game.friendlyJustPlayed, frame: 0 };
       this.game.friendlyJustPlayed = null;
     }
+
+    // evento de decisión pendiente: pausa cualquier avance automático hasta
+    // que se elija una opción (ver core/Game.js._rollDecision/resolveDecision)
+    if (this.game.decisionEvent) { this._drawDecisionModal(); return; }
 
     // avance automático día a día: cada paso marca el día como completado;
     // si cae en un evento, se detiene un segundo y entra a él
@@ -50,6 +72,18 @@ export class AgendaScreen {
     }
 
     const clock = player.seasonClock;
+    // this.leftWeek es la semana "de casa" (página izquierda cuando
+    // pageOffset=0): se inicializa a la semana de hoy, y solo salta hacia
+    // delante de dos en dos, en cuanto el reloj entra en la TERCERA semana
+    // — es decir, cuando tanto la izquierda como la derecha ya quedaron
+    // atrás. Se resincroniza cada frame (no solo durante el avance
+    // automático) por si el reloj avanza por otra vía (modo Debugger).
+    // si el ancla venía de una temporada ya cerrada (ascenso/descenso/fin
+    // de temporada corrido justo entre un frame y el siguiente), se
+    // resincroniza de golpe con la semana real en vez de arrastrar una
+    // pareja de semanas de una liga que ya no es la actual
+    if (this.leftWeek === null || this.leftWeek < clock.seasonWeekOffset) this.leftWeek = clock.weekIndex;
+    while (clock.weekIndex >= this.leftWeek + 2) this.leftWeek += 2;
     const bookW = PAGE_W * 2 + PAGE_GAP;
     const bx = Math.floor((screen.cols - bookW) / 2);
     screen.box(bx, AY - 3, bookW, 3, '#c9a35d', 'double');
@@ -57,16 +91,22 @@ export class AgendaScreen {
     screen.text(bx + Math.floor((bookW - todayLabel.length) / 2), AY - 2, todayLabel, '#ffe680');
 
     // pasador de páginas: qué par de semanas se ve ahora mismo, sin tocar
-    // el avance real del calendario (this.pageOffset es solo de cámara)
-    this.pageOffset = Math.max(0, Math.min(MAX_PAGE_AHEAD, this.pageOffset));
-    const baseWeek = clock.weekIndex + this.pageOffset;
+    // el avance real del calendario (this.pageOffset es solo de cámara).
+    // Hacia delante, tope de MAX_PAGE_AHEAD semanas; hacia atrás, se puede
+    // retroceder hasta la primera semana de la temporada EN CURSO (no
+    // tiene sentido ir más atrás: el calendario de una liga que ya cerró
+    // temporada no es el mismo, y matchdayForWeek daría jornadas que ya no
+    // corresponden a nada real de la liga actual).
+    const minPageOffset = Math.min(0, clock.seasonWeekOffset - this.leftWeek);
+    this.pageOffset = Math.max(minPageOffset, Math.min(MAX_PAGE_AHEAD, this.pageOffset));
+    const baseWeek = this.leftWeek + this.pageOffset;
     const week1 = clock.weekAt(baseWeek, player.league);
     const week2 = clock.weekAt(baseWeek + 1, player.league);
     screen.box(bx, AY, PAGE_W, PAGE_H, '#8a7f66', 'double');
     screen.box(bx + PAGE_W + PAGE_GAP, AY, PAGE_W, PAGE_H, '#8a7f66', 'double');
 
     // flechas de paginación, a los lados del libro
-    const canPagePrev = this.pageOffset > 0;
+    const canPagePrev = this.pageOffset > minPageOffset;
     const canPageNext = this.pageOffset < MAX_PAGE_AHEAD;
     screen.text(bx - 3, AY + PAGE_H / 2, canPagePrev ? '◀' : ' ', canPagePrev ? (frame % 20 < 14 ? '#ffe680' : '#a8901a') : '#3a352c');
     screen.text(bx + bookW + 1, AY + PAGE_H / 2, canPageNext ? '▶' : ' ', canPageNext ? (frame % 20 < 14 ? '#ffe680' : '#a8901a') : '#3a352c');
@@ -107,7 +147,7 @@ export class AgendaScreen {
         const isToday = d.day === clock.day;
         const completed = d.day < clock.day;
         const rowOver = !this.playing && input.mouse.cy >= yy && input.mouse.cy <= yy + 2 && input.mouse.cx >= px + 1 && input.mouse.cx < px + PAGE_W - 1;
-        if (rowOver) hover = { d, entry, px, yy };
+        if (rowOver) hover = { d, entry, px, yy, completed };
         const wd = WD_SHORT[d.weekdayName];
         const dayCol = isToday ? '#ffe14d' : d.isMatchDay ? '#e8ddb8' : '#c9c2a8';
         const tabCol = rowOver ? '#fff' : dayCol;
@@ -149,7 +189,7 @@ export class AgendaScreen {
         if (entry.kind === 'match') screen.text(px + 6, yy + 1, entry.text, completed ? '#bfe8bf' : '#7ec850');
         else if (entry.kind === 'cup') screen.text(px + 6, yy + 1, entry.text, completed ? '#c9b970' : (entry.european ? '#88c8e8' : '#ffd75e'));
         else if (entry.kind === 'training') screen.text(px + 6, yy + 1, rowOver && !completed ? entry.text + '  ✕ cancelar' : entry.text, completed ? '#bfe8e8' : rowOver ? '#ff8c5b' : '#88c8e8');
-        else if (rowOver && entry.kind === 'free') screen.text(px + 6, yy + 1, '+ agendar entreno', frame % 20 < 14 ? '#7CFC00' : '#4a8a4a');
+        else if (rowOver && !completed && entry.kind === 'free') screen.text(px + 6, yy + 1, '+ agendar entreno', frame % 20 < 14 ? '#7CFC00' : '#4a8a4a');
 
         // regla horizontal punteada, como las líneas de una libreta real
         // (solo si cabe dentro de la página, el último día no lleva línea)
@@ -165,13 +205,24 @@ export class AgendaScreen {
     } else if (this.pageOffset > 0) {
       screen.textCenter(AY + PAGE_H + 1, '[←/→] cambiar de semana    click en un día libre para agendar un entreno', '#c9c2a8');
       screen.textCenter(AY + PAGE_H + 2, `estás viendo por delante — [→ ${MAX_PAGE_AHEAD - this.pageOffset} más] · vuelve con [←] hasta la semana actual`, '#8a7f66');
+    } else if (this.pageOffset < 0) {
+      screen.textCenter(AY + PAGE_H + 1, '[←/→] cambiar de semana    pasa el ratón por un día jugado para ver el resultado', '#c9c2a8');
+      screen.textCenter(AY + PAGE_H + 2, canPagePrev
+        ? `estás viendo el pasado de esta temporada — vuelve con [→] hasta la semana actual`
+        : 'primera semana de la temporada — no se puede ir más atrás', '#8a7f66');
     } else {
-      const baseHelp = '[ENTER] avanzar día a día    [→] ver semanas futuras    click en un día libre para agendar un entreno';
+      const navHelp = canPagePrev ? '[←/→] ver semanas pasadas/futuras' : '[→] ver semanas futuras';
+      const baseHelp = `[ENTER] avanzar día a día    ${navHelp}    click en un día libre para agendar un entreno`;
       screen.textCenter(AY + PAGE_H + 1, canFriendly ? `${baseHelp}    [F] amistoso de pretemporada (quedan ${player.friendliesLeft})` : baseHelp, '#c9c2a8');
     }
 
-    if (hover) this._drawDayTooltip(hover.d, hover.entry, input.mouse.cx, input.mouse.cy);
-    if (!this.playing && hover && input.mouse.clicked && hover.entry.kind === 'free' && !hover.d.isMatchDay) {
+    if (hover) this._drawDayTooltip(hover.d, hover.entry, input.mouse.cx, input.mouse.cy, hover.completed);
+    // un día ya pasado (sellado en la agenda con el relleno ▓) no puede
+    // recibir un entreno nuevo: por muy "libre" que estuviera ese hueco,
+    // ya no hay manera de que SeasonClock lo ejecute — solo comprueba
+    // this.trainings[day] según el reloj avanza hacia delante, así que
+    // agendar en el pasado dejaba el entreno agendado pero nunca se jugaba
+    if (!this.playing && hover && !hover.completed && input.mouse.clicked && hover.entry.kind === 'free' && !hover.d.isMatchDay) {
       this.schedule = { day: hover.d.day, step: 'abuelo', abueloId: null, cursor: 0 };
     }
     if (!this.playing && hover && input.mouse.clicked && hover.entry.kind === 'training') {
@@ -198,6 +249,14 @@ export class AgendaScreen {
 
   _dayEntry(d) {
     const { player } = this.game;
+    // si este día ya se jugó de verdad, la entrada se reconstruye a partir
+    // del marcador guardado (player.matchResults) en vez de mirar el
+    // estado EN VIVO del cruce — para Copa/Copa de Europa ese cruce ya
+    // habrá avanzado de ronda (o hasta terminado del todo) para cuando se
+    // navega hacia atrás, así que "¿hay Copa hoy?" ya no valdría para
+    // reconstruir qué pasó ese día en concreto
+    const result = player.matchResults[d.day];
+    if (result) return this._entryFromResult(result);
     // el día de Copa agendado no cae necesariamente en domingo (se busca
     // con firstFreeDayFrom entre semana), así que se comprueba aparte y
     // antes que el resto — antes no se mostraba en la Agenda en absoluto
@@ -225,11 +284,37 @@ export class AgendaScreen {
     return { kind: 'free', text: '' };
   }
 
-  _drawDayTooltip(d, entry, mx, my) {
+  // entrada para un día ya jugado, a partir de player.matchResults[day] —
+  // ver _dayEntry. Guarda el marcador consigo (entry.result) para que la
+  // fila y el tooltip puedan enseñarlo sin tener que volver a mirar el
+  // estado (ya adelantado) de la liga/Copa/Copa de Europa.
+  _entryFromResult(r) {
+    const scoreTxt = `${r.scoreP}-${r.scoreA}`;
+    if (r.kind === 'league') {
+      return { kind: 'match', text: `    vs ${r.oppName}${r.isDerby ? ' ¡DERBI!' : ''}  (${scoreTxt})`, result: r };
+    }
+    const label = r.kind === 'eurocup' ? 'EUROPA' : 'COPA';
+    return { kind: 'cup', text: `    ${label}: ${r.roundName.toLowerCase()} vs ${r.oppName}  (${scoreTxt})`, result: r, european: r.kind === 'eurocup' };
+  }
+
+  _drawDayTooltip(d, entry, mx, my, completed) {
     const { screen } = this.game;
     const lines = [];
     lines.push([`${d.weekdayName.toUpperCase()} · día ${d.day}`, '#ffe680']);
-    if (entry.kind === 'match') {
+    if (entry.result) {
+      const r = entry.result;
+      const wonCol = r.won ? '#7ec850' : '#ff8c5b';
+      if (r.kind === 'league') {
+        lines.push([`Partido de liga — ${r.won ? 'GANADO' : 'PERDIDO'}`, wonCol]);
+      } else {
+        lines.push([`${r.kind === 'eurocup' ? 'Copa de Europa' : 'Copa de España'} — ${r.roundName.toLowerCase()} — ${r.won ? 'GANADO' : 'PERDIDO'}`, wonCol]);
+      }
+      lines.push([`${this.game.player.clubName} ${r.scoreP} - ${r.scoreA} ${r.oppName}`, '#c9c2a8']);
+      if (r.isDerby) {
+        const h = this.game.player.derbyHistory;
+        lines.push([`¡EL DERBI DE SIEMPRE! historial: ${h.wins}-${h.losses}`, '#ffb347']);
+      }
+    } else if (entry.kind === 'match') {
       const aiLevel = entry.opp ? Math.round(entry.opp.avgSkill()) : '?';
       lines.push([`Partido de liga ${entry.home ? '(en casa)' : '(fuera)'}`, '#7ec850']);
       lines.push([`Rival: ${entry.opp ? entry.opp.name : '???'}`, '#c9c2a8']);
@@ -248,6 +333,8 @@ export class AgendaScreen {
       lines.push(['Entreno agendado', '#88c8e8']);
       lines.push([`${entry.drill} — ${this.game.displayName(entry.abueloId)}`, '#c9c2a8']);
       lines.push(['[click] cancelar este entreno', '#ff8c5b']);
+    } else if (completed) {
+      lines.push(['Día ya pasado.', '#8a8a7a']);
     } else {
       lines.push(['Día libre.', '#8a8a7a']);
       lines.push(['[click] agendar un entreno aquí', '#7CFC00']);
@@ -264,6 +351,39 @@ export class AgendaScreen {
   _fillBlack(x, y, w, h) {
     const { screen } = this.game;
     for (let r = 0; r < h; r++) for (let c = 0; c < w; c++) screen.put(x + c, y + r, '█', '#000');
+  }
+
+  // evento de decisión: 2-3 opciones, cada una con su efecto a la vista
+  // antes de elegir — nada de letra pequeña ni sorpresas.
+  _drawDecisionModal() {
+    const { screen, input } = this.game;
+    const { event, ctx } = this.game.decisionEvent;
+    const w = 76, h = 10 + event.options.length * 4;
+    const x = Math.floor((screen.cols - w) / 2), y = Math.floor((screen.rows - h) / 2);
+    this._fillBlack(x, y, w, h);
+    screen.box(x, y, w, h, '#c8a0e8', 'double');
+    screen.textCenter(y + 1, event.title, '#ffe680');
+    const bodyLines = wrapText(fillDecisionText(event.text, ctx, (id) => this.game.displayName(id)), w - 6);
+    bodyLines.forEach((l, i) => screen.text(x + 3, y + 3 + i, l, '#c9c2a8'));
+
+    const optY0 = y + 3 + bodyLines.length + 1;
+    this.decisionCursor = ((this.decisionCursor % event.options.length) + event.options.length) % event.options.length;
+    event.options.forEach((opt, i) => {
+      const sel = i === this.decisionCursor;
+      const oy = optY0 + i * 4;
+      screen.text(x + 3, oy, `${sel ? '▶' : ' '} ${opt.label}`, sel ? '#fff' : '#c9c2a8');
+      const effectLines = wrapText(describeDecisionEffects(opt.effects), w - 10);
+      effectLines.forEach((l, k) => screen.text(x + 5, oy + 1 + k, l, sel ? '#a8e8c8' : '#6a8a7a'));
+    });
+
+    screen.textCenter(y + h - 2, '[↑/↓] elegir   [ENTER] confirmar', '#c9c2a8');
+
+    if (input.hit('ArrowUp')) this.decisionCursor = (this.decisionCursor + event.options.length - 1) % event.options.length;
+    if (input.hit('ArrowDown')) this.decisionCursor = (this.decisionCursor + 1) % event.options.length;
+    if (input.hit('Enter') || input.hit(' ')) {
+      this.game.resolveDecision(this.decisionCursor);
+      this.decisionCursor = 0;
+    }
   }
 
   _drawScheduleModal() {
@@ -297,20 +417,34 @@ export class AgendaScreen {
         this.schedule.step = 'drill';
       }
     } else {
-      const drills = ['ARRIME', 'TIRO'];
-      const bonus = player.facilities.trainingStatBonus();
       screen.textCenter(y + 1, `¿QUÉ ENTRENA ${this.game.displayName(this.schedule.abueloId)}?`, '#ffe680');
-      drills.forEach((drill, i) => {
+      this.schedule.cursor = ((this.schedule.cursor % TRAINING_DRILLS.length) + TRAINING_DRILLS.length) % TRAINING_DRILLS.length;
+      TRAINING_DRILLS.forEach((drill, i) => {
         const sel = i === this.schedule.cursor;
-        const stat = drill === 'ARRIME' ? 'pulso' : 'brazo';
-        screen.text(x + 4, y + 4 + i * 3, `${sel ? '▶' : ' '} ${drill}  (+${bonus} ${stat})`, sel ? '#fff' : '#c9c2a8');
+        const bonus = player.facilities.trainingStatBonus(drill.stat);
+        screen.text(x + 4, y + 4 + i * 3, `${sel ? '▶' : ' '} ${drill.label}  (+${bonus} ${STAT_LABEL[drill.stat]})`, sel ? '#fff' : '#c9c2a8');
       });
       screen.textCenter(y + h - 2, '[↑/↓] elegir   [ENTER] agendar   [ESC] cancelar', '#c9c2a8');
-      if (input.hit('ArrowUp') || input.hit('ArrowDown')) this.schedule.cursor = this.schedule.cursor === 0 ? 1 : 0;
+      if (input.hit('ArrowUp')) this.schedule.cursor = (this.schedule.cursor + TRAINING_DRILLS.length - 1) % TRAINING_DRILLS.length;
+      if (input.hit('ArrowDown')) this.schedule.cursor = (this.schedule.cursor + 1) % TRAINING_DRILLS.length;
       if (input.hit('Enter') || input.hit(' ')) {
-        this.game.scheduleTrainingOnDay(this.schedule.day, this.schedule.abueloId, drills[this.schedule.cursor]);
+        this.game.scheduleTrainingOnDay(this.schedule.day, this.schedule.abueloId, TRAINING_DRILLS[this.schedule.cursor].id);
         this.schedule = null;
       }
     }
   }
+}
+
+// resumen legible de lo que hace una opción de un evento de decisión, para
+// que el jugador vea el efecto ANTES de elegir (ver core/Game.js._applyDecisionEffects)
+function describeDecisionEffects(effects) {
+  if (!effects || !Object.keys(effects).length) return 'sin efecto directo';
+  const parts = [];
+  if (effects.money) parts.push(`${effects.money > 0 ? '+' : ''}${effects.money}€`);
+  if (effects.boardConfidence) parts.push(`${effects.boardConfidence > 0 ? '+' : ''}${effects.boardConfidence} confianza de la junta`);
+  if (effects.moral) parts.push(`${effects.moral.d > 0 ? '+' : ''}${effects.moral.d} moral (${effects.moral.target === 'all' ? 'toda la peña' : 'él'})`);
+  if (effects.stamina) parts.push(`${effects.stamina.d > 0 ? '+' : ''}${effects.stamina.d} STA (${effects.stamina.target === 'all' ? 'toda la peña' : 'él'})`);
+  if (effects.xp) parts.push(`+${effects.xp.amount} XP`);
+  if (effects.item) parts.push('amuleto nuevo');
+  return parts.join('  ·  ');
 }
