@@ -41,7 +41,7 @@ export class TitleScreen {
     const startRect = { x: Math.floor((screen.cols - startLabel.length) / 2), y: 34, w: startLabel.length, h: 1 };
     const startHover = hitRect(input.mouse.cx, input.mouse.cy, startRect.x, startRect.y, startRect.w, startRect.h);
     if (frame % 40 < 26 || startHover) screen.textCenter(34, startLabel, startHover ? '#ffe680' : '#7CFC00');
-    screen.textCenter(37, `${player.clubName}   ·   Liga de ${player.league.cityName} (nivel ${player.currentLeagueLevel}/8)   ·   ${player.money}€   V:${player.wins} D:${player.losses}`, '#e8e0c8');
+    screen.textCenter(37, `${player.clubName}   ·   Liga de ${player.league.cityName} (nivel ${player.currentLeagueLevel}/8)   ·   ${player.money}€   G:${player.wins} P:${player.losses}`, '#e8e0c8');
     screen.textCenter(39, `Perfil ${Player.activeSlot()} de ${Player.SLOT_COUNT}   ·   [P] cambiar de perfil${player.wins + player.losses > 0 ? '   ·   [B] borrar partida guardada' : ''}`, '#8a7f66');
     screen.textCenter(43, 'foto: Wikimedia Commons · filtro ASCII casero · hecho con cariño y albero', '#556');
 
@@ -68,7 +68,7 @@ export class TitleScreen {
       const summary = Player.slotSummary(slot);
       if (summary) {
         screen.text(x + 2, 38, summary.clubName.slice(0, w - 4), '#9a927a');
-        screen.text(x + 2, 39, `${summary.money}€  ·  V:${summary.wins} D:${summary.losses}`, '#88c8e8');
+        screen.text(x + 2, 39, `${summary.money}€  ·  G:${summary.wins} P:${summary.losses}`, '#88c8e8');
       } else {
         screen.text(x + 2, 38, 'vacío — partida nueva', '#8a8a7a');
       }
