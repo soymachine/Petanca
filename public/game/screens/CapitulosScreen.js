@@ -43,7 +43,7 @@ export class CapitulosScreen {
     const perPage = 7;
     const maxPage = Math.max(0, Math.ceil(chapters.length / perPage) - 1);
     const overBox = input.mouse.cx >= boxX && input.mouse.cx < boxX + boxW && input.mouse.cy >= boxY && input.mouse.cy < boxY + boxH;
-    if (overBox) this.chapterPage -= input.wheel;
+    if (overBox) this.chapterPage += input.wheel;
     this.chapterPage = Math.max(0, Math.min(maxPage, this.chapterPage));
 
     const pageChapters = chapters.slice(this.chapterPage * perPage, this.chapterPage * perPage + perPage);
@@ -64,29 +64,42 @@ export class CapitulosScreen {
     }
   }
 
-  // gráfico de barras de las 3 copas del club (liga / España / Europa),
-  // todas a la misma escala (la mayor cosecha marca el 100% de la barra) —
-  // sin iconos repetidos, solo barras y el número exacto al final
+  // tres columnas, una por cada tipo de copa, cada una con su propio
+  // gráfico de barra vertical — glifo y patrón de relleno distintos para
+  // diferenciarlas a golpe de vista — a la misma escala entre sí (la mayor
+  // cosecha marca el 100% de la barra) y el número exacto de títulos debajo
   _drawTrophyCharts(x, y, w) {
     const { screen, player } = this.game;
-    const rows = [
-      { label: 'COPAS DE LIGA', count: player.seasonTitles, color: '#ffd75e' },
-      { label: 'COPAS DE ESPAÑA', count: player.cupTitles, color: '#c8a0e8' },
-      { label: 'COPAS DE EUROPA', count: player.euroCupTitles, color: '#7ec8ea' },
+    const cols = [
+      { label: 'COPAS DE LIGA', count: player.seasonTitles, color: '#ffd75e', pattern: 'solid' },
+      { label: 'COPAS DE ESPAÑA', count: player.cupTitles, color: '#c8a0e8', pattern: 'checker' },
+      { label: 'COPAS DE EUROPA', count: player.euroCupTitles, color: '#7ec8ea', pattern: 'stars' },
     ];
-    const labelW = 18;
-    const numW = 4;
-    const barW = Math.max(10, w - labelW - numW - 2);
-    const maxCount = Math.max(1, ...rows.map((r) => r.count));
-    let yy = y;
-    for (const r of rows) {
-      screen.text(x, yy, r.label.padEnd(labelW), '#c9c2a8');
-      const filled = Math.round((r.count / maxCount) * barW);
-      screen.text(x + labelW, yy, '▓'.repeat(filled) + '░'.repeat(barW - filled), r.count > 0 ? r.color : '#3a3730');
-      screen.text(x + labelW + barW + 2, yy, `${r.count}`.padStart(numW), r.color);
-      yy += 2;
-    }
-    return yy;
+    const gap = 3;
+    const colW = Math.floor((w - gap * 2) / 3);
+    const barW = Math.min(9, colW - 2);
+    const chartH = 6;
+    const maxCount = Math.max(1, ...cols.map((c) => c.count));
+
+    cols.forEach((c, i) => {
+      const cx = x + i * (colW + gap);
+      screen.text(cx + Math.max(0, Math.floor((colW - c.label.length) / 2)), y, c.label, '#c9c2a8');
+      const barX = cx + Math.floor((colW - barW) / 2);
+      const filledRows = c.count > 0 ? Math.max(1, Math.round((c.count / maxCount) * chartH)) : 0;
+      for (let r = 0; r < chartH; r++) {
+        const filled = r >= chartH - filledRows;
+        let line;
+        if (!filled) line = '·'.repeat(barW);
+        else if (c.pattern === 'solid') line = '▓'.repeat(barW);
+        else if (c.pattern === 'checker') line = Array.from({ length: barW }, (_, k) => ((k + r) % 2 === 0 ? '▓' : '▒')).join('');
+        else line = Array.from({ length: barW }, (_, k) => (k % 2 === 0 ? '★' : ' ')).join('');
+        screen.text(barX, y + 2 + r, line, filled ? c.color : '#3a3730');
+      }
+      const numLabel = `${c.count} título${c.count === 1 ? '' : 's'}`;
+      screen.text(cx + Math.max(0, Math.floor((colW - numLabel.length) / 2)), y + 2 + chartH + 1, numLabel, c.count > 0 ? c.color : '#8a8a7a');
+    });
+
+    return y + 2 + chartH + 2;
   }
 
   _drawSalonDeLaFama() {
@@ -121,8 +134,14 @@ export class CapitulosScreen {
       [`Ultimátums recibidos`, `${player.boardUltimatums}`],
       [`Reputación de mánager`, `${player.managerRep} (${player.managerRepLabel})`],
     ];
+    // la columna de valores se alinea a la derecha con margen fijo respecto
+    // al borde de la caja (en vez de un desplazamiento fijo desde la
+    // izquierda): así nunca se come el borde por muy larga que llegue a
+    // ser una cifra tras muchas temporadas simuladas (victorias, derrotas...)
+    const maxValLen = Math.max(...rows.map(([, v]) => v.length));
+    const valX = CONTENT_X + leftW - 3 - maxValLen;
     let yy = colY + 2;
-    for (const [label, val] of rows) { screen.text(CONTENT_X + 3, yy, label, '#c9c2a8'); screen.text(CONTENT_X + leftW - 26, yy, val, '#ffe14d'); yy += 1; }
+    for (const [label, val] of rows) { screen.text(CONTENT_X + 3, yy, truncate(label, Math.max(1, valX - (CONTENT_X + 3) - 2)), '#c9c2a8'); screen.text(valX, yy, val, '#ffe14d'); yy += 1; }
     yy++;
     screen.text(CONTENT_X + 3, yy++, 'CIUDADES DONDE HABÉIS GANADO LIGA:', '#ffb347');
     if (!player.citiesWon.length) screen.text(CONTENT_X + 3, yy++, 'ninguna todavía — a por la primera.', '#8a8a7a');
@@ -172,7 +191,7 @@ export class CapitulosScreen {
     const perPage = Math.floor((boxH - 3) / rowH);
     const maxScroll = Math.max(0, history.length - perPage);
     const overBox = hitRect(input.mouse.cx, input.mouse.cy, boxX, boxY, boxW, boxH);
-    if (overBox) this.historyScroll -= input.wheel;
+    if (overBox) this.historyScroll += input.wheel;
     this.historyScroll = Math.max(0, Math.min(maxScroll, this.historyScroll));
 
     let yy = boxY + 2;

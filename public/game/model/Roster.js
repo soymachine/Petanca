@@ -100,6 +100,11 @@ export function upkeepFor(id, roster) {
   const potentialAvg = s.potentialCap
     ? (STAT_KEYS.reduce((sum, k) => sum + s.potentialCap[k], 0) / STAT_KEYS.length) * 10
     : avgStat;
-  const effectivePrice = 50 + ((avgStat + potentialAvg) / 2) * 4.5;
+  // curva convexa sobre el 0..1 de calidad (media actual+potencial, ya que
+  // el tope real es 100): antes hacía falta llegar al máximo absoluto para
+  // que la cuota subiera apenas +5€/semana — ahora un fichaje de verdad
+  // top se nota de verdad en la nómina, no solo en el precio de compra.
+  const qualityFrac = (avgStat + potentialAvg) / 200;
+  const effectivePrice = 50 + Math.pow(qualityFrac, 1.8) * 4000;
   return 5 + Math.round(effectivePrice / 100) + Math.round(s.level * 1.5);
 }

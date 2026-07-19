@@ -79,7 +79,7 @@ export class BarScreen {
     const visibleRows = Math.max(1, Math.floor(listH / AMULET_ROW_H));
     const maxOffset = Math.max(0, ITEM_IDS.length - visibleRows);
     const overList = hitRect(input.mouse.cx, input.mouse.cy, boxX, listY, boxW, listH);
-    if (overList) this.amuletScroll -= input.wheel;
+    if (overList) this.amuletScroll += input.wheel;
     this.amuletScroll = Math.max(0, Math.min(maxOffset, this.amuletScroll));
 
     let yy = listY;

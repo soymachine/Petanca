@@ -191,7 +191,15 @@ export class Career {
 
     p.roster.applyRivalryJealousy(ctx.usados);
     const diff = DIFFICULTIES.find((d) => d.id === p.difficulty) || DIFFICULTIES[1];
-    const upkeep = Math.round(p.roster.totalUpkeep() * diff.wageMult);
+    // la nómina también escala con el nivel de la liga: un club de Madrid
+    // (nivel 8) es una entidad mucho más grande que una peña de pueblo de
+    // Albacete (nivel 1), igual que ya reflejaba baseMoneyFor() para los
+    // clubes IA — antes la cuota de socio no subía nada con la categoría,
+    // así que el premio semanal (que sí escala fuerte con el nivel) se
+    // acumulaba casi sin gasto según se ascendía, aunque no se invirtiera
+    // ni un euro en fichajes
+    const leagueWageFactor = 1 + (league.level - 1) * 0.4;
+    const upkeep = Math.round(p.roster.totalUpkeep() * diff.wageMult * leagueWageFactor);
     money -= upkeep;
     if (p.money + money < 0) {
       for (const id of p.roster.ids) p.roster.get(id).addMoral(-6);

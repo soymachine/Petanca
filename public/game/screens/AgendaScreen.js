@@ -108,8 +108,11 @@ export class AgendaScreen {
     // flechas de paginación, a los lados del libro
     const canPagePrev = this.pageOffset > minPageOffset;
     const canPageNext = this.pageOffset < MAX_PAGE_AHEAD;
-    screen.text(bx - 3, AY + PAGE_H / 2, canPagePrev ? '◀' : ' ', canPagePrev ? (frame % 20 < 14 ? '#ffe680' : '#a8901a') : '#3a352c');
-    screen.text(bx + bookW + 1, AY + PAGE_H / 2, canPageNext ? '▶' : ' ', canPageNext ? (frame % 20 < 14 ? '#ffe680' : '#a8901a') : '#3a352c');
+    // estas flechas de paginación NO parpadean — solo el marcador del día
+    // actual (más abajo, `isToday`) lo hace, para que el parpadeo siga
+    // significando "hoy" y no se diluya en toda la pantalla
+    screen.text(bx - 3, AY + PAGE_H / 2, canPagePrev ? '◀' : ' ', canPagePrev ? '#ffe680' : '#3a352c');
+    screen.text(bx + bookW + 1, AY + PAGE_H / 2, canPageNext ? '▶' : ' ', canPageNext ? '#ffe680' : '#3a352c');
 
     // lomo del cuaderno: degradado de caracteres para sugerir la curva del
     // papel encuadernado, en vez de un simple relleno de '│'

@@ -429,33 +429,8 @@ export class Game {
       this.injuryEvent = injury;
       this.player.news.push(`LESIÓN: ${injury.text}`);
     }
-    const diedId = calendar.rollDeath(this.player.roster.ids, (id) => this.player.roster.get(id), evChance);
-    if (diedId !== null) {
-      const name = this.displayName(diedId);
-      const age = this.player.roster.get(diedId).age;
-      // deuda de sangre: si se va con una revancha pendiente (némesis activa,
-      // o el derbi en contra en el historial), el nieto hereda las ganas de
-      // saldarla — ver Career.settleDebts, que la liquida al ganarle a ese club
-      let debt = null;
-      if (this.player.nemesis) debt = { clubId: this.player.nemesis.city, label: this.player.nemesis.rival };
-      else if (this.player.derbyClub && this.player.derbyHistory.losses > this.player.derbyHistory.wins) {
-        debt = { clubId: this.player.derbyClub.id, label: this.player.derbyClub.name };
-      }
-      const wasForeshadowed = this.player.roster.get(diedId).agingFlavorSeen;
-      const hadLegend = resetChemistryFor(this.player, diedId);
-      const { inherited } = this.player.roster.get(diedId).retireToGrandchild('fallecimiento', debt);
-      const echo = inherited.clima
-        ? `Dicen que ha salido a su abuelo: tampoco le hace mella la ${CLIMAS[inherited.clima].label.toLowerCase()}.`
-        : `Se le nota de familia el ${STAT_LABEL[inherited.stat].toLowerCase()}.`;
-      const debtTxt = debt ? ` El nieto se guarda una cuenta pendiente con ${debt.label}.` : '';
-      // si ya se le veía venir (ver _maybeAgingForeshadow), el titular lo
-      // cita en vez de sonar a sorpresa — cierra el presagio con el desenlace
-      const foreshadowTxt = wasForeshadowed ? ' Llevaba tiempo avisando de que el cuerpo no daba para más.' : '';
-      this.deathEvent = { id: diedId, text: `${name} nos dejó a los ${age} años. El testigo pasa a su nieto.` };
-      this.player.news.push(`IN MEMORIAM: se nos fue ${name}, a los ${age} años.${foreshadowTxt} Su nieto recoge el testigo en la peña. ${echo}${debtTxt}`);
-      this.player.addAnnal(`IN MEMORIAM — ${name} (${age} años). El testigo pasa a su nieto en la peña.`);
-      if (hadLegend) this.player.news.push(`FIN DE UNA ERA: la pareja de leyenda de ${name} se deshace con su marcha. Al nieto le toca hacerse un hueco desde cero.`);
-    } else {
+    const diedId = this._maybeRollDeath(evChance);
+    if (diedId === null) {
       this.calendarEvent = calendar.rollEvent(this.player.roster.ids, (id) => this.displayName(id), evChance);
       if (this.calendarEvent) {
         const s = this.player.roster.get(this.calendarEvent.id);
@@ -486,6 +461,42 @@ export class Game {
     } else {
       this.state = 'lineup';
     }
+  }
+
+  // tirada de fallecimiento + todo lo que conlleva (relevo generacional,
+  // deuda de sangre heredada, noticia, anal permanente) — factorizado para
+  // que tanto el partido jugado en vivo (_startWeeklyMatch) como el modo
+  // Debugger (debugAdvanceOneDay, que antes se saltaba esta tirada por
+  // completo y por eso nadie moría nunca simulando temporadas) usen
+  // exactamente la misma lógica. Devuelve el id fallecido, o null.
+  _maybeRollDeath(evChance) {
+    const diedId = calendar.rollDeath(this.player.roster.ids, (id) => this.player.roster.get(id), evChance);
+    if (diedId === null) return null;
+    const name = this.displayName(diedId);
+    const age = this.player.roster.get(diedId).age;
+    // deuda de sangre: si se va con una revancha pendiente (némesis activa,
+    // o el derbi en contra en el historial), el nieto hereda las ganas de
+    // saldarla — ver Career.settleDebts, que la liquida al ganarle a ese club
+    let debt = null;
+    if (this.player.nemesis) debt = { clubId: this.player.nemesis.city, label: this.player.nemesis.rival };
+    else if (this.player.derbyClub && this.player.derbyHistory.losses > this.player.derbyHistory.wins) {
+      debt = { clubId: this.player.derbyClub.id, label: this.player.derbyClub.name };
+    }
+    const wasForeshadowed = this.player.roster.get(diedId).agingFlavorSeen;
+    const hadLegend = resetChemistryFor(this.player, diedId);
+    const { inherited } = this.player.roster.get(diedId).retireToGrandchild('fallecimiento', debt);
+    const echo = inherited.clima
+      ? `Dicen que ha salido a su abuelo: tampoco le hace mella la ${CLIMAS[inherited.clima].label.toLowerCase()}.`
+      : `Se le nota de familia el ${STAT_LABEL[inherited.stat].toLowerCase()}.`;
+    const debtTxt = debt ? ` El nieto se guarda una cuenta pendiente con ${debt.label}.` : '';
+    // si ya se le veía venir (ver _maybeAgingForeshadow), el titular lo
+    // cita en vez de sonar a sorpresa — cierra el presagio con el desenlace
+    const foreshadowTxt = wasForeshadowed ? ' Llevaba tiempo avisando de que el cuerpo no daba para más.' : '';
+    this.deathEvent = { id: diedId, text: `${name} nos dejó a los ${age} años. El testigo pasa a su nieto.` };
+    this.player.news.push(`IN MEMORIAM: se nos fue ${name}, a los ${age} años.${foreshadowTxt} Su nieto recoge el testigo en la peña. ${echo}${debtTxt}`);
+    this.player.addAnnal(`IN MEMORIAM — ${name} (${age} años). El testigo pasa a su nieto en la peña.`);
+    if (hadLegend) this.player.news.push(`FIN DE UNA ERA: la pareja de leyenda de ${name} se deshace con su marcha. Al nieto le toca hacerse un hueco desde cero.`);
+    return diedId;
   }
 
   // presagio de la edad: sin efecto mecánico, solo una línea de aviso para
@@ -742,6 +753,13 @@ export class Game {
     const result = clock.advanceOneDay(league, () => negotiationMarket.rollOffer(p.roster.ids), () => this._rollDecision());
 
     if (result.type === 'match') {
+      // igual que _startWeeklyMatch: cada jornada de liga es también el
+      // momento en que se comprueba si algún abuelo fallece de viejo —
+      // antes el modo Debugger se saltaba esta tirada por completo, así
+      // que nadie moría nunca simulando temporadas enteras
+      const diff = DIFFICULTIES.find((d) => d.id === p.difficulty) || DIFFICULTIES[1];
+      const evChance = p.facilities.eventChanceMultiplier() * diff.eventMult;
+      this._maybeRollDeath(evChance);
       const fixtures = league.fixturesForMatchday(result.matchdayIndex);
       const myFixture = fixtures.find(([a, b]) => a === league.playerClub.id || b === league.playerClub.id);
       const opponentId = myFixture ? (myFixture[0] === league.playerClub.id ? myFixture[1] : myFixture[0]) : null;

@@ -53,8 +53,12 @@ export class RivalPlayer {
   // El escalón de antes (+40€ de golpe por debajo de 45 años) además era
   // código muerto en la práctica: RivalPlayer.generate() solo genera
   // edades 60-80, así que esa rama nunca llegaba a activarse.
+  // curva convexa (exponente >1) en vez de lineal: antes un crack de
+  // nivel 10 apenas costaba el doble que uno de nivel 5 (500€ vs 275€),
+  // así que el mercado nunca reflejaba de verdad lo top que era alguien.
+  // Ahora el nivel 10 cuesta ~1880€ y el nivel 5 ~400€ — casi 5x, no 2x.
   get value() {
-    return Math.round((50 + this.avgSkill * 45) * ageValueFactor(this.age));
+    return Math.round((40 + Math.pow(this.avgSkill, 2.3) * 9) * ageValueFactor(this.age));
   }
 
   // genera un jugador nuevo con un nivel medio dado (1..10 aprox.), con
