@@ -10,7 +10,7 @@ import { ABUELO_DATA, STAT_KEYS } from '../data/abuelos.js';
 // Constantes pensadas para retocarse fácil si el ritmo no cuaja jugando.
 const LEVEL_CAP = 12;
 function xpToNextLevel(level) { return 60 + level * 25 + level * level * 4; }
-function pointsForLevel(level) { return Math.round((10 + (level - 1) * 5) * 0.85); }
+function pointsForLevel(level) { return Math.max(1, Math.round((10 + (level - 1) * 5) * 0.85 * 0.25)); }
 
 // Estado vivo de un abuelo de la peña: stamina, moral, entrenamiento
 // acumulado, amuleto, generación (nietos) y estadísticas de carrera.
