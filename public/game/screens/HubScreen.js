@@ -121,8 +121,7 @@ export class HubScreen {
     const rank = league.myRank();
     const rankCol = rank <= 3 ? RANK_COL[Math.min(2, rank - 1)] : '#c9c2a8';
     screen.text(x + 2, y + 2, `${rank}º de 10`, rankCol);
-    screen.text(x + 2, y + 4, `${player.club.pts} pts`, '#88e088');
-    screen.text(x + 2, y + 5, `(${player.club.won}V ${player.club.played - player.club.won}D)`, '#9a927a');
+    screen.text(x + 2, y + 4, `${player.club.won} (G) / ${player.club.played - player.club.won} (P)`, '#88e088');
     if (rank <= 2) screen.text(x + 2, y + 7, '▲ zona de ascenso', '#7ec850');
     else if (rank >= 9) screen.text(x + 2, y + 7, '▼ zona de descenso', '#ff5c5c');
     wrapText('pasa el ratón: tabla completa · clic: ir a Ligas', w - 4).forEach((l, i) => screen.text(x + 2, y + h - 3 + i, l, '#8a7f66'));
@@ -132,7 +131,7 @@ export class HubScreen {
   _drawStandingsTooltip(league, mx, my) {
     const { screen } = this.game;
     const table = league.standings();
-    const w = 40, h = table.length + 2;
+    const w = 48, h = table.length + 2;
     const tx = Math.min(mx + 2, screen.cols - w - 1);
     const ty = Math.min(my + 1, screen.rows - h - 1);
     for (let r = 0; r < h; r++) for (let c = 0; c < w; c++) screen.put(tx + c, ty + r, '█', '#000');
@@ -141,9 +140,9 @@ export class HubScreen {
       const isTop3 = i < 3;
       const rankCol = isTop3 ? RANK_COL[i] : row.isPlayer ? '#7CFC00' : '#8a8a7a';
       const nameCol = row.isPlayer ? '#7CFC00' : '#c9c2a8';
-      const label = `${(i + 1 + '').padStart(2)}º ${row.name}${row.isPlayer ? ' ★' : ''}`.slice(0, w - 12).padEnd(w - 10);
+      const label = `${(i + 1 + '').padStart(2)}º ${row.name}${row.isPlayer ? ' ★' : ''}`.slice(0, w - 20).padEnd(w - 18);
       screen.text(tx + 2, ty + 1 + i, label, isTop3 || row.isPlayer ? rankCol : nameCol);
-      screen.text(tx + w - 8, ty + 1 + i, `${row.pts} pts`, nameCol);
+      screen.text(tx + w - 16, ty + 1 + i, `${row.won} (G) / ${row.lost} (P)`, nameCol);
     });
   }
 
@@ -252,7 +251,7 @@ export class HubScreen {
   // mirar el estado de las ligas o del Mercado con calma
   _drawDebuggerPanel() {
     const { screen, input } = this.game;
-    const bx = 4, by = 38, bw = 68, bh = 5;
+    const bx = 4, by = 38, bw = 132, bh = 5;
     screen.box(bx, by, bw, bh, '#8a7f66', 'double');
     screen.text(bx + 2, by, ' MODO DEBUGGER ', '#ffb347');
 
