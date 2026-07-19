@@ -70,6 +70,8 @@ export class PenyaScreen {
     this.mScroll = 0;
     this.allocating = null; // id del abuelo con el overlay de reparto de puntos abierto
     this.allocCursor = 0;
+    this._allocHoldKey = null; // stat que se está repartiendo mientras el ratón sigue pulsado
+    this._allocHoldNext = 0; // performance.now() del próximo punto automático (cada 100ms)
     this.trainDrillPick = null; // modal: { abueloId, cursor } — qué minijuego de entreno agendarle
     this._rDrag = false; // arrastrando la barra de scroll de Plantilla
     this._mDrag = false; // arrastrando la barra de scroll de Mercado
@@ -407,9 +409,20 @@ export class PenyaScreen {
       if (sel || overRow) screen.text(x + 2, ry, ' '.repeat(w - 4), '#3a2a10');
       const label = `${STAT_LABEL[k].padEnd(8)} ${'▮'.repeat(bar)}${'▯'.repeat(20 - bar)} ${val}`;
       screen.text(x + 2, ry, label, sel || overRow ? '#fff' : '#c9c2a8');
-      if (overRow && input.mouse.clicked && s.points > 0) {
-        this.allocCursor = i;
-        if (s.allocatePoint(k, 1) > 0) player.save();
+      // mantener el botón pulsado sobre la fila reparte 1 punto al momento
+      // y sigue repartiendo cada 100ms mientras no se suelte ni se mueva a
+      // otra fila (un simple clic ya cae dentro de esta misma lógica: el
+      // primer punto se da nada más pulsar)
+      if (overRow && input.mouse.down && s.points > 0) {
+        const now = performance.now();
+        if (this._allocHoldKey !== k || now >= this._allocHoldNext) {
+          this.allocCursor = i;
+          if (s.allocatePoint(k, 1) > 0) player.save();
+          this._allocHoldKey = k;
+          this._allocHoldNext = now + 100;
+        }
+      } else if (this._allocHoldKey === k) {
+        this._allocHoldKey = null;
       }
       ry += 2;
     });
@@ -504,8 +517,8 @@ export class PenyaScreen {
       wrapText(ABUELO_DATA[id].trait, 40).forEach((l) => lines.push(['  ' + l, '#d8b8e8']));
     }
     lines.push(['CARRERA:', '#ffb347']);
-    lines.push([`  ${s.career.wins}V ${s.career.losses}D  ·  ${s.torneos} PARTIDAS / ${RETIRE_AT}  ·  sueldo ${upkeepFor(id, player.roster)}€/sem`, '#9a927a']);
-    if (s.formStreak >= 2) lines.push([`  🔥 racha de ${s.formStreak} victorias seguidas${s.formStreak >= 3 ? ' (llega más firme a la mesa)' : ''}`, '#ffb347']);
+    lines.push([`  ${s.career.wins}G ${s.career.losses}P  ·  ${s.torneos} PARTIDAS / ${RETIRE_AT}  ·  sueldo ${upkeepFor(id, player.roster)}€/sem`, '#9a927a']);
+    if (s.formStreak >= 2) lines.push([`  racha de ${s.formStreak} victorias seguidas${s.formStreak >= 3 ? ' (llega más firme a la mesa)' : ''}`, '#ffb347']);
     if (s.item) {
       const it = ITEMS[s.item.id];
       lines.push([`  objeto: ${it.name}`, '#ffd9a0']);
@@ -667,7 +680,7 @@ export class PenyaScreen {
     const scout = player.scoutStaff.scoutOf(e.seedKey);
     const known = e.kind === 'transfer' ? e.statsRevealed : e.potentialRevealed;
     const estadoTxt = known ? 'REVELADO' : scout ? 'scouteando…' : 'rango estimado';
-    screen.text(MCOLS[4].x, rowY, truncate(`${estadoTxt}${scout ? ' 🔎' : ''}`, MCOLS[4].w - 1), known ? '#7ec850' : scout ? '#88c8e8' : '#8a7f66');
+    screen.text(MCOLS[4].x, rowY, truncate(estadoTxt, MCOLS[4].w - 1), known ? '#7ec850' : scout ? '#88c8e8' : '#8a7f66');
     screen.text(MCOLS[5].x, rowY, `${e.price}€`, e.afford ? '#7ec850' : '#ff5c5c');
   }
 
@@ -678,11 +691,12 @@ export class PenyaScreen {
     const lv = this._marketLevel(e);
     const lines = [];
     lines.push([e.name, '#ffe680']);
+    lines.push([`Edad: ${e.age} años`, '#c9c2a8']);
     lines.push([`Nivel: ${lv.known ? `${lv.exact}/100` : `${lv.lo}-${lv.hi}/100 (estimado)`}`, '#ffe14d']);
     if (scout) {
       const tpl = SCOUT_TEMPLATES.find((t) => t.id === scout.templateId);
       const left = Math.max(0, tpl.weeksToReveal - (player.seasonClock.weekIndex - scout.assignedWeek));
-      lines.push([`🔎 ${tpl.name} scouteándolo — informe completo en ${left} semana(s)`, '#7ec850']);
+      lines.push([`${tpl.name} scouteándolo — informe completo en ${left} semana(s)`, '#7ec850']);
     } else if (!known) {
       lines.push(['  sin ojeador asignado — [S] para ponerle uno encima', '#8a7f66']);
     }
@@ -1056,7 +1070,7 @@ export class PenyaScreen {
     const s = player.roster.get(id);
     screen.text(rightX + 2, rightY, ` ${this.game.displayName(id).toUpperCase()} — GENERACIÓN ACTUAL (${s.gen + 1}ª) `, '#ffe680');
     let yy = rightY + 2;
-    screen.text(rightX + 2, yy, `${s.career.wins}V ${s.career.losses}D  ·  racha máxima ${s.career.bestStreak}`, '#c9c2a8'); yy++;
+    screen.text(rightX + 2, yy, `${s.career.wins}G ${s.career.losses}P  ·  racha máxima ${s.career.bestStreak}`, '#c9c2a8'); yy++;
     if (s.inherited) {
       const label = s.inherited.clima
         ? `le afecta menos la ${CLIMAS[s.inherited.clima].label.toLowerCase()} — ha salido a su abuelo`
@@ -1073,7 +1087,7 @@ export class PenyaScreen {
         if (yy > rightY + rightH - 2) break;
         const reasonTxt = leg.reason === 'fallecimiento' ? 'falleció' : 'se retiró con honores';
         const legName = leg.name || this.game.faces[id].name;
-        screen.text(rightX + 2, yy, `${leg.gen + 1}ª gen. — ${legName}, ${reasonTxt} a los ${leg.age} años (${leg.wins}V ${leg.losses}D, racha ${leg.bestStreak})`, '#c9b98a');
+        screen.text(rightX + 2, yy, `${leg.gen + 1}ª gen. — ${legName}, ${reasonTxt} a los ${leg.age} años (${leg.wins}G ${leg.losses}P, racha ${leg.bestStreak})`, '#c9b98a');
         yy++;
       }
     }
