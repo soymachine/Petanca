@@ -32,7 +32,7 @@ const COUNTRY_STYLE = {
   FR: { color: '#6fa8dc', glyph: '▲' },
   IT: { color: '#e8433f', glyph: '◆' },
   BE: { color: '#e8c832', glyph: '●' },
-  CH: { color: '#ff5c8a', glyph: '✚' },
+  CH: { color: '#ff5c8a', glyph: '✡' },
   PT: { color: '#3fae7a', glyph: '▼' },
 };
 
@@ -182,7 +182,13 @@ export class LeagueMapScreen {
       screen.text(lx, LEGEND_Y, s.glyph, s.color);
       lx += 2;
     }
-    screen.text(MAP_BOX.x, LEGEND_Y + 1, 'arrastra = mover · rueda = zoom', '#5a5347');
+    const hintY = LEGEND_Y + 1;
+    const hintBase = 'arrastra = mover · rueda = zoom · ';
+    screen.text(MAP_BOX.x, hintY, hintBase, '#5a5347');
+    const miLigaX = MAP_BOX.x + hintBase.length;
+    const miLigaLabel = '[M] MI LIGA';
+    const miLigaOver = hitRect(input.mouse.cx, input.mouse.cy, miLigaX, hintY, miLigaLabel.length, 1);
+    screen.text(miLigaX, hintY, miLigaLabel, miLigaOver ? '#ffe680' : '#7CFC00');
 
     if (input.mouse.clicked && inView) {
       let best = null;
@@ -227,6 +233,10 @@ export class LeagueMapScreen {
     }
     if (league && input.hit('ArrowLeft')) this._jornadaIdx = clamp(this._jornadaIdx - 1, 0, league.fixtures.length - 1);
     if (league && input.hit('ArrowRight')) this._jornadaIdx = clamp(this._jornadaIdx + 1, 0, league.fixtures.length - 1);
+    if (input.hit('m') || input.hit('M') || (miLigaOver && input.mouse.clicked)) {
+      const myIdx = ALL_MARKERS.findIndex((mk) => mk.country === 'ES' && mk.city.diff === player.currentLeagueLevel);
+      if (myIdx >= 0) { this.cursor = myIdx; this._camCenterOn(ALL_MARKERS[myIdx].city); }
+    }
     if (input.hit('+') || input.hit('=')) this._setZoom(this.zoom + 1);
     if (input.hit('-') || input.hit('_')) this._setZoom(this.zoom - 1);
     if ((input.hit('Enter') || input.hit(' ')) && marker.country === 'ES' && marker.city.diff === player.currentLeagueLevel) this.game.state = 'hub';
@@ -279,10 +289,9 @@ export class LeagueMapScreen {
     screen.text(b.x + 2, b.y + 1, title, '#ffb347');
     screen.text(b.x + 2, b.y + 2, `Pista: ${pistaDesc.slice(0, b.w - 12)}`, '#c9a35d');
     if (canPromote || canRelegate) {
-      const bits = [];
-      if (canPromote) bits.push('▲ ascenso');
-      if (canRelegate) bits.push('▼ descenso');
-      screen.text(b.x + 2, b.y + 3, bits.join('   '), '#8a8a7a');
+      let zx = b.x + 2;
+      if (canPromote) { screen.text(zx, b.y + 3, '▲ ascenso', '#7ec850'); zx += 12; }
+      if (canRelegate) screen.text(zx, b.y + 3, '▼ descenso', '#ff5c5c');
     }
     this._drawStandings(league.standings(), b.x + 2, b.y + 5, b.w - 4, canPromote, canRelegate);
   }
@@ -291,7 +300,7 @@ export class LeagueMapScreen {
     const { screen, input, player } = this.game;
     const RANK_COL = ['#ffd75e', '#d8d8e0', '#c88a4a'];
     const rowRects = [];
-    const nameW = Math.max(10, w - 15);
+    const nameW = Math.max(10, w - 18);
     for (let i = 0; i < table.length; i++) {
       const row = table[i];
       const ty = y0 + i;
@@ -304,7 +313,7 @@ export class LeagueMapScreen {
       screen.text(x + 2, ty, `${(i + 1 + '').padStart(2)}º`, rankCol);
       const label = `${row.name}${row.isPlayer ? ' ★' : ''}`.slice(0, nameW).padEnd(nameW);
       screen.text(x + 6, ty, label, nameCol);
-      screen.text(x + 6 + nameW + 1, ty, `${row.pts} pts`, nameCol);
+      screen.text(x + 6 + nameW + 1, ty, `${row.won} (G) / ${row.lost} (P)`, nameCol);
       if (!row.isPlayer) rowRects.push({ club: row, x, y: ty, w });
     }
 
@@ -390,7 +399,7 @@ export class LeagueMapScreen {
         const statsTxt = STAT_KEYS.map((k) => `${STAT_LABEL[k].slice(0, 3)} ${p.stats[k]}`).join('  ');
         lines.push([`  ${statsTxt}`, '#88c8e8']);
       } else {
-        lines.push([`· ${p.name}`, '#a8e8a8']);
+        lines.push([`· ${p.name}  ·  ${p.age} años`, '#a8e8a8']);
       }
     }
 
