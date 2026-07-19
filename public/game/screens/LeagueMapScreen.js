@@ -43,15 +43,15 @@ const ALL_MARKERS = [
   ...allForeignCityMarkers(),
 ];
 
-// Layout: mapa reducido (~50% de su tamaño original) a la izquierda,
-// clasificación en una sola columna a su derecha, y abajo — a todo lo
-// ancho — los partidos de la jornada elegida (con flechas para navegar
-// jornadas anteriores/siguientes).
-const MAP_BOX = { x: 3, y: 4, w: 64, h: 16 };
+// Layout: el mapa ocupa todo el ancho arriba; debajo, una fila con la
+// clasificación a la izquierda y los partidos de la jornada elegida a la
+// derecha (con flechas para navegar jornadas anteriores/siguientes).
+const MAP_BOX = { x: 3, y: 4, w: 134, h: 18 };
 const MAP_VIEW = { x: MAP_BOX.x + 1, y: MAP_BOX.y + 1, w: MAP_BOX.w - 2, h: MAP_BOX.h - 2 };
-const STAND_BOX = { x: MAP_BOX.x + MAP_BOX.w + 2, y: 4, w: 68, h: 21 };
 const LEGEND_Y = MAP_BOX.y + MAP_BOX.h + 1;
-const RESULTS_BOX = { x: 3, y: 26, w: 134, h: 18 };
+const ROW_Y = LEGEND_Y + 2;
+const STAND_BOX = { x: 3, y: ROW_Y, w: 65, h: 19 };
+const RESULTS_BOX = { x: STAND_BOX.x + STAND_BOX.w + 2, y: ROW_Y, w: 134 - STAND_BOX.w - 2, h: 19 };
 
 // El mapa de los 6 países del circuito, siempre visible entero: cada
 // ciudad española es una liga jugable (asciendes/desciendes entre ellas);
@@ -164,9 +164,8 @@ export class LeagueMapScreen {
       if (sx >= this.view.x && sx < this.view.x + this.view.w && sy >= this.view.y && sy < this.view.y + this.view.h) {
         const glyph = isSel && frame % 20 < 12 ? '◈' : isMine ? '★' : style ? style.glyph : '■';
         screen.put(sx, sy, glyph, col);
-        // etiqueta recortada al recuadro del mapa: ahora hay un panel justo
-        // a la derecha y no debe invadirlo (antes el mapa ocupaba casi todo
-        // el ancho de pantalla y esto nunca se notaba)
+        // etiqueta recortada al recuadro del mapa, para que nunca se salga
+        // de su caja aunque el marcador esté pegado al borde
         const label = `${c.name}`;
         for (let k = 0; k < label.length; k++) {
           screen.putClipped(sx + 2 + k, sy, label[k], isSel ? '#fff' : col, this.view.x, this.view.y, this.view.w, this.view.h);
@@ -340,17 +339,18 @@ export class LeagueMapScreen {
     const arrowCol2 = idx < total - 1 ? '#ffe680' : '#3a4a3a';
     screen.text(b.x + 2, b.y + 1, '◀', arrowCol);
     screen.text(b.x + b.w - 3, b.y + 1, '▶', arrowCol2);
-    const title = `JORNADA ${idx + 1}/${total} — ${marker.city.name}${isCurrent ? ' (última jugada)' : ''}`;
-    screen.textCenter(b.y + 1, title, '#ffb347');
-    screen.textCenter(b.y + 2, played ? 'RESULTADOS' : (idx === league.matchday ? 'POR JUGAR' : 'PRÓXIMOS PARTIDOS'), played ? '#7ec850' : '#8fb0c8');
+    const title = `JORNADA ${idx + 1}/${total}${isCurrent ? ' (última)' : ''}`;
+    screen.text(b.x + Math.floor((b.w - title.length) / 2), b.y + 1, title, '#ffb347');
+    const subtitle = played ? 'RESULTADOS' : (idx === league.matchday ? 'POR JUGAR' : 'PRÓXIMOS PARTIDOS');
+    screen.text(b.x + Math.floor((b.w - subtitle.length) / 2), b.y + 2, subtitle, played ? '#7ec850' : '#8fb0c8');
 
     const fixtures = league.fixturesForMatchday(idx);
     const results = played ? league.resultsForMatchday(idx) : [];
     const resultFor = (aId, bId) => results.find((r) => (r.a === aId && r.b === bId) || (r.a === bId && r.b === aId));
 
     const rowY0 = b.y + 4;
-    const midX = b.x + Math.floor(b.w / 2); // centro de la caja (coincide con el de pantalla: caja casi a todo lo ancho)
-    const nameW = 38;
+    const midX = b.x + Math.floor(b.w / 2); // centro de la caja (el panel ya no ocupa toda la pantalla)
+    const nameW = Math.max(8, Math.floor((b.w - 16) / 2));
     fixtures.forEach(([aId, bId], i) => {
       const clubA = league.clubById(aId), clubB = league.clubById(bId);
       if (!clubA || !clubB) return;
@@ -360,14 +360,14 @@ export class LeagueMapScreen {
       const nameB = clubB.name + (clubB.isPlayer ? ' ★' : '');
       const colA = clubA.isPlayer ? '#7CFC00' : '#c9c2a8';
       const colB = clubB.isPlayer ? '#7CFC00' : '#c9c2a8';
-      const mid = r ? `${r.a === aId ? r.scoreA : r.scoreB} - ${r.a === aId ? r.scoreB : r.scoreA}` : 'vs';
+      const mid = r ? `${r.a === aId ? r.scoreA : r.scoreB}-${r.a === aId ? r.scoreB : r.scoreA}` : 'vs';
       const half = Math.ceil(mid.length / 2);
       screen.text(midX - half - 2 - nameW, ty, nameA.slice(0, nameW).padStart(nameW), colA);
       screen.text(midX - half, ty, mid, r ? '#ffe680' : '#8a8a7a');
       screen.text(midX + (mid.length - half) + 2, ty, nameB.slice(0, nameW).padEnd(nameW), colB);
     });
 
-    screen.text(b.x + 2, b.y + b.h - 2, '[←] jornada anterior    [→] jornada siguiente', '#8a7f66');
+    screen.text(b.x + 2, b.y + b.h - 2, '[←] anterior   [→] siguiente', '#8a7f66');
   }
 
   // escudo + nombre del club, y quién juega en él, para cualquier equipo
