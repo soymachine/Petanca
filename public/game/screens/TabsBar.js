@@ -10,7 +10,7 @@ export class TabsBar {
     { id: 'club', label: ' [4]EL CLUB ' },
     { id: 'leaguemap', label: ' [5]LIGAS ' },
     { id: 'bar', label: ' [6]EL BAR ' },
-    { id: 'capitulos', label: ' [7]CAPÍTULOS ' },
+    { id: 'capitulos', label: ' [7]HISTORIA ' },
     { id: 'hemeroteca', label: ' [8]HEMEROTECA ' },
     { id: 'ayuda', label: ' [9]AYUDA ' },
   ];
