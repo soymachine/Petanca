@@ -1,4 +1,4 @@
-import { CW, CH, COURT_X, COURT_Y, THROW_X, GRAV } from '../physics/constants.js';
+import { CW, CH, COURT_X, COURT_Y, THROW_X, GRAV, ballsPerPlayer } from '../physics/constants.js';
 import { CLIMAS, isRainy } from '../data/climas.js';
 import { ABUELO_DATA, STAT_KEYS, STAT_LABEL } from '../data/abuelos.js';
 import { BIG_DIGITS } from '../data/art/staticArt.js';
@@ -25,7 +25,7 @@ export class MatchScreen {
 
     screen.text(26, 1, this.game.displayName(M.abuelo), '#4fc3f7');
     const teamSize = M.teamP.length;
-    const ballCount = M.training ? (M.training === 'TIRO' ? 4 : 3) : 3 * teamSize;
+    const ballCount = M.training ? (M.training === 'TIRO' ? 4 : 3) : ballsPerPlayer(teamSize) * teamSize;
     screen.text(26, 2, `${'●'.repeat(M.ballsLeftP)}${'○'.repeat(Math.max(0, ballCount - M.ballsLeftP))}`, '#4fc3f7');
     const st = pState.st;
     const stCol = st > 60 ? '#7ec850' : st > 30 ? '#ffe14d' : '#ff5c5c';
@@ -49,7 +49,8 @@ export class MatchScreen {
       else screen.drawPhotoArt(rivalFaces[M.rivalIdx].photo, screen.cols - 22, 1);
       const rname = `${M.rival}${teamSize > 1 ? ' Y CÍA' : ''} [NIV.${M.aiLevel}]`;
       screen.text(screen.cols - 26 - rname.length, 1, rname, '#ef7676');
-      screen.text(screen.cols - 26 - 3, 2, `${'●'.repeat(M.ballsLeftA)}${'○'.repeat(Math.max(0, 3 * teamSize - M.ballsLeftA))}`, '#ef7676');
+      const rivalBallCount = ballsPerPlayer(teamSize) * teamSize;
+      screen.text(screen.cols - 26 - 3, 2, `${'●'.repeat(M.ballsLeftA)}${'○'.repeat(Math.max(0, rivalBallCount - M.ballsLeftA))}`, '#ef7676');
 
       screen.textCenter(0, `╣ LIGA DE ${M.city.name} · JORNADA ╠`, M.city.color);
 
@@ -239,7 +240,7 @@ export class MatchScreen {
     if (M.training === 'TIRO') {
       for (const b of M.balls) if (b.owner === 'T') screen.put(COURT_X + b.ox, COURT_Y + b.oy, '+', '#6a6a5a');
     }
-    if (M.training !== 'TIRO' && visible(M.jack)) screen.put(COURT_X + M.jack.x, COURT_Y + M.jack.y, '☼', '#ffe14d');
+    if (M.training !== 'TIRO' && M.jack && visible(M.jack)) screen.put(COURT_X + M.jack.x, COURT_Y + M.jack.y, '☼', '#ffe14d');
     if (M.twinJacks && M.jack2 && visible(M.jack2)) screen.put(COURT_X + M.jack2.x, COURT_Y + M.jack2.y, '☀', '#ff9c5b');
 
     for (const b of M.balls) {
@@ -317,6 +318,16 @@ export class MatchScreen {
       let bar = '';
       for (let i = 0; i <= 7; i++) bar += i === idx ? steps[i] : i < idx ? steps[i] : '·';
       screen.text(5, py + 2, `rasa ${bar} bombeada   ${deg.toFixed(0)}°  ${deg < 20 ? '(tiro tenso, para tirar bolas)' : deg > 45 ? '(globo, cae muerta)' : '(media altura)'}`, '#9fd8e8');
+    } else if (M.phase === 'jackPower') {
+      screen.text(5, py + 1, 'BOLICHE   [ENTER/ESPACIO] ¡suelta! — solo cuenta la potencia', '#e8e0c8');
+      const w = 60;
+      const fill = Math.round(M.power * w);
+      let bar = '';
+      for (let i = 0; i < w; i++) bar += i < fill ? '█' : '░';
+      const pcol = M.power < 0.4 ? '#7ec850' : M.power < 0.75 ? '#ffe14d' : '#ff5c5c';
+      screen.text(5, py + 2, '[', '#e8e0c8');
+      screen.text(6, py + 2, bar, pcol);
+      screen.text(6 + w, py + 2, `] corto ⟷ largo`, '#e8e0c8');
     } else if (M.phase === 'power') {
       const inSweet = M.sweetSpot !== null && Math.abs(M.power - M.sweetSpot) < M.sweetWidth;
       screen.text(5, py + 1, `POTENCIA  [ENTER/ESPACIO] ¡lanzar!   [ESC] volver${M.sweetSpot !== null ? '   ◆ busca el punto dulce dorado' : ''}`, inSweet ? '#ffe14d' : '#e8e0c8');
@@ -343,9 +354,7 @@ export class MatchScreen {
     } else if (M.phase === 'aiTurn') {
       screen.text(5, py + 1, `${M.rival} escupe en la bola, mira al cielo y se concentra...`, '#ef9f9f');
     } else if (M.phase === 'roundStart') {
-      screen.text(5, py + 1, M.twinJacks
-        ? `MANO ${M.round} — ¡DOBLE BOLICHE! El primer tiro decide cuál cuenta. [ENTER] empezar`
-        : `MANO ${M.round} — el boliche está colocado. [ENTER] para empezar`, '#ffe680');
+      screen.text(5, py + 1, `MANO ${M.round} — te toca lanzar el boliche. [ENTER] para tirar`, '#ffe680');
     } else if (M.phase === 'roundEnd') {
       const who = M.lastWinner === 'P' ? '¡PUNTO PARA TI!' : M.lastWinner === 'A' ? `Punto para ${M.rival}` : 'Mano nula';
       screen.text(5, py + 1, `${who}  +${M.lastPoints} punto(s)   [ENTER] siguiente mano`, M.lastWinner === 'P' ? '#7CFC00' : '#ef7676');

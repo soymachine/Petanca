@@ -3,7 +3,7 @@ import { ABUELO_DATA } from '../data/abuelos.js';
 import { BOLAS } from '../data/bolas.js';
 import { CLIMAS, avisoClima, cambioClima } from '../data/climas.js';
 import { RIVALS, ROUND_NAMES } from '../data/cities.js';
-import { CW, CH, THROW_X, GRAV, TARGET } from '../physics/constants.js';
+import { CW, CH, THROW_X, GRAV, TARGET, ballsPerPlayer } from '../physics/constants.js';
 import { Ball } from '../physics/Ball.js';
 import { Court } from '../physics/Court.js';
 import { Weather } from '../physics/Weather.js';
@@ -65,8 +65,8 @@ export class Match {
     this.round = 1;
     this.phase = 'roundStart'; this.phaseT = 0;
     this.balls = []; this.jack = null; this.jack2 = null; this.twinJacks = false;
-    this.ballsLeftP = training ? (training === 'ARRIME' ? 3 : 4) : 3 * this.teamP.length;
-    this.ballsLeftA = training ? 0 : 3 * this.teamP.length;
+    this.ballsLeftP = training ? (training === 'ARRIME' ? 3 : 4) : ballsPerPlayer(this.teamP.length) * this.teamP.length;
+    this.ballsLeftA = training ? 0 : ballsPerPlayer(this.teamP.length) * this.teamP.length;
     this.turn = 'P';
     this.aimAngle = 0; this.spin = 0; this.loft = 0.6; this.power = 0; this.powerDir = 1;
     this.lastPoints = 0; this.lastWinner = null;
@@ -191,19 +191,9 @@ export class Match {
 
   _startRound(isFirst) {
     this.balls = [];
-    this.ballsLeftP = this.training ? this.ballsLeftP : 3 * this.teamP.length;
-    this.ballsLeftA = this.training ? 0 : 3 * this.teamP.length;
-    if (!this.training || this.training === 'ARRIME') {
-      this.jack = new Ball({ x: rnd(75, 115), y: rnd(6, CH - 6), owner: 'J' });
-    }
-    this.jack2 = null; this.twinJacks = false;
-    if (!this.training && this.city.diff >= 6 && Math.random() < 0.35) {
-      const ang = rnd(0, Math.PI * 2), dist = rnd(14, 22);
-      const jx = clamp(this.jack.x + Math.cos(ang) * dist, 6, CW - 6);
-      const jy = clamp(this.jack.y + Math.sin(ang) * dist * 0.5, 3, CH - 3);
-      this.jack2 = new Ball({ x: jx, y: jy, owner: 'J2' });
-      this.twinJacks = true;
-    }
+    this.ballsLeftP = this.training ? this.ballsLeftP : ballsPerPlayer(this.teamP.length) * this.teamP.length;
+    this.ballsLeftA = this.training ? 0 : ballsPerPlayer(this.teamP.length) * this.teamP.length;
+    this.jack = null; this.jack2 = null; this.twinJacks = false;
     if (!isFirst && this.weatherChange) {
       if (!this.weatherChange.warned && this.round === this.weatherChange.atRound - 1) {
         this.narr = avisoClima(this.weatherChange.to);
@@ -228,12 +218,29 @@ export class Match {
     if (this.weather.type === 'TORMENTA' && this.tournament) this.tournament.stormPlayed = true;
     this.turn = 'P';
     this.phase = 'roundStart'; this.phaseT = 0;
-    this.aimAngle = Math.atan2(((this.jack.y - CH / 2) * 2) / 60, 1) * 0.5;
+    this.aimAngle = 0;
     this.spin = 0; this.loft = 0.6;
     this.trail = [];
     this.jackRevealed = this.weather.type !== 'NIEBLA';
     this.measured = false;
     this.weather.initParticles();
+  }
+
+  // lanzamiento del boliche simplificado: solo potencia, sin puntería ni
+  // efecto — la barra de this.power (0-1) fija linealmente la distancia
+  _placeJack(power) {
+    const jx = clamp(75 + power * 40, 6, CW - 6);
+    const jy = clamp(CH / 2 + gauss() * 1.5, 5, CH - 5);
+    this.jack = new Ball({ x: jx, y: jy, owner: 'J' });
+    if (this.city.diff >= 6 && Math.random() < 0.35) {
+      const ang = rnd(0, Math.PI * 2), dist = rnd(14, 22);
+      const jx2 = clamp(this.jack.x + Math.cos(ang) * dist, 6, CW - 6);
+      const jy2 = clamp(this.jack.y + Math.sin(ang) * dist * 0.5, 3, CH - 3);
+      this.jack2 = new Ball({ x: jx2, y: jy2, owner: 'J2' });
+      this.twinJacks = true;
+      this.narr = '¡DOBLE BOLICHE! El primer tiro decide cuál cuenta.';
+    }
+    this.aimAngle = Math.atan2(((this.jack.y - CH / 2) * 2) / 60, 1) * 0.5;
   }
 
   throwBall(owner, angle, power, spin, loft) {
@@ -336,10 +343,22 @@ export class Match {
       case 'roundStart':
         if (this.phaseT > 1.6 || input.hit('Enter') || input.hit(' ')) {
           if (this.turn === 'P') this.pickThrower();
+          this.phase = 'jackPower'; this.phaseT = 0;
+          this.power = 0; this.powerDir = 1;
+        }
+        break;
+
+      case 'jackPower': {
+        this.power += this.powerDir * 1.1 * dt;
+        if (this.power >= 1) { this.power = 1; this.powerDir = -1; }
+        if (this.power <= 0) { this.power = 0; this.powerDir = 1; }
+        if (input.hit('Enter') || input.hit(' ')) {
+          this._placeJack(this.power);
           this.phase = this.turn === 'P' ? 'aim' : 'aiTurn';
           this.phaseT = 0; this.role = 'apuntar';
         }
         break;
+      }
 
       case 'aim': {
         if (input.held('ArrowUp')) this.aimAngle -= 0.9 * dt;

@@ -68,7 +68,14 @@ distancias reales usan `dy×2` (`dist2d`). Dos regímenes por bola:
   (`o` → `●` → círculo 2×2 de medias celdas → bola 4×2 con esquinas `▗▖▝▘`),
   con sombra proyectada en el suelo y elevación visual `y − min(z×0.18, …)`.
 
-### Secuencia de lanzamiento (4 fases)
+### Lanzamiento del boliche
+
+Al empezar cada mano, antes de tirar la primera bola: minijuego simplificado
+de **solo potencia** (barra oscilante, `power` 0–1 lineal → distancia), sin
+puntería/efecto/elevación. 35% de doble boliche en ciudades difíciles se
+sigue decidiendo con el primer tiro, igual que antes.
+
+### Secuencia de lanzamiento de bola (4 fases)
 
 1. **Puntería** `↑/↓` (±31°) — guía de puntos que se curva con el efecto.
 2. **Efecto** `←/→` — el rango depende de la Maña del abuelo y las bolas.
@@ -78,8 +85,9 @@ distancias reales usan `dy×2` (`dist2d`). Dos regímenes por bola:
    parpadeante marcando el punto de caída previsto
    (`carry = v²·sin(2·loft)/GRAV`).
 
-Reglas de petanca reales: 3 bolas por bando, tira quien pierde la mano,
-puntúa cada bola más cercana que la mejor rival, mano nula posible.
+Reglas de petanca reales: 3 bolas por jugador en individual/dobletes, 2 en
+tripletas; tira quien pierde la mano; puntúa cada bola más cercana que la
+mejor rival; mano nula posible; partida a 13 puntos.
 
 ### IA rival
 
@@ -104,7 +112,7 @@ mejor bola si manda.
   se ficha con dinero (250–700€). Candidatos se muestran con retrato en gris.
 - `getStat(i,k) = base + bonus de entrenamiento` (tope 10).
 
-### Torneos (3 rondas a 3 puntos)
+### Torneos (3 rondas a 13 puntos)
 
 `newTournament(city)`: CUARTOS → SEMIFINAL → FINAL, rival final = jefe de la
 ciudad, niveles crecientes. Antes de cada ronda, pantalla de **alineación**:
