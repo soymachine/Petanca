@@ -64,42 +64,64 @@ export class CapitulosScreen {
     }
   }
 
-  // tres columnas, una por cada tipo de copa, cada una con su propio
-  // gráfico de barra vertical — glifo y patrón de relleno distintos para
-  // diferenciarlas a golpe de vista — a la misma escala entre sí (la mayor
-  // cosecha marca el 100% de la barra) y el número exacto de títulos debajo
+  // tres columnas, una por cada tipo de copa, cada una con el dibujo ASCII
+  // de un trofeo distinto (copa lisa / copa con asas / trofeo esbelto con
+  // estrella) para diferenciarlas a golpe de vista, y el número exacto de
+  // títulos debajo. Los tres dibujos comparten alto (8 filas, con relleno
+  // de filas en blanco arriba en los más bajos) para que las tres bases
+  // queden a la misma altura, como en una vitrina.
   _drawTrophyCharts(x, y, w) {
     const { screen, player } = this.game;
+    const TROPHY_LIGA = [
+      '         ',
+      ' ▄▄▄▄▄▄▄ ',
+      '█████████',
+      ' ▀▀▀▀▀▀▀ ',
+      '   ███   ',
+      '   ███   ',
+      '  █████  ',
+      ' ███████ ',
+    ];
+    const TROPHY_ESPANA = [
+      '           ',
+      ' ▄▄▄▄▄▄▄▄▄ ',
+      '(█████████)',
+      ' ▀▀▀▀▀▀▀▀▀ ',
+      '    ███    ',
+      '    ███    ',
+      '   █████   ',
+      '  ███████  ',
+    ];
+    const TROPHY_EUROPA = [
+      '    ★    ',
+      '   ▄▄▄   ',
+      '  █████  ',
+      '  █████  ',
+      '   ███   ',
+      '    █    ',
+      '    █    ',
+      '  █████  ',
+    ];
     const cols = [
-      { label: 'COPAS DE LIGA', count: player.seasonTitles, color: '#ffd75e', pattern: 'solid' },
-      { label: 'COPAS DE ESPAÑA', count: player.cupTitles, color: '#c8a0e8', pattern: 'checker' },
-      { label: 'COPAS DE EUROPA', count: player.euroCupTitles, color: '#7ec8ea', pattern: 'stars' },
+      { label: 'COPAS DE LIGA', count: player.seasonTitles, color: '#ffd75e', art: TROPHY_LIGA },
+      { label: 'COPAS DE ESPAÑA', count: player.cupTitles, color: '#c8a0e8', art: TROPHY_ESPANA },
+      { label: 'COPAS DE EUROPA', count: player.euroCupTitles, color: '#7ec8ea', art: TROPHY_EUROPA },
     ];
     const gap = 3;
     const colW = Math.floor((w - gap * 2) / 3);
-    const barW = Math.min(9, colW - 2);
-    const chartH = 6;
-    const maxCount = Math.max(1, ...cols.map((c) => c.count));
+    const artH = TROPHY_LIGA.length;
 
     cols.forEach((c, i) => {
       const cx = x + i * (colW + gap);
       screen.text(cx + Math.max(0, Math.floor((colW - c.label.length) / 2)), y, c.label, '#c9c2a8');
-      const barX = cx + Math.floor((colW - barW) / 2);
-      const filledRows = c.count > 0 ? Math.max(1, Math.round((c.count / maxCount) * chartH)) : 0;
-      for (let r = 0; r < chartH; r++) {
-        const filled = r >= chartH - filledRows;
-        let line;
-        if (!filled) line = '·'.repeat(barW);
-        else if (c.pattern === 'solid') line = '▓'.repeat(barW);
-        else if (c.pattern === 'checker') line = Array.from({ length: barW }, (_, k) => ((k + r) % 2 === 0 ? '▓' : '▒')).join('');
-        else line = Array.from({ length: barW }, (_, k) => (k % 2 === 0 ? '★' : ' ')).join('');
-        screen.text(barX, y + 2 + r, line, filled ? c.color : '#3a3730');
-      }
+      const artW = Math.max(...c.art.map((l) => l.length));
+      const artX = cx + Math.max(0, Math.floor((colW - artW) / 2));
+      screen.block(artX, y + 2, c.art, c.count > 0 ? c.color : '#3a3730');
       const numLabel = `${c.count} título${c.count === 1 ? '' : 's'}`;
-      screen.text(cx + Math.max(0, Math.floor((colW - numLabel.length) / 2)), y + 2 + chartH + 1, numLabel, c.count > 0 ? c.color : '#8a8a7a');
+      screen.text(cx + Math.max(0, Math.floor((colW - numLabel.length) / 2)), y + 2 + artH + 1, numLabel, c.count > 0 ? c.color : '#8a8a7a');
     });
 
-    return y + 2 + chartH + 2;
+    return y + 2 + artH + 2;
   }
 
   _drawSalonDeLaFama() {
