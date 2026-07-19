@@ -72,7 +72,7 @@ export class MatchScreen {
       screen.textCenter(8, `· mano ${M.round} · partida a ${M.target} ·`, '#c9c2a8');
       if (M.turn === 'P' && frame % 26 < 18) screen.textCenter(9, '▶▶ TIRAS TÚ ◀◀', '#7CFC00');
       else if (M.turn === 'A') screen.textCenter(9, `tira ${M.rival}...`, '#ef9f9f');
-      if (M.streak >= 2 && frame % 20 < 15) screen.textCenter(10, `🔥 RACHA x${M.streak} — pulso más firme`, '#ffb347');
+      if (M.streak >= 2 && frame % 20 < 15) screen.textCenter(10, `RACHA x${M.streak} — pulso más firme`, '#ffb347');
     }
 
     const cl = CLIMAS[M.weather.type];
@@ -160,7 +160,7 @@ export class MatchScreen {
         screen.put(COURT_X + lx, COURT_Y + ly, '·', col);
       }
     }
-    if (frame % 20 < 15) screen.textCenter(COURT_Y - 2, '📏  MIDIENDO...  📏', '#ffe14d');
+    if (frame % 20 < 15) screen.textCenter(COURT_Y - 2, '◆ ◆  MIDIENDO...  ◆ ◆', '#ffe14d');
   }
 
   // guía del boliche: solo dirección + potencia, sin efecto ni elevación
@@ -311,7 +311,7 @@ export class MatchScreen {
       if (isRainy(M.weather.type)) screen.put(COURT_X + pt.x, COURT_Y + pt.y, '/', pt.s > 1 ? '#7fc4e8' : '#5590b0');
       else if (M.weather.type === 'CALOR') screen.put(COURT_X + pt.x, COURT_Y + pt.y, '~', '#e8cf7a');
       else if (M.weather.type === 'NIEBLA') screen.put(COURT_X + pt.x, COURT_Y + pt.y, pt.s > 1 ? '▒' : '░', '#9aa4a4');
-      else if (M.weather.type === 'HELADA') screen.put(COURT_X + pt.x, COURT_Y + pt.y, '❋', '#dff0fa');
+      else if (M.weather.type === 'HELADA') screen.put(COURT_X + pt.x, COURT_Y + pt.y, '❄', '#dff0fa');
       else screen.put(COURT_X + pt.x, COURT_Y + pt.y, pt.s > 1 ? '-' : '∙', '#cfc9a0');
     }
     for (const s of M.weather.splats) {

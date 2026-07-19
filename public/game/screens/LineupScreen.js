@@ -43,7 +43,7 @@ export class LineupScreen {
     } else {
       screen.textCenter(1, `╣ JORNADA ${ctx.league.matchday + 1} — LIGA DE ${ctx.city.name} ╠`, ctx.city.color);
     }
-    if (ctx.festival) screen.textCenter(2, `🎉 ${ctx.festival} — ambiente de feria, mejor taquilla si se gana 🎉`, frame % 24 < 16 ? '#ffb347' : '#c98a3a');
+    if (ctx.festival) screen.textCenter(2, `${ctx.festival} — ambiente de feria, mejor taquilla si se gana`, frame % 24 < 16 ? '#ffb347' : '#c98a3a');
 
     const isNemesis = !ctx.isCup && !ctx.isFriendly && player.nemesis && player.nemesis.city === opponent.id;
     const isDerby = !ctx.isCup && !ctx.isFriendly && player.derbyClub && player.derbyClub.id === opponent.id;
@@ -138,7 +138,7 @@ export class LineupScreen {
       const picked = ctx.teamSel.includes(id);
       const stCol = s.st > 60 ? '#7ec850' : s.st > 30 ? '#ffe14d' : '#ff5c5c';
       const aff = d.clima[r.forecast.main] !== undefined ? d.clima[r.forecast.main] : 0;
-      const affStr = r.forecast.main === 'SOL' ? '  ' : aff === 1 ? ' ✚' : aff === -1 ? ' ▼' : '  ';
+      const affStr = r.forecast.main === 'SOL' ? '  ' : aff === 1 ? ' ✡' : aff === -1 ? ' ▼' : '  ';
       const affCol = aff === 1 ? '#7ec850' : aff === -1 ? '#ff5c5c' : '#666';
       // una sola línea por abuelo: las 5 stats ya no hace falta repetirlas
       // aquí, viven en el tooltip del rollover — así caben todos sin scroll
@@ -242,7 +242,7 @@ export class LineupScreen {
     lines.push([`Nv.${s.level}  ·  ${STAT_KEYS.map((k) => `${STAT_LABEL[k][0]}${s.getStatDisplay(k)}`).join('  ')}`, '#88c8e8']);
     if (s.points > 0) lines.push([`${s.points} puntos por repartir en Mi Peña`, '#ffd75e']);
     if (!s.signed) wrapText(ABUELO_DATA[id].trait, 42).forEach((l) => lines.push(['  ' + l, '#d8b8e8']));
-    lines.push([`${s.career.wins}V ${s.career.losses}D`, '#9a927a']);
+    lines.push([`${s.career.wins}G ${s.career.losses}P`, '#9a927a']);
 
     const tw = Math.min(56, Math.max(...lines.map((l) => l[0].length)) + 4);
     const th = lines.length + 2;

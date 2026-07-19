@@ -80,7 +80,7 @@ export class ResultScreen {
     yy += 2;
     screen.textCenter(yy++, `+${o.xp} XP      +${o.money}€`, '#b48ce8');
     if (o.revenge) screen.textCenter(yy++, '¡REVANCHA CUMPLIDA! XP con sabor a gloria (+50%)', '#ff8c5b');
-    if (o.stormWin) screen.textCenter(yy++, '⚡ ¡VICTORIA BAJO TORMENTA! Premio doble por aguantar el chaparrón.', '#c8a0e8');
+    if (o.stormWin) screen.textCenter(yy++, '¡VICTORIA BAJO TORMENTA! Premio doble por aguantar el chaparrón.', '#c8a0e8');
     if (o.itemDrop) {
       const it = ITEMS[o.itemDrop.item.id];
       const climaTxt = o.itemDrop.item.clima ? ` (inmunidad a ${o.itemDrop.item.clima})` : '';
