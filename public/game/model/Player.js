@@ -70,6 +70,7 @@ export class Player {
     this.pressPromise = null;
     this.friendliesLeft = 3; // amistosos de pretemporada disponibles esta temporada
     this.cupTitles = 0;
+    this.euroCupTitles = 0;
     this.dailyBest = {};
     // libro de récords del Panteón: la mayor paliza dada, cualquiera que
     // sea la competición — {margin, rival, cityName} o null hasta la primera
@@ -80,6 +81,12 @@ export class Player {
     // pareja de leyenda) entran aquí, y no se podan nunca. Ver
     // Player.addAnnal y la sección histórica de HemerotecaScreen.js.
     this.annals = [];
+    // resumen de cada temporada de liga cerrada: ciudad/nivel, puesto final,
+    // ascenso/descenso y premios de la peña — a diferencia de `annals` (solo
+    // los hitos más gordos), esto es un registro completo temporada a
+    // temporada para la subsección Históricos. Ver Career.js donde se
+    // cierra la temporada.
+    this.seasonHistory = [];
     this.reachedTopFlight = false; // ya se anotó el hito de llegar por primera vez a Madrid (nivel 8)
     // resultados de partidos jugados, por día del calendario absoluto —
     // para poder mostrar el marcador al hacer rollover sobre un día ya
@@ -206,6 +213,11 @@ export class Player {
       seasonTitles: this.seasonTitles,
       stormWins: this.stormWins,
       promotions: this.promotions,
+      cupTitles: this.cupTitles,
+      euroCupTitles: this.euroCupTitles,
+      euroUpsets: this.euroUpsets,
+      reachedTopFlight: this.reachedTopFlight,
+      level: this.level,
       state: Object.fromEntries(this.roster.ids.map((id) => [id, this.roster.get(id)])),
     };
   }
@@ -257,8 +269,9 @@ export class Player {
       boardConfidence: this.boardConfidence, boardUltimatums: this.boardUltimatums, boardCrisis: this.boardCrisis,
       difficulty: this.difficulty, difficultyChosen: this.difficultyChosen, debugMode: this.debugMode, pressPromise: this.pressPromise,
       friendliesLeft: this.friendliesLeft, cup: this.cup ? this.cup.toJSON() : null, cupTitles: this.cupTitles,
+      euroCupTitles: this.euroCupTitles,
       bestMarginWin: this.bestMarginWin, chemistry: this.chemistry, seasonsPlayed: this.seasonsPlayed,
-      publicImage: this.publicImage, annals: this.annals, reachedTopFlight: this.reachedTopFlight,
+      publicImage: this.publicImage, annals: this.annals, seasonHistory: this.seasonHistory, reachedTopFlight: this.reachedTopFlight,
       matchResults: this.matchResults,
       seenDecisions: this.seenDecisions, pendingDecisions: this.pendingDecisions,
       clubName: this.clubName, currentLeagueLevel: this.currentLeagueLevel,
@@ -319,6 +332,7 @@ export class Player {
     p.friendliesLeft = json.friendliesLeft ?? 3;
     p.cup = json.cup ? Cup.fromJSON(json.cup) : null;
     p.cupTitles = json.cupTitles || 0;
+    p.euroCupTitles = json.euroCupTitles || 0;
     p.bestMarginWin = json.bestMarginWin || null;
     p.chemistry = json.chemistry || {};
     // guardado de antes de este contador: se aproxima con el nivel de liga
@@ -327,6 +341,7 @@ export class Player {
     p.seasonsPlayed = json.seasonsPlayed ?? Math.max(1, json.currentLeagueLevel || 1);
     p.publicImage = json.publicImage ?? 0;
     p.annals = json.annals || [];
+    p.seasonHistory = json.seasonHistory || [];
     p.matchResults = json.matchResults || {};
     p.seenDecisions = json.seenDecisions || [];
     p.pendingDecisions = json.pendingDecisions || [];
