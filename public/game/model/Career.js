@@ -9,7 +9,7 @@ import { TransferPool } from '../domain/TransferPool.js';
 import { advanceScoutingWeek, currentMarketSeedKeys } from '../domain/Scouting.js';
 import { EuropeanCup } from '../domain/EuropeanCup.js';
 import { rivalPersonalityLine } from '../data/rivalPersonality.js';
-import { countryTag } from '../data/countries.js';
+import { countryTag, countryLabel, citiesFor, levelBoundsFor } from '../data/countries.js';
 import { chemistryKey, chemistryLevel, CHEMISTRY_LEVELS } from '../domain/Chemistry.js';
 import { Chronicle } from '../match/Chronicle.js';
 import { composeBiography } from '../data/biografias.js';
@@ -100,12 +100,12 @@ export class Career {
         // os manda a la categoría inferior de un plumazo si se puede. El
         // cambio de liga en sí se aplica al final (después de resolver
         // esta misma jornada en la liga actual, no antes).
-        crisisDemotion = league.level > 1;
+        crisisDemotion = league.level > levelBoundsFor(p.homeCountry).min;
         money -= 250;
         p.boardConfidence = 45;
         const pres = boardPresidentFor(p.clubName);
         if (crisisDemotion) {
-          p.news.push(`${pres.name.toUpperCase()} YA NO AGUANTA MÁS: segundo ultimátum de la temporada. Os bajan de categoría sin miramientos, a ${cityAt(league.level - 1)}, y multa de 250€.`);
+          p.news.push(`${pres.name.toUpperCase()} YA NO AGUANTA MÁS: segundo ultimátum de la temporada. Os bajan de categoría sin miramientos, a ${cityAt(league.level - 1, p.homeCountry)}, y multa de 250€.`);
         } else {
           p.news.push(`${pres.name.toUpperCase()} YA NO AGUANTA MÁS: segundo ultimátum de la temporada. Ya no quedan categorías más abajo, pero la multa es de 250€ y la paciencia sigue bajo mínimos.`);
         }
@@ -305,23 +305,24 @@ export class Career {
         p.addAnnal(`¡CAMPEONES DE LA LIGA DE ${league.cityName}! ${p.clubName} corona la temporada en lo más alto de su categoría.`);
       }
 
+      const bounds = levelBoundsFor(p.homeCountry);
       const promoted = rank <= 2 && league.level < 8;
-      const relegated = rank >= 9 && league.level > 1;
+      const relegated = rank >= 9 && league.level > bounds.min;
       const fromLevel = league.level;
       if (promoted) {
         p.promotions++;
         p.currentLeagueLevel = league.level + 1;
         p.leagueWorld.movePlayer(fromLevel, p.currentLeagueLevel, p.clubName);
-        p.news.push(`¡ASCENSO! ${p.clubName} sube a la liga de ${cityAt(p.currentLeagueLevel)} tras acabar ${rank}º.`);
+        p.news.push(`¡ASCENSO! ${p.clubName} sube a la liga de ${cityAt(p.currentLeagueLevel, p.homeCountry)} tras acabar ${rank}º.`);
         if (p.currentLeagueLevel === 8 && !p.reachedTopFlight) {
           p.reachedTopFlight = true;
-          p.addAnnal(`${p.clubName} PISA MADRID POR PRIMERA VEZ: ascenso a la máxima categoría de la liga federada.`);
+          p.addAnnal(`${p.clubName} PISA ${cityAt(8, p.homeCountry).toUpperCase()} POR PRIMERA VEZ: ascenso a la máxima categoría de la liga federada.`);
         }
       } else if (relegated) {
         p.relegations++;
-        p.currentLeagueLevel = Math.max(1, league.level - 1);
+        p.currentLeagueLevel = Math.max(bounds.min, league.level - 1);
         p.leagueWorld.movePlayer(fromLevel, p.currentLeagueLevel, p.clubName);
-        p.news.push(`DESCENSO: ${p.clubName} baja a la liga de ${cityAt(p.currentLeagueLevel)} tras acabar ${rank}º.`);
+        p.news.push(`DESCENSO: ${p.clubName} baja a la liga de ${cityAt(p.currentLeagueLevel, p.homeCountry)} tras acabar ${rank}º.`);
       } else {
         p.news.push(`Fin de temporada en ${league.cityName}: ${p.clubName} acaba ${rank}º de 10.`);
         league.startNewSeason();
@@ -340,7 +341,8 @@ export class Career {
         p.cup = Cup.generate(p.leagueWorld, p.club, p.club.avgSkill(p.roster));
         const day = p.seasonClock.firstFreeDayFrom(3, p.league);
         p.seasonClock.scheduleCup(day);
-        p.news.push(`¡ARRANCA LA COPA DE ESPAÑA! ${p.clubName} debuta en ${p.cup.roundName.toLowerCase()} contra ${p.cup.playerOpponent().name}.`);
+        const cupLabel = p.homeCountry === 'ES' ? 'LA COPA DE ESPAÑA' : `LA COPA NACIONAL DE ${countryLabel(p.homeCountry).toUpperCase()}`;
+        p.news.push(`¡ARRANCA ${cupLabel}! ${p.clubName} debuta en ${p.cup.roundName.toLowerCase()} contra ${p.cup.playerOpponent().name}.`);
       }
 
       // Copa de Europa: solo si acabas de cerrar una temporada en el nivel
@@ -349,7 +351,7 @@ export class Career {
       // de cada uno de los 5 países extranjeros, totalmente al azar y sin
       // mirar país.
       if (fromLevel === 8 && rank <= 4 && (!p.euroCup || p.euroCup.finished)) {
-        const groups = [{ country: 'ES', clubs: table.slice(0, 4) }];
+        const groups = [{ country: p.homeCountry, clubs: table.slice(0, 4) }];
         for (const [code, world] of p.foreignLeagues) {
           const top = world.leagueOf(8);
           if (top) groups.push({ country: code, clubs: top.standings().slice(0, 4) });
@@ -358,7 +360,7 @@ export class Career {
         const day = p.seasonClock.firstFreeDayFrom(6, p.league);
         p.seasonClock.scheduleEuroCup(day);
         const firstOpp = p.euroCup.playerOpponent();
-        const oppTag = firstOpp ? countryTag(firstOpp.country) : '';
+        const oppTag = firstOpp ? countryTag(firstOpp.country, p.homeCountry) : '';
         p.news.push(`¡OS CLASIFICÁIS PARA LA COPA DE EUROPA! ${p.clubName} debuta en ${p.euroCup.roundName.toLowerCase()} contra ${firstOpp ? firstOpp.name : '?'}${oppTag}.`);
       }
       p.boardGoal = boardGoalFor(p.seasonsPlayed, p.currentLeagueLevel);
@@ -589,9 +591,9 @@ function fakeLeagueScore(won) {
   return won ? [13, loserScore] : [loserScore, 13];
 }
 
-function cityAt(level) {
-  const map = { 1: 'Albacete', 2: 'Cuenca', 3: 'Zaragoza', 4: 'Sevilla', 5: 'Valencia', 6: 'Bilbao', 7: 'Barcelona', 8: 'Madrid' };
-  return map[level] || `nivel ${level}`;
+function cityAt(level, country) {
+  const c = citiesFor(country).find((x) => x.diff === level);
+  return c ? c.name : `nivel ${level}`;
 }
 function boardGoalFor(seasonNum, leagueLevel) { return BoardObjective.forSeason(seasonNum, leagueLevel).goal; }
 

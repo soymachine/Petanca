@@ -1,5 +1,5 @@
 import { rnd, pickWeighted } from '../core/utils.js';
-import { CITIES } from '../data/cities.js';
+import { cityByName } from '../data/countries.js';
 import { clamp } from '../core/utils.js';
 import { rollFestival } from '../data/festivals.js';
 
@@ -9,7 +9,7 @@ import { rollFestival } from '../data/festivals.js';
 // sin tener que tocarla.
 export class WeeklyMatchContext {
   constructor(league, opponentClub, playerMoney, nemesisClubId, derbyClubId) {
-    const city = CITIES.find((c) => c.diff === league.level);
+    const city = cityByName(league.cityName);
     this.city = city;
     this.league = league;
     this.opponentClub = opponentClub;

@@ -7,7 +7,7 @@ import { FacilityManager } from './FacilityManager.js';
 import { LineupPresets } from './LineupPresets.js';
 import { LeagueWorld } from '../domain/LeagueWorld.js';
 import { ForeignLeagueWorld } from '../domain/ForeignLeagueWorld.js';
-import { FOREIGN_COUNTRIES } from '../data/countries.js';
+import { awayCountriesFor } from '../data/countries.js';
 import { SeasonClock } from '../domain/SeasonClock.js';
 import { FreeAgentPool } from '../domain/FreeAgentPool.js';
 import { Cup } from '../domain/Cup.js';
@@ -127,10 +127,17 @@ export class Player {
     this.boardGoal = boardObjectiveFor(1, 1);
     this.weeklyGoal = rollWeeklyGoal();
 
+    // país de casa: España por defecto (el resto se elige y se desbloquea
+    // en TitleScreen — ver MetaProgress.js). Una partida nueva SIEMPRE
+    // arranca así; si se elige otro país, TitleScreen regenera clubName/
+    // leagueWorld/foreignLeagues/cup tal cual hace ya el selector de nivel
+    // de debug, no aquí en el constructor.
+    this.homeCountry = 'ES';
+
     // liga y calendario
     this.clubName = CLUB_NAMES[Math.floor(Math.random() * CLUB_NAMES.length)];
     this.currentLeagueLevel = 1; // Albacete
-    this.leagueWorld = LeagueWorld.generate(this.currentLeagueLevel, this.clubName);
+    this.leagueWorld = LeagueWorld.generate(this.currentLeagueLevel, this.clubName, this.homeCountry);
     this.seasonClock = new SeasonClock();
     this.freeAgents = new FreeAgentPool();
     this.freeAgents.refresh();
@@ -140,12 +147,14 @@ export class Player {
     this.promotions = 0;
     this.relegations = 0;
 
-    // las 3 ligas de fondo de cada país extranjero (Francia, Italia,
-    // Bélgica, Suiza, Portugal): 100% IA, nunca las juega el jugador
-    // directamente — se simulan semana a semana (ver Career.js) para que
-    // tengan una clasificación real cuando toque sortear la Copa de Europa
+    // las ligas de fondo de los 5 países que NO son el de casa (Francia,
+    // Italia, Bélgica, Suiza, Portugal si juegas en España; España + 4 de
+    // esos 5 si juegas en un país extranjero): 100% IA, nunca las juega el
+    // jugador directamente — se simulan semana a semana (ver Career.js)
+    // para que tengan una clasificación real cuando toque sortear la Copa
+    // de Europa
     this.foreignLeagues = new Map();
-    for (const fc of FOREIGN_COUNTRIES) this.foreignLeagues.set(fc.code, ForeignLeagueWorld.generate(fc.code, fc.cities));
+    for (const { code, cities } of awayCountriesFor(this.homeCountry)) this.foreignLeagues.set(code, ForeignLeagueWorld.generate(code, cities));
     this.euroCup = null; // se genera al terminar una temporada en nivel 8 quedando entre los primeros
   }
 
@@ -286,6 +295,7 @@ export class Player {
       publicImage: this.publicImage, annals: this.annals, seasonHistory: this.seasonHistory, reachedTopFlight: this.reachedTopFlight,
       matchResults: this.matchResults,
       seenDecisions: this.seenDecisions, pendingDecisions: this.pendingDecisions,
+      homeCountry: this.homeCountry,
       clubName: this.clubName, currentLeagueLevel: this.currentLeagueLevel,
       leagueWorld: this.leagueWorld.toJSON(),
       seasonClock: this.seasonClock.toJSON(),
@@ -365,6 +375,9 @@ export class Player {
     p.dailyBest = json.dailyBest || {};
     p.boardGoal = json.boardGoal || boardObjectiveFor(1);
     p.weeklyGoal = weeklyGoalFromJSON(json.weeklyGoal);
+    // guardado de antes de la meta-progresión (elegir país): se da por
+    // España, el único país jugable que existía entonces
+    p.homeCountry = json.homeCountry || 'ES';
     p.clubName = json.clubName || p.clubName;
     p.currentLeagueLevel = json.currentLeagueLevel ?? 1;
     // guardado antiguo sin el flag: si ya estaba en Madrid, se da por
@@ -392,7 +405,9 @@ export class Player {
     p.relegations = json.relegations || 0;
     if (worldIsCurrent && json.foreignLeagues) {
       p.foreignLeagues = new Map();
-      for (const fc of FOREIGN_COUNTRIES) p.foreignLeagues.set(fc.code, ForeignLeagueWorld.fromJSON(fc.code, json.foreignLeagues[fc.code]));
+      for (const { code } of awayCountriesFor(p.homeCountry)) {
+        p.foreignLeagues.set(code, ForeignLeagueWorld.fromJSON(code, json.foreignLeagues[code]));
+      }
     }
     p.euroCup = json.euroCup ? EuropeanCup.fromJSON(json.euroCup) : null;
     return p;
@@ -406,6 +421,7 @@ export class Player {
     p.difficultyChosen = true; // guardado de una versión anterior al selector: no interrumpir
     p.systemsRevealed = { mercado: true, ojeadores: true, patrocinios: true, junta: true }; // partida ya en marcha: nada que tapar
     p.helpHintSeen = true;
+    p.homeCountry = 'ES'; // el único país jugable cuando se guardó esta partida
     p.money = o.money ?? 150; p.xp = o.xp ?? 0; p.level = o.level ?? 1;
     p.wins = o.wins ?? 0; p.losses = o.losses ?? 0;
     if (o.roster) {

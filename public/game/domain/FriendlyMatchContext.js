@@ -1,5 +1,5 @@
 import { rnd, pickWeighted, clamp } from '../core/utils.js';
-import { CITIES } from '../data/cities.js';
+import { cityByName } from '../data/countries.js';
 
 // Adaptador que hace que el primer amistoso de pretemporada "parezca" un
 // torneo de una sola ronda de cara a Match.js — igual que WeeklyMatchContext,
@@ -7,7 +7,7 @@ import { CITIES } from '../data/cities.js';
 // patrocinio en juego. Es solo para coger forma antes de que empiece la liga.
 export class FriendlyMatchContext {
   constructor(league, opponentClub) {
-    const city = CITIES.find((c) => c.diff === league.level);
+    const city = cityByName(league.cityName);
     this.city = city;
     this.league = league;
     this.opponentClub = opponentClub;

@@ -5,7 +5,8 @@ import { PHOTO_BANNER } from '../data/art/photoBanner.js';
 import { FACES } from '../data/art/faces.js';
 import { RIVAL_FACES } from '../data/art/rivalFaces.js';
 import { CITIES } from '../data/cities.js';
-import { allForeignCities, countryTag, strengthFor } from '../data/countries.js';
+import { allForeignCities, countryTag, strengthFor, citiesFor } from '../data/countries.js';
+import { setHomeCountry } from '../data/activeRoster.js';
 import { Player } from '../model/Player.js';
 import { Career } from '../model/Career.js';
 import { Calendar } from '../model/Calendar.js';
@@ -62,6 +63,11 @@ export class Game {
     }
 
     this.player = Player.load();
+    // los 10 abuelos fundadores y sus retratos dependen del país de casa
+    // (ver data/activeRoster.js): hay que fijarlos ANTES de que cualquier
+    // pantalla lea ABUELO_DATA/FACES, tanto en el arranque como al cambiar
+    // de perfil (ver TitleScreen._drawSlotPicker)
+    setHomeCountry(this.player.homeCountry);
     this.career = new Career(this.player, (id) => this.displayName(id));
 
     this.weeklyMatch = null;
@@ -526,7 +532,7 @@ export class Game {
     const opponentEntry = cup && cup.playerOpponent();
     if (!cup || cup.finished || !opponentEntry) { this.state = 'hub'; return; }
 
-    this.weeklyMatch = new CupMatchContext(cup, opponentEntry, null);
+    this.weeklyMatch = new CupMatchContext(cup, opponentEntry, null, citiesFor(this.player.homeCountry));
     this.isCupMatch = true;
     this.isEuroCupMatch = false;
     this.screens.lineup.cursor = 0;
@@ -610,7 +616,7 @@ export class Game {
     const p = this.player;
     const cup = p.euroCup;
     const opponent = cup.playerOpponent();
-    const rivalTag = countryTag(opponent.country);
+    const rivalTag = countryTag(opponent.country, p.homeCountry);
     const roundName = cup.roundName;
     cup.resolvePlayerPairing(won);
     this._grantMatchXp(this.weeklyMatch, won, 15, 25);
@@ -620,9 +626,9 @@ export class Game {
     p.matchResults[p.seasonClock.day] = { kind: 'eurocup', scoreP, scoreA, won, oppName: `${opponent.name}${rivalTag}`, roundName };
 
     // dar la campanada: ganar a un club de un país con más strength que el
-    // tuyo (Francia/Italia/Bélgica) pesa más para el prestigio de mánager
-    // que un triunfo cualquiera — ver Player.managerRep
-    if (won && strengthFor(opponent.country) > 1) {
+    // TUYO (no siempre España — ver Player.homeCountry) pesa más para el
+    // prestigio de mánager que un triunfo cualquiera — ver Player.managerRep
+    if (won && strengthFor(opponent.country) > strengthFor(p.homeCountry)) {
       p.euroUpsets++;
       p.news.push(`DAIS LA CAMPANADA: ${p.clubName} tumba a ${opponent.name}${rivalTag}, de un país con más nivel que el vuestro. La comarca no habla de otra cosa.`);
       p.addAnnal(`CAMPANADA EUROPEA: ${p.clubName} tumba a ${opponent.name}${rivalTag}, de un país de más nivel, en ${cup.roundName.toLowerCase()}.`);
@@ -654,7 +660,7 @@ export class Game {
       } else {
         p.addReward(180, 260);
         const nextOpp = cup.playerOpponent();
-        const nextTag = nextOpp ? countryTag(nextOpp.country) : '';
+        const nextTag = nextOpp ? countryTag(nextOpp.country, p.homeCountry) : '';
         p.news.push(`COPA DE EUROPA: ${p.clubName} pasa a ${cup.roundName.toLowerCase()} tras ganar a ${opponent.name}${rivalTag} (${scoreP}-${scoreA}). Próximo rival: ${nextOpp ? nextOpp.name : '?'}${nextTag}.`);
         const day = p.seasonClock.firstFreeDayFrom(6, p.league);
         p.seasonClock.scheduleEuroCup(day);

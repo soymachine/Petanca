@@ -10,6 +10,8 @@
 // Orden de fuerza pensado como un vistazo al prestigio real de la petanca
 // en cada país: Francia (cuna del deporte) > Italia > Bélgica > Suiza ≈
 // España > Portugal.
+import { CITIES } from './cities.js';
+
 export const FOREIGN_COUNTRIES = [
   {
     code: 'FR', label: 'Francia', strength: 1.15,
@@ -108,11 +110,71 @@ export function allForeignCityMarkers() {
   return FOREIGN_COUNTRIES.flatMap((c) => c.cities.map((city) => ({ city, country: c.code })));
 }
 
-// etiqueta lista para pegar en un texto: "" si es España (el caso normal,
-// no hace falta aclararlo), " (Italia)" etc si no — usado en cualquier
-// noticia/tarjeta que mencione un club rival de la Copa de Europa
-export function countryTag(code) {
-  if (!code || code === 'ES') return '';
+// etiqueta lista para pegar en un texto: "" si el club es del país de CASA
+// del jugador (el caso normal, no hace falta aclararlo — España por
+// defecto si no se indica `homeCode`, para no romper llamadas antiguas),
+// " (Italia)" / " (España)" etc si no — usado en cualquier noticia/tarjeta
+// que mencione un club rival de la Copa de Europa
+export function countryTag(code, homeCode = 'ES') {
+  if (!code || code === homeCode) return '';
+  return ` (${countryLabel(code)})`;
+}
+
+// nombre para humanos de un país jugable, España incluida (que no vive en
+// FOREIGN_COUNTRIES) — para textos como "¡ARRANCA LA COPA DE EUROPA!" o el
+// tag de countryTag()
+export function countryLabel(code) {
+  if (!code || code === 'ES') return 'España';
   const c = foreignCountry(code);
-  return c ? ` (${c.label})` : '';
+  return c ? c.label : 'España';
+}
+
+// las ciudades (con su nivel de liga, diff 1..8) del país de CASA del
+// jugador: las 8 de siempre si es España, o las 3 de fondo (diff 6/7/8) si
+// es un país extranjero — ver LeagueWorld.generate
+export function citiesFor(code) {
+  if (!code || code === 'ES') return CITIES;
+  const c = foreignCountry(code);
+  return c ? c.cities : CITIES;
+}
+
+// techo y suelo de nivel de liga jugable en un país: España es 1..8, un
+// país extranjero (siempre 3 ligas de fondo a diff 6/7/8) es 6..8 — el
+// techo (8) es siempre el mismo para cualquier país, así que casi todo el
+// código que ya comparaba contra "8" a secas sigue siendo válido; solo el
+// SUELO (antes siempre 1) necesita mirar este valor.
+export function levelBoundsFor(code) {
+  const diffs = citiesFor(code).map((c) => c.diff);
+  return { min: Math.min(...diffs), max: Math.max(...diffs) };
+}
+
+// busca una ciudad por nombre en TODAS las conocidas (España + los 5
+// extranjeros): evita el bug de "CITIES.find(c => c.diff === nivel)", que
+// con niveles 6/7/8 devuelve la ciudad ESPAÑOLA de ese nivel aunque el
+// jugador esté jugando en otro país (todos comparten la misma escala de
+// diff) — los nombres de ciudad sí son únicos en todo el circuito.
+export function cityByName(name) {
+  return CITIES.find((c) => c.name === name) || allForeignCities().find((c) => c.name === name) || null;
+}
+
+// las ciudades de fondo (100% IA) de un país cuando NO es el país de casa
+// del jugador: los 5 extranjeros siempre usan sus 3 de siempre; España usa
+// solo sus 3 de nivel más alto (Bilbao/Barcelona/Madrid, diff 6/7/8) —
+// mismo patrón "ligero" que ya se decidió para los países extranjeros, en
+// vez de simular sus 8 ligas completas de fondo cuando el jugador está en
+// otro país.
+export function awayCitiesFor(code) {
+  if (!code || code === 'ES') return CITIES.slice(-3);
+  const c = foreignCountry(code);
+  return c ? c.cities : CITIES.slice(-3);
+}
+
+// los 5 países que NO son el de casa, con las ciudades que les toca
+// simular de fondo — usado para construir/restaurar player.foreignLeagues
+// sea cual sea el país de casa (antes siempre los 5 FOREIGN_COUNTRIES a
+// secas, porque España era home siempre)
+export function awayCountriesFor(homeCode) {
+  return ['ES', 'FR', 'IT', 'BE', 'CH', 'PT']
+    .filter((code) => code !== homeCode)
+    .map((code) => ({ code, cities: awayCitiesFor(code) }));
 }

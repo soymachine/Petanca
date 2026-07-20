@@ -1,5 +1,5 @@
 import { wrapText, hitRect, truncate } from '../core/utils.js';
-import { CITIES } from '../data/cities.js';
+import { cityByName } from '../data/countries.js';
 import { seaCell } from '../core/seaFx.js';
 import { TabsBar } from './TabsBar.js';
 import { CrestGenerator } from '../portraits/CrestGenerator.js';
@@ -290,6 +290,6 @@ export class HubScreen {
 
   _cityData() {
     const league = this.game.player.league;
-    return CITIES.find((c) => c.diff === league.level);
+    return cityByName(league.cityName);
   }
 }

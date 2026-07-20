@@ -1,5 +1,5 @@
 import { CITIES } from '../data/cities.js';
-import { FOREIGN_COUNTRIES, allForeignCityMarkers, foreignCountry } from '../data/countries.js';
+import { FOREIGN_COUNTRIES, allForeignCityMarkers, foreignCountry, cityByName, levelBoundsFor } from '../data/countries.js';
 import { seaCell } from '../core/seaFx.js';
 import { TabsBar } from './TabsBar.js';
 import { Geography } from '../data/geography.js';
@@ -29,6 +29,7 @@ const DEFAULT_ZOOM = 2;
 // vistazo en el mapa y en la leyenda — España se trata aparte (gris si no
 // es la tuya, verde vivo si lo es, ver draw())
 const COUNTRY_STYLE = {
+  ES: { color: '#8a8a7a', glyph: '■' },
   FR: { color: '#6fa8dc', glyph: '▲' },
   IT: { color: '#e8433f', glyph: '◆' },
   BE: { color: '#e8c832', glyph: '●' },
@@ -113,7 +114,7 @@ export class LeagueMapScreen {
   // extranjera de la que aún no hay datos generados
   _leagueFor(marker) {
     const { player } = this.game;
-    if (marker.country === 'ES') return player.leagueWorld.leagueOf(marker.city.diff);
+    if (marker.country === player.homeCountry) return player.leagueWorld.leagueOf(marker.city.diff);
     return player.foreignLeagues.get(marker.country)?.leagueOf(marker.city.diff) || null;
   }
 
@@ -123,7 +124,7 @@ export class LeagueMapScreen {
     screen.clear();
     TabsBar.draw(this.game, 'leaguemap');
     if (!this.cam) {
-      const home = CITIES.find((c) => c.diff === player.currentLeagueLevel) || CITIES[0];
+      const home = cityByName(player.league.cityName) || CITIES[0];
       this._camCenterOn(home);
     }
 
@@ -153,7 +154,7 @@ export class LeagueMapScreen {
     const markerScreen = [];
     for (let i = 0; i < ALL_MARKERS.length; i++) {
       const { city: c, country } = ALL_MARKERS[i];
-      const isMine = country === 'ES' && c.diff === player.currentLeagueLevel;
+      const isMine = country === player.homeCountry && c.diff === player.currentLeagueLevel;
       const isSel = i === this.cursor;
       const style = COUNTRY_STYLE[country];
       const col = isMine ? '#7CFC00' : style ? style.color : '#8a8a8a';
@@ -176,9 +177,11 @@ export class LeagueMapScreen {
     // leyenda de países: fila libre justo bajo el mapa (a su izquierda; la
     // clasificación ocupa la misma franja de filas a la derecha)
     let lx = MAP_BOX.x;
-    screen.text(lx, LEGEND_Y, '■ ES', '#8a8a7a'); lx += 6;
-    for (const fc of FOREIGN_COUNTRIES) {
-      const s = COUNTRY_STYLE[fc.code];
+    const homeStyle = COUNTRY_STYLE[player.homeCountry] || COUNTRY_STYLE.ES;
+    screen.text(lx, LEGEND_Y, `${homeStyle.glyph} ${player.homeCountry}`, homeStyle.color); lx += 6;
+    for (const code of ['ES', ...FOREIGN_COUNTRIES.map((fc) => fc.code)]) {
+      if (code === player.homeCountry) continue;
+      const s = COUNTRY_STYLE[code];
       screen.text(lx, LEGEND_Y, s.glyph, s.color);
       lx += 2;
     }
@@ -211,7 +214,7 @@ export class LeagueMapScreen {
       this._jornadaIdx = league ? Math.max(0, league.matchday - 1) : 0;
     }
 
-    if (marker.country === 'ES') this._drawSpanishLeague(marker.city, league);
+    if (marker.country === player.homeCountry) this._drawHomeLeague(marker.city, league);
     else this._drawForeignLeague(marker.city, marker.country, league);
 
     this._drawJornadaPanel(marker, league);
@@ -234,19 +237,19 @@ export class LeagueMapScreen {
     if (league && input.hit('ArrowLeft')) this._jornadaIdx = clamp(this._jornadaIdx - 1, 0, league.fixtures.length - 1);
     if (league && input.hit('ArrowRight')) this._jornadaIdx = clamp(this._jornadaIdx + 1, 0, league.fixtures.length - 1);
     if (input.hit('m') || input.hit('M') || (miLigaOver && input.mouse.clicked)) {
-      const myIdx = ALL_MARKERS.findIndex((mk) => mk.country === 'ES' && mk.city.diff === player.currentLeagueLevel);
+      const myIdx = ALL_MARKERS.findIndex((mk) => mk.country === player.homeCountry && mk.city.diff === player.currentLeagueLevel);
       if (myIdx >= 0) { this.cursor = myIdx; this._camCenterOn(ALL_MARKERS[myIdx].city); }
     }
     if (input.hit('+') || input.hit('=')) this._setZoom(this.zoom + 1);
     if (input.hit('-') || input.hit('_')) this._setZoom(this.zoom - 1);
-    if ((input.hit('Enter') || input.hit(' ')) && marker.country === 'ES' && marker.city.diff === player.currentLeagueLevel) this.game.state = 'hub';
+    if ((input.hit('Enter') || input.hit(' ')) && marker.country === player.homeCountry && marker.city.diff === player.currentLeagueLevel) this.game.state = 'hub';
     if (input.hit('Escape')) this.game.state = 'hub';
   }
 
-  _drawSpanishLeague(c, league) {
+  _drawHomeLeague(c, league) {
     const { screen, player } = this.game;
     const isMine = c.diff === player.currentLeagueLevel;
-    const canPromote = league.level < 8, canRelegate = league.level > 1;
+    const canPromote = league.level < 8, canRelegate = league.level > levelBoundsFor(player.homeCountry).min;
     this._drawStandingsPanel(league, c.color, `⚜ ${c.name} — niv.${c.diff}/8${isMine ? '  ★ TU LIGA' : ''}`, c.feature.desc, canPromote, canRelegate);
 
     if (!isMine) {
@@ -387,7 +390,7 @@ export class LeagueMapScreen {
   _drawClubTooltip(club, mx, my) {
     const { screen, player } = this.game;
     const crest = CrestGenerator.generate(club.name);
-    const countryTag = club.country && club.country !== 'ES' ? ` (${(foreignCountry(club.country) || {}).label || club.country})` : '';
+    const countryTag = club.country && club.country !== player.homeCountry ? ` (${(foreignCountry(club.country) || {}).label || club.country})` : '';
 
     const lines = [[`${club.name}${countryTag}`, '#ffe680']];
     if (player.debugMode) lines.push([`Caja del club: ${club.money ?? 0}€`, '#c9c2a8']);

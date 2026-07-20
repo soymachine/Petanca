@@ -265,7 +265,7 @@ export class AgendaScreen {
     // antes que el resto — antes no se mostraba en la Agenda en absoluto
     if (d.hasEuroCup && player.euroCup && !player.euroCup.finished) {
       const opp = player.euroCup.playerOpponent();
-      const tag = opp ? (countryTag(opp.country) || ' (España)') : '';
+      const tag = opp ? countryTag(opp.country, player.homeCountry) : '';
       return { kind: 'cup', text: `    EUROPA: ${player.euroCup.roundName.toLowerCase()} vs ${opp ? opp.name : '???'}${tag}`, opp, roundName: player.euroCup.roundName, european: true };
     }
     if (d.hasCup && player.cup && !player.cup.finished) {
@@ -329,7 +329,7 @@ export class AgendaScreen {
     } else if (entry.kind === 'cup') {
       const aiLevel = entry.opp ? Math.round(entry.opp.skill ?? entry.opp.avgSkill?.() ?? 0) : '?';
       lines.push([`${entry.european ? 'Copa de Europa' : 'Copa de España'} — ${entry.roundName.toLowerCase()}`, entry.european ? '#88c8e8' : '#ffd75e']);
-      lines.push([`Rival: ${entry.opp ? entry.opp.name : '???'}${entry.opp && entry.opp.country ? (countryTag(entry.opp.country) || ' (España)') : ''}`, '#c9c2a8']);
+      lines.push([`Rival: ${entry.opp ? entry.opp.name : '???'}${entry.opp && entry.opp.country ? countryTag(entry.opp.country, this.game.player.homeCountry) : ''}`, '#c9c2a8']);
       if (aiLevel) lines.push([`Nivel del rival: ${aiLevel}/10`, '#9a927a']);
       lines.push(['Partido único: quien gana, pasa de ronda.', '#9a927a']);
     } else if (entry.kind === 'training') {

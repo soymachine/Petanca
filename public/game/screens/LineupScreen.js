@@ -61,7 +61,7 @@ export class LineupScreen {
       rivalHover = hitRect(input.mouse.cx, input.mouse.cy, p.x, PANEL_Y, p.w, PANEL_H) ? { opponent, r } : null;
       screen.drawAnyPortrait(r.rivalMini || r.rivalPortrait || RIVAL_FACES[0].photo, rx, ry);
       screen.text(p.x + 2, PANEL_Y + PANEL_H - 4, opponent.name.slice(0, p.w - 4), isDerby ? '#ffb347' : '#ef9f9f');
-      const euroTag = ctx.isEuropean && ctx.cup.playerOpponent() ? ` ${countryTag(ctx.cup.playerOpponent().country) || ' (España)'}` : '';
+      const euroTag = ctx.isEuropean && ctx.cup.playerOpponent() ? ` ${countryTag(ctx.cup.playerOpponent().country, player.homeCountry)}` : '';
       screen.text(p.x + 2, PANEL_Y + PANEL_H - 3, `Nivel ${r.aiLevel}/10   ·   ${opponent.pts} pts${euroTag}`, '#c9c2a8');
       if (isDerby) screen.text(p.x + 2, PANEL_Y + PANEL_H - 2, `¡EL DERBI! (${player.derbyHistory.wins}-${player.derbyHistory.losses})`, frame % 20 < 14 ? '#ffb347' : '#a08050');
       else if (isNemesis) screen.text(p.x + 2, PANEL_Y + PANEL_H - 2, '¡TU NÉMESIS! Véngate.', frame % 20 < 14 ? '#ff8c5b' : '#a05838');

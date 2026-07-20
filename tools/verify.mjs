@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 // Verificaciones de consistencia del motor de datos/dominio (sin navegador,
 // sin UI): nombres, generación de clubes, mapa/geografía, economía del
-// Mercado, nómina/precios de fichajes y sorteo de la Copa de Europa. No
+// Mercado, nómina/precios de fichajes, sorteo de la Copa de Europa y jugar
+// con un país de casa distinto de España (meta-progresión). No
 // sustituye probarlo en el navegador (eso sigue haciendo falta para
 // UI/render), pero cubre en segundos variantes de lógica que, si se
 // rompen, rompen la partida entera — y que hasta ahora se comprobaban a
@@ -18,6 +19,7 @@ import { allForeignCityMarkers, FOREIGN_COUNTRIES } from '../public/game/data/co
 import { Player } from '../public/game/model/Player.js';
 import { TransferPool } from '../public/game/domain/TransferPool.js';
 import { EuropeanCup } from '../public/game/domain/EuropeanCup.js';
+import { Cup } from '../public/game/domain/Cup.js';
 import { Court } from '../public/game/physics/Court.js';
 import { strengthFor } from '../public/game/data/countries.js';
 import { advanceScoutingWeek, rollLevelRange } from '../public/game/domain/Scouting.js';
@@ -25,6 +27,13 @@ import { Career, leagueWageFactor } from '../public/game/model/Career.js';
 import { RivalPlayer } from '../public/game/domain/RivalPlayer.js';
 import { WeeklyMatchContext } from '../public/game/domain/WeeklyMatchContext.js';
 import { DIFFICULTIES } from '../public/game/data/difficulty.js';
+import { LeagueWorld } from '../public/game/domain/LeagueWorld.js';
+import { ForeignLeagueWorld } from '../public/game/domain/ForeignLeagueWorld.js';
+import { awayCountriesFor, levelBoundsFor } from '../public/game/data/countries.js';
+import { setHomeCountry } from '../public/game/data/activeRoster.js';
+import { ABUELO_DATA } from '../public/game/data/abuelos.js';
+import { FACES } from '../public/game/data/art/faces.js';
+import { abueloDataFor, facesFor } from '../public/game/data/abuelosByCountry.js';
 
 // entorno mínimo: Player.js usa localStorage para guardar/cargar partida
 globalThis.localStorage = { getItem: () => null, setItem: () => {}, removeItem: () => {} };
@@ -326,6 +335,57 @@ check('Copa de Europa: 24 entrantes (top 4 × 6 países), el jugador nunca recib
       rounds++;
     }
     if (!cup.finished) throw new Error('el bracket no terminó en un número razonable de rondas (posible bucle infinito)');
+  }
+});
+
+// --- país de casa distinto de España ---
+// hasta ahora "jugar como Francia" no se había probado de verdad: LeagueWorld
+// siempre generaba las 8 ligas españolas pasara lo que pasara. Este check
+// reproduce el flujo real (elegir país -> generar leagueWorld/foreignLeagues
+// con ese país -> jugar unas temporadas) para pillar cualquier resto de "1"
+// o "España" hardcodeado que se le hubiera escapado a la generalización.
+check('país de casa: Francia genera su propia pirámide (6-8), su propio roster/retratos, y el suelo de descenso no baja de 6', () => {
+  try {
+    setHomeCountry('FR');
+    if (ABUELO_DATA.length !== 10 || FACES.length !== 10) throw new Error('el roster activo debería seguir teniendo 10 abuelos/retratos');
+    const expected = abueloDataFor('FR');
+    if (ABUELO_DATA[3].trait !== expected[3].trait) throw new Error('ABUELO_DATA no se sustituyó por el reparto francés');
+    if (FACES[3].name !== facesFor('FR')[3].name) throw new Error('FACES no se sustituyó por los retratos franceses');
+
+    const bounds = levelBoundsFor('FR');
+    if (bounds.min !== 6 || bounds.max !== 8) throw new Error(`suelo/techo de Francia deberían ser 6/8, son ${bounds.min}/${bounds.max}`);
+
+    const p = new Player();
+    p.homeCountry = 'FR';
+    p.clubName = 'PÉTANQUE CLUB TEST';
+    p.currentLeagueLevel = bounds.min;
+    p.leagueWorld = LeagueWorld.generate(p.currentLeagueLevel, p.clubName, 'FR');
+    p.foreignLeagues = new Map();
+    for (const { code, cities } of awayCountriesFor('FR')) p.foreignLeagues.set(code, ForeignLeagueWorld.generate(code, cities));
+    if (p.foreignLeagues.has('FR')) throw new Error('Francia es el país de casa: no debería simularse también de fondo');
+    if (!p.foreignLeagues.has('ES')) throw new Error('con Francia de casa, España debería ser una de las 5 ligas de fondo');
+    if ([...p.foreignLeagues.get('ES').leagues.keys()].sort().join() !== '6,7,8') throw new Error('España "de fuera" debería simularse solo con sus 3 ligas de nivel más alto (6/7/8)');
+    p.cup = Cup.generate(p.leagueWorld, p.club, p.club.avgSkill(p.roster));
+
+    const rival = p.leagueWorld.leagueOf(p.currentLeagueLevel).clubs.find((c) => !c.isPlayer);
+    if (rival.country !== 'FR') throw new Error(`un club IA de la liga de casa francesa debería tener country 'FR', tiene '${rival.country}'`);
+
+    const career = new Career(p, (id) => `abuelo${id}`);
+    for (let i = 0; i < 400 && p.currentLeagueLevel < 8; i++) {
+      const league = p.league;
+      const opp = league.clubs.find((c) => !c.isPlayer);
+      const ctx = new WeeklyMatchContext(league, opp, p.money, null, null);
+      const won = Math.random() < 0.85;
+      const r = career.finishWeeklyMatch(ctx, won, won ? 13 : 6, won ? 6 : 13);
+      if (p.currentLeagueLevel < bounds.min) throw new Error(`el descenso bajó del suelo de Francia (nivel ${p.currentLeagueLevel} < ${bounds.min})`);
+      if (r.seasonEnd) {
+        const cityName = league.cityName;
+        if (!['TOULOUSE', 'LYON', 'MARSEILLE'].includes(cityName)) throw new Error(`ciudad de temporada inesperada para Francia: ${cityName}`);
+      }
+    }
+    if (!p.reachedTopFlight) throw new Error('en 400 semanas forzando un 85% de victorias, no llegó al nivel 8 (Marseille)');
+  } finally {
+    setHomeCountry('ES'); // deja el roster activo como lo esperan el resto de checks
   }
 });
 
