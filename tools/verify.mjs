@@ -31,6 +31,7 @@ import { LeagueWorld } from '../public/game/domain/LeagueWorld.js';
 import { ForeignLeagueWorld } from '../public/game/domain/ForeignLeagueWorld.js';
 import { awayCountriesFor, levelBoundsFor } from '../public/game/data/countries.js';
 import { setHomeCountry } from '../public/game/data/activeRoster.js';
+import { MetaProgress } from '../public/game/model/MetaProgress.js';
 import { ABUELO_DATA } from '../public/game/data/abuelos.js';
 import { FACES } from '../public/game/data/art/faces.js';
 import { abueloDataFor, facesFor } from '../public/game/data/abuelosByCountry.js';
@@ -386,6 +387,37 @@ check('país de casa: Francia genera su propia pirámide (6-8), su propio roster
     if (!p.reachedTopFlight) throw new Error('en 400 semanas forzando un 85% de victorias, no llegó al nivel 8 (Marseille)');
   } finally {
     setHomeCountry('ES'); // deja el roster activo como lo esperan el resto de checks
+  }
+});
+
+// --- meta-progresión: techo de nivel al ascender ---
+check('meta-progresión: ascender registra el techo de nivel para poder elegir esa ciudad en la SIGUIENTE partida', () => {
+  const realLocalStorage = globalThis.localStorage;
+  const store = {};
+  globalThis.localStorage = {
+    getItem: (k) => (k in store ? store[k] : null),
+    setItem: (k, v) => { store[k] = String(v); },
+    removeItem: (k) => { delete store[k]; },
+  };
+  try {
+    if (MetaProgress.maxSelectableLevel('ES') !== 1) throw new Error('el suelo de España debería ser 1 antes de jugar nada');
+    const p = new Player();
+    const career = new Career(p, (id) => `abuelo${id}`);
+    for (let i = 0; i < 60 && p.currentLeagueLevel < 3; i++) {
+      const league = p.league;
+      const opp = league.clubs.find((c) => !c.isPlayer);
+      const ctx = new WeeklyMatchContext(league, opp, p.money, null, null);
+      career.finishWeeklyMatch(ctx, true, 13, 4);
+    }
+    if (p.currentLeagueLevel < 3) throw new Error(`no llegó a nivel 3 en 60 semanas ganando siempre (se quedó en ${p.currentLeagueLevel})`);
+    if (MetaProgress.maxSelectableLevel('ES') < p.currentLeagueLevel) {
+      throw new Error(`el ascenso a nivel ${p.currentLeagueLevel} no quedó registrado en MetaProgress (sigue en ${MetaProgress.maxSelectableLevel('ES')})`);
+    }
+    // una partida NUEVA de cero debería heredar ese techo ya alcanzado
+    const p2 = new Player();
+    if (MetaProgress.maxSelectableLevel(p2.homeCountry) < p.currentLeagueLevel) throw new Error('el techo no sobrevive a fundar una peña nueva');
+  } finally {
+    globalThis.localStorage = realLocalStorage;
   }
 });
 

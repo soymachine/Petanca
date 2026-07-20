@@ -10,6 +10,7 @@ import { advanceScoutingWeek, currentMarketSeedKeys } from '../domain/Scouting.j
 import { EuropeanCup } from '../domain/EuropeanCup.js';
 import { rivalPersonalityLine } from '../data/rivalPersonality.js';
 import { countryTag, countryLabel, citiesFor, levelBoundsFor } from '../data/countries.js';
+import { MetaProgress } from './MetaProgress.js';
 import { chemistryKey, chemistryLevel, CHEMISTRY_LEVELS } from '../domain/Chemistry.js';
 import { Chronicle } from '../match/Chronicle.js';
 import { composeBiography } from '../data/biografias.js';
@@ -313,6 +314,10 @@ export class Career {
         p.promotions++;
         p.currentLeagueLevel = league.level + 1;
         p.leagueWorld.movePlayer(fromLevel, p.currentLeagueLevel, p.clubName);
+        // el techo de nivel alcanzado en ESTA partida se guarda de por vida
+        // (fuera del guardado de partida — ver MetaProgress.js) para poder
+        // elegir directamente esa ciudad al fundar una peña nueva de cero
+        MetaProgress.recordLevelReached(p.homeCountry, p.currentLeagueLevel);
         p.news.push(`¡ASCENSO! ${p.clubName} sube a la liga de ${cityAt(p.currentLeagueLevel, p.homeCountry)} tras acabar ${rank}º.`);
         if (p.currentLeagueLevel === 8 && !p.reachedTopFlight) {
           p.reachedTopFlight = true;
