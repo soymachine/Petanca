@@ -101,6 +101,15 @@ export class PhysicsWorld {
     const pImp = ((1 + e) * (van - vbn)) / (1 / ma + 1 / mb) * (striker.impact || 1);
     a.vx -= (pImp / ma) * nx; a.vy -= (pImp / ma) * ny;
     b.vx += (pImp / mb) * nx; b.vy += (pImp / mb) * ny;
+    // "retro": el efecto hacia atrás de un buen "tirar" frena en seco la
+    // bola que golpea, dejándola casi clavada donde impacta en vez de seguir
+    // rodando — cuanto más comprometido el efecto (ver Match.throwBall),
+    // más se frena; es puramente el efecto ya metido, no un dado aparte
+    if (striker.retroPower) {
+      const damp = 1 - striker.retroPower * 0.8;
+      striker.vx *= damp; striker.vy *= damp;
+      striker.retroHit = true;
+    }
     a.moving = a.vx || a.vy ? true : a.moving;
     b.moving = true;
     a.wasHit = true; b.wasHit = true;

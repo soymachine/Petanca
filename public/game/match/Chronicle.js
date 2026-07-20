@@ -12,7 +12,7 @@ const CRONISTAS = {
 };
 
 // orden de relevancia: qué hecho se cuenta primero si hay varios
-const PRIORITY = ['lesion', 'remontada', 'decisiva', 'clima', 'medicion', 'racha'];
+const PRIORITY = ['lesion', 'remontada', 'decisiva', 'retro', 'plomada', 'clima', 'medicion', 'racha'];
 
 function factClause(fact) {
   switch (fact.t) {
@@ -22,6 +22,10 @@ function factClause(fact) {
       return `remontando un marcador que llegó a estar ${fact.data.scoreA}-${fact.data.scoreP} en contra`;
     case 'decisiva':
       return 'con una mano decisiva en el tramo final que dejó el partido sentenciado';
+    case 'retro':
+      return 'con un retro de manual que dejó la bola clavada tras el golpe';
+    case 'plomada':
+      return 'con una plomada de las que se cuentan en el bar';
     case 'clima':
       return 'con un cambio de tiempo a media partida que lo puso todo cuesta arriba';
     case 'medicion':

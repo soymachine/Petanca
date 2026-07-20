@@ -339,7 +339,10 @@ export class MatchScreen {
       const roleCol = M.role === 'tirar' ? '#ff8c5b' : M.role === 'bloquear' ? '#c8a0e8' : '#88e088';
       screen.text(5, py + 2, `ángulo: ${deg}°     rol: ${roleTxt}`, roleCol);
     } else if (M.phase === 'spin') {
-      screen.text(5, py + 1, 'EFECTO    [←/→] curvar la bola   [ENTER] confirmar   [ESC] volver', '#e8e0c8');
+      const prof = M.throwProfile();
+      const retroReady = !M.training && M.role === 'tirar' && prof.spinMax > 0 && Math.abs(M.spin) > prof.spinMax * 0.5;
+      const hint = retroReady ? '   ¡mucho efecto en TIRAR! si golpeas, se puede quedar clavada (RETRO)' : '';
+      screen.text(5, py + 1, 'EFECTO    [←/→] curvar la bola   [ENTER] confirmar   [ESC] volver' + hint, retroReady ? '#ffb347' : '#e8e0c8');
       let bar = '';
       for (let i = 0; i < 41; i++) bar += i === 20 + Math.round(M.spin * 20) ? '◆' : i === 20 ? '┼' : '─';
       screen.text(5, py + 2, 'IZQ ' + bar + ' DER', '#d8a4e8');
@@ -350,7 +353,8 @@ export class MatchScreen {
       const idx = clamp(Math.round(((M.loft - 0.17) / (1.05 - 0.17)) * 7), 0, 7);
       let bar = '';
       for (let i = 0; i <= 7; i++) bar += i === idx ? steps[i] : i < idx ? steps[i] : '·';
-      screen.text(5, py + 2, `rasa ${bar} bombeada   ${deg.toFixed(0)}°  ${deg < 20 ? '(tiro tenso, para tirar bolas)' : deg > 45 ? '(globo, cae muerta)' : '(media altura)'}`, '#9fd8e8');
+      const tag = deg < 20 ? '(tiro tenso, para tirar bolas)' : deg > 45 ? '(globo: si cae junto al boliche, PLOMADA)' : '(media altura)';
+      screen.text(5, py + 2, `rasa ${bar} bombeada   ${deg.toFixed(0)}°  ${tag}`, '#9fd8e8');
     } else if (M.phase === 'jackAim') {
       screen.text(5, py + 1, 'BOLICHE — PUNTERÍA  [↑/↓] ajustar dirección   [ENTER] confirmar', '#e8e0c8');
       const deg = (-M.aimAngle * 57.3).toFixed(1);

@@ -70,6 +70,18 @@ export class Narrator {
           '¡Seco y limpio! Ni el boliche se movió, pero la bola rival ya no está.',
           'Tiro de castigo: la bola sale disparada y deja el hueco libre.',
         ]);
+      case 'retro':
+        return pick([
+          '¡RETRO DE MANUAL! La bola golpea y se queda clavada en el sitio, como pegada con cola.',
+          '¡ESO ES EFECTO DE VERDAD! Golpea y no se mueve ni un dedo: se planta ahí mismo.',
+          '¡CASTA PURA! Tanto efecto que la bola frena en seco justo tras el golpe.',
+        ]);
+      case 'plomada':
+        return pick([
+          '¡PLOMADA PERFECTA! Cae del cielo casi a plomo y se muere pegada al boliche.',
+          '¡BOMBEO DE LIBRO! El globo cae vertical y se queda muerta junto al boliche, sin rodar ni un palmo.',
+          '¡Menudo globo! Baja casi en vertical y se planta al lado del boliche.',
+        ]);
       case 'nula':
         return pick([
           'Mano nula. Los dos se miran y fingen que era lo que querían.',

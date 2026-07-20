@@ -317,6 +317,16 @@ export class Match {
     b.grip = !!bm.grip;
     b.wetPenalty = bm.wetPenalty || 1;
     b.thrower = owner === 'P' ? this.abuelo : null;
+    b.loft = loft;
+    // "retro": tirar con mucho efecto de verdad (más de la mitad del spinMax
+    // disponible) deja la bola con posibilidad de quedarse casi clavada tras
+    // el golpe en vez de seguir rodando — el tiro clásico de la petanca real
+    // (efecto hacia atrás), y aquí depende solo de cuánto efecto se ha
+    // metido de verdad, no de la suerte (ver PhysicsWorld._collide)
+    const spinMax = owner === 'P' && prof ? prof.spinMax : 0;
+    const spinFrac = spinMax > 0 ? Math.abs(spin) / spinMax : 0;
+    b.retroPower = (owner === 'P' && this.role === 'tirar' && spinFrac > 0.5) ? clamp((spinFrac - 0.5) / 0.5, 0, 1) : 0;
+    b.retroHit = false;
     this.balls.push(b);
     this.lastThrown = b;
     this.lastCollision = false;
@@ -347,7 +357,14 @@ export class Match {
       let spinMax = (0.5 + s.getStat('mana') * 0.05) * (bm.spin || 1);
       if (s.item && s.item.id === 'botas') spinMax *= 1.15;
       if (b.thrower === 6) spinMax *= 1.1; // PEPE, "manos de santo"
-      if (spinMax > 0 && Math.abs(b.spin) > spinMax * 0.5) xp += 3;
+      // premio grande si el efecto de verdad logró el retro (resultado, no
+      // solo intención); si no llegó a tanto pero se usó bastante efecto,
+      // se mantiene el bono menor de siempre como consuelo
+      if (b.retroHit) xp += 10;
+      else if (spinMax > 0 && Math.abs(b.spin) > spinMax * 0.5) xp += 3;
+      // plomada perfecta: bombeo alto que se queda a menos de 2 pasos del
+      // boliche — el bombeo por fin tiene un premio ligado al acierto
+      if ((b.loft || 0) > 0.75 && d < 2) xp += 6;
       if (xp > 0) this.xpGain[b.thrower] = (this.xpGain[b.thrower] || 0) + xp;
     }
   }
@@ -545,7 +562,18 @@ export class Match {
         const c2 = physicsWorld.step(this.allBalls(), dt, this.court, this.weather, treeHit, this.trail, this.lastThrown, frame);
         this.lastCollision = c1 || c2;
         if (!this.anyMoving()) {
-          if (this.lastCollision) this.narr = Narrator.line('golpe', {});
+          const lt = this.lastThrown;
+          // plomada: bombeo alto (globo) que cae y se queda casi muerta
+          // pegada al boliche — el bombeo por fin tiene una recompensa
+          // visible, no solo "elige cualquier valor intermedio" (ver _tallyThrowXp)
+          const isPlomada = !!(lt && lt.owner === 'P' && this.jack && (lt.loft || 0) > 0.75 && dist2d(lt.x, lt.y, this.jack.x, this.jack.y) < 2);
+          if (lt && lt.retroHit) {
+            this.narr = Narrator.line('retro', {});
+            if (!this.training) this.chronicle.push({ t: 'retro', data: {} });
+          } else if (isPlomada) {
+            this.narr = Narrator.line('plomada', {});
+            if (!this.training) this.chronicle.push({ t: 'plomada', data: {} });
+          } else if (this.lastCollision) this.narr = Narrator.line('golpe', {});
           this.phase = 'throwDone'; this.phaseT = 0;
         }
         break;
