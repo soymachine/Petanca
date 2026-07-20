@@ -4,6 +4,7 @@ import { DIFFICULTIES } from '../data/difficulty.js';
 import { CITIES } from '../data/cities.js';
 import { LeagueWorld } from '../domain/LeagueWorld.js';
 import { Cup } from '../domain/Cup.js';
+import { setHomeCountry } from '../data/activeRoster.js';
 import { wrapText, hitRect } from '../core/utils.js';
 
 export class TitleScreen {
@@ -86,7 +87,13 @@ export class TitleScreen {
       if (slot !== Player.activeSlot()) {
         Player.switchSlot(slot);
         if (typeof window !== 'undefined' && window.location && window.location.reload) window.location.reload();
-        else this.game.player = Player.load();
+        else {
+          this.game.player = Player.load();
+          // el perfil al que se cambia puede ser de otro país de casa: el
+          // roster de 10 abuelos/retratos activo (ver data/activeRoster.js)
+          // hay que recalcularlo aquí también, no solo al arrancar Game
+          setHomeCountry(this.game.player.homeCountry);
+        }
       }
       this.pickingSlot = false;
     }
