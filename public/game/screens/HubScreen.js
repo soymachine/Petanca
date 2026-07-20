@@ -19,6 +19,11 @@ export class HubScreen {
     screen.clear();
     TabsBar.draw(this.game, 'hub');
 
+    // ventana de aviso de la primera Copa de Europa ganada NUNCA: tapa el
+    // resto del Hub hasta que se cierra, para que no pase desapercibida
+    // (ver Game._finishEuroCupMatch / MetaProgress.unlockAllCountries)
+    if (this.game.countryUnlockEvent) { this._drawCountryUnlockModal(); return; }
+
     screen.textCenter(4, `╣ ${player.clubName} — LIGA DE ${league.cityName} (nivel ${league.level}/8) ╠`, '#ffb347');
     screen.text(4, 5, `Hoy: ${player.seasonClock.dateLabel()}${this.game.simulating ? (frame % 24 < 16 ? '  ● SIMULANDO' : '  ○ SIMULANDO') : ''}`, this.game.simulating ? '#ffe680' : '#c9c2a8');
     // fila reservada siempre para el aviso de crisis, aunque no aplique —
@@ -68,6 +73,31 @@ export class HubScreen {
     }
     if (input.hit('d') || input.hit('D')) { player.debugMode = !player.debugMode; if (!player.debugMode) this.game.stopSimulating(); player.save(); }
     if (!this.game.simulating && (input.hit('Enter') || input.hit(' '))) this.game.advanceDay();
+  }
+
+  // aviso de una sola vez en toda la vida del jugador (cualquier perfil):
+  // al ganar la primera Copa de Europa, Francia/Italia/Bélgica/Suiza/
+  // Portugal quedan disponibles como país de casa la próxima vez que se
+  // funde una peña desde cero (ver TitleScreen._drawCountryPicker)
+  _drawCountryUnlockModal() {
+    const { screen, input } = this.game;
+    const w = 96, h = 18;
+    const x = Math.floor((screen.cols - w) / 2), y = Math.floor((screen.rows - h) / 2);
+    for (let r = 0; r < h; r++) for (let c = 0; c < w; c++) screen.put(x + c, y + r, '█', '#000');
+    screen.box(x, y, w, h, '#ffd75e', 'double');
+    screen.textCenter(y + 2, '¡SE ABRE EL CIRCUITO ENTERO!', '#ffd75e');
+    const body = [
+      'Con esta Copa de Europa, la peña se hace un nombre fuera de España de una vez',
+      'por todas: Francia, Italia, Bélgica, Suiza y Portugal quedan desbloqueados como',
+      'país de casa para siempre, en cualquier partida futura.',
+      '',
+      'La próxima vez que fundéis una peña desde cero podréis elegir con cuál empezar,',
+      'aunque esta partida siga en España — cada país tiene su propia peña fundadora y',
+      'su propia escalera de ciudades por escalar.',
+    ];
+    body.forEach((l, i) => screen.text(x + 4, y + 5 + i, l, l ? '#e8e0c8' : '#000'));
+    screen.textCenter(y + h - 2, '[ENTER] entendido', '#7CFC00');
+    if (input.hit('Enter') || input.hit(' ') || input.mouse.clicked) this.game.countryUnlockEvent = null;
   }
 
   // tarjeta de identidad: el escudo "de héroe" (13x13) ocupa toda la

@@ -7,6 +7,7 @@ import { RIVAL_FACES } from '../data/art/rivalFaces.js';
 import { CITIES } from '../data/cities.js';
 import { allForeignCities, countryTag, strengthFor, citiesFor } from '../data/countries.js';
 import { setHomeCountry } from '../data/activeRoster.js';
+import { MetaProgress } from '../model/MetaProgress.js';
 import { Player } from '../model/Player.js';
 import { Career } from '../model/Career.js';
 import { Calendar } from '../model/Calendar.js';
@@ -79,6 +80,7 @@ export class Game {
     this.deathEvent = null;
     this.transferOffer = null;
     this.decisionEvent = null; // { event, ctx } — evento de decisión esperando respuesta (ver data/decisionEvents.js)
+    this.countryUnlockEvent = null; // true justo tras desbloquear los 5 países extranjeros (ver _finishEuroCupMatch) — ventana de aviso en HubScreen
     this.simulating = false; // modo Debugger: avanza días solo en segundo plano
 
     this.showFps = false; // [F3] contador de FPS reales, ver loop()
@@ -657,6 +659,11 @@ export class Game {
         p.addReward(900, 1800);
         p.news.push(`¡¡¡CAMPEONES DE LA COPA DE EUROPA!!! ${p.clubName} se corona tras ganar a ${opponent.name}${rivalTag} en la final (${scoreP}-${scoreA}). ¡La peña entera lo va a recordar toda la vida!`);
         p.addAnnal(`CAMPEONES DE LA COPA DE EUROPA: ${p.clubName} gana la final a ${opponent.name}${rivalTag} (${scoreP}-${scoreA}).`);
+        // primera Copa de Europa ganada NUNCA (con cualquier perfil): abre
+        // los 5 países extranjeros como país de casa para partidas futuras
+        // — unlockAllCountries() devuelve true solo la primera vez, así
+        // que el aviso no vuelve a salir en futuras Copas de Europa
+        if (MetaProgress.unlockAllCountries()) this.countryUnlockEvent = true;
       } else {
         p.addReward(180, 260);
         const nextOpp = cup.playerOpponent();
