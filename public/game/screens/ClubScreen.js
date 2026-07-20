@@ -29,18 +29,33 @@ export class ClubScreen {
     if (input.hit('Escape') && this.practiceStep) { this.practiceStep = null; input.pressed.Escape = false; }
     TabsBar.draw(this.game, 'club');
     screen.textCenter(4, '═══ EL CLUB ═══', '#ffb347');
-    const clicked = drawTabRow(screen, input, 4, 6, SECTIONS.map((s) => SECTION_LABEL[s]), SECTIONS.indexOf(this.section), { activeColor: '#ffe680', color: '#ffe680' });
+    // Patrocinios y Junta se desbloquean solos las primeras semanas (ver
+    // Player.systemsRevealed / Career._maybeRevealSystems) — Descampado
+    // está disponible desde el minuto uno
+    const revealed = this.game.player.systemsRevealed;
+    const locked = SECTIONS.map((s) => (s === 'sponsor' && !revealed.patrocinios) || (s === 'junta' && !revealed.junta));
+    const labels = SECTIONS.map((s) => {
+      if (s === 'sponsor' && !revealed.patrocinios) return `${SECTION_LABEL[s]} (semana 4)`;
+      if (s === 'junta' && !revealed.junta) return `${SECTION_LABEL[s]} (semana 5)`;
+      return SECTION_LABEL[s];
+    });
+    const clicked = drawTabRow(screen, input, 4, 6, labels, SECTIONS.indexOf(this.section), { activeColor: '#ffe680', color: '#ffe680', disabled: locked });
     screen.text(80, 6, '[Q] cambiar de pestaña', '#8a7f66');
     const nomina = this.game.player.roster.totalUpkeep();
     screen.text(110, 6, `nómina semanal: ${nomina}€`, '#c98080');
 
-    if (this.section === 'facilities') { this._drawFacilities(); this._drawPractice(); }
-    else if (this.section === 'sponsor') this._drawSponsor();
-    else this._drawJunta();
+    if (this.section === 'sponsor' && revealed.patrocinios) this._drawSponsor();
+    else if (this.section === 'junta' && revealed.junta) this._drawJunta();
+    else { this._drawFacilities(); this._drawPractice(); }
 
     if (clicked !== null) { this.section = SECTIONS[clicked]; this.cursor = 0; }
     else if (!this.practiceStep && (input.hit('q') || input.hit('Q'))) {
-      this.section = SECTIONS[(SECTIONS.indexOf(this.section) + 1) % SECTIONS.length];
+      let next = SECTIONS.indexOf(this.section);
+      for (let i = 0; i < SECTIONS.length; i++) {
+        next = (next + 1) % SECTIONS.length;
+        if (!locked[next]) break;
+      }
+      this.section = SECTIONS[next];
       this.cursor = 0;
     }
     if (this.section === 'facilities' && !this.practiceStep) this._inputFacilities();

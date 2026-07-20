@@ -472,6 +472,7 @@ export class Career {
   // noticia semanal ambiental: qué se cuece en la liga (fichajes ajenos, etc.)
   weeklyNews(league) {
     const p = this.player;
+    this._maybeRevealSystems(p);
     if (Math.random() <= 0.4) {
       const others = league.clubs.filter((c) => !c.isPlayer);
       if (others.length) {
@@ -505,6 +506,28 @@ export class Career {
     if (Math.random() <= 0.08) {
       const bio = composeBiography(p, (id) => this.nameOf(id));
       if (bio) p.news.push(bio);
+    }
+  }
+
+  // revelado progresivo de onboarding (ver Player.systemsRevealed): Mercado,
+  // Ojeadores, Patrocinios y Junta empiezan tapados en una partida nueva y
+  // se van abriendo solos, una semana detrás de otra, con su propio
+  // titular — para no volcar los nueve apartados del juego encima de quien
+  // acaba de empezar. Ninguna simulación de fondo cambia con esto: el
+  // Mercado y la Junta siguen corriendo igual, solo se tapa la pestaña.
+  _maybeRevealSystems(p) {
+    const day = p.seasonClock.day;
+    const reveals = [
+      { key: 'mercado', day: 8, text: 'Ahora que ya conocéis la peña, el Mercado se abre: hay excedentes de otros clubes buscando equipo, y algún Sin Equipo suelto por la comarca. Echad un ojo en Mi Peña › Mercado.' },
+      { key: 'ojeadores', day: 15, text: 'La peña empieza a hacerse un nombre: ya se pueden contratar ojeadores en Mi Peña › Ojeadores para destapar de verdad lo que esconde el Mercado.' },
+      { key: 'patrocinios', day: 22, text: 'Ha llamado un comercio del pueblo interesado en patrocinar a la peña — el trato se cierra en El Club › Patrocinios.' },
+      { key: 'junta', day: 29, text: 'La junta directiva quiere veros las caras: a partir de ahora vais a rendir cuentas de verdad. Consultad su humor en El Club › La Junta.' },
+    ];
+    for (const r of reveals) {
+      if (!p.systemsRevealed[r.key] && day >= r.day) {
+        p.systemsRevealed[r.key] = true;
+        p.news.push(r.text);
+      }
     }
   }
 

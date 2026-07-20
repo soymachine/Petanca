@@ -163,17 +163,35 @@ export class PenyaScreen {
     const clubLabel = truncate(this.game.player.clubName, 30);
     screen.text(crestX - 1 - clubLabel.length, crestY + 2, clubLabel, '#ffb347');
 
+    // Mercado y Ojeadores se desbloquean solos las primeras semanas (ver
+    // Player.systemsRevealed / Career._maybeRevealSystems) — Plantilla y
+    // Panteón están disponibles desde el minuto uno
     const sections = ['plantilla', 'mercado', 'ojeadores', 'panteon'];
-    const clicked = drawTabRow(screen, input, TABLE_X, 6, ['PLANTILLA', 'MERCADO', 'OJEADORES', 'PANTEÓN'], sections.indexOf(this.section));
+    const revealed = this.game.player.systemsRevealed;
+    const locked = [false, !revealed.mercado, !revealed.ojeadores, false];
+    const labels = [
+      'PLANTILLA',
+      revealed.mercado ? 'MERCADO' : 'MERCADO (semana 2)',
+      revealed.ojeadores ? 'OJEADORES' : 'OJEADORES (semana 3)',
+      'PANTEÓN',
+    ];
+    const clicked = drawTabRow(screen, input, TABLE_X, 6, labels, sections.indexOf(this.section), { disabled: locked });
     screen.text(TABLE_X + 66, 6, '[Q] cambiar de pestaña', '#8a7f66');
 
-    if (this.section === 'plantilla') this._drawPlantilla();
-    else if (this.section === 'mercado') this._drawMercado();
-    else if (this.section === 'ojeadores') this._drawOjeadores();
-    else this._drawPanteon();
+    if (this.section === 'mercado' && revealed.mercado) this._drawMercado();
+    else if (this.section === 'ojeadores' && revealed.ojeadores) this._drawOjeadores();
+    else if (this.section === 'panteon') this._drawPanteon();
+    else this._drawPlantilla();
 
     if (clicked !== null) this.section = sections[clicked];
-    else if (input.hit('q') || input.hit('Q')) this.section = sections[(sections.indexOf(this.section) + 1) % sections.length];
+    else if (input.hit('q') || input.hit('Q')) {
+      let next = sections.indexOf(this.section);
+      for (let i = 0; i < sections.length; i++) {
+        next = (next + 1) % sections.length;
+        if (!locked[next]) break;
+      }
+      this.section = sections[next];
+    }
   }
 
   // ============================= PLANTILLA =============================

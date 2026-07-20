@@ -68,6 +68,17 @@ export class Player {
     // deja mirar plantillas rivales al vuelo — para testear sistemas rápido
     this.debugMode = false;
     this.pressPromise = null;
+    // revelado progresivo de onboarding: Mercado, Ojeadores, Patrocinios y
+    // Junta empiezan ocultos en una partida NUEVA y se van desbloqueando
+    // solos las primeras semanas (ver Career._maybeRevealSystems), con su
+    // propio titular de Hemeroteca al abrirse — para no volcar los nueve
+    // apartados del juego encima de quien acaba de empezar. No cambia
+    // ninguna simulación de fondo (el Mercado y la Junta siguen corriendo
+    // igual): solo tapa la pestaña hasta que toca enseñarla.
+    this.systemsRevealed = { mercado: false, ojeadores: false, patrocinios: false, junta: false };
+    // aviso de "primera vez, mira Ayuda" en Inicio: se apaga solo al
+    // visitar Ayuda una vez, o pasada la primera semana si no se visita
+    this.helpHintSeen = false;
     this.friendliesLeft = 3; // amistosos de pretemporada disponibles esta temporada
     this.cupTitles = 0;
     this.euroCupTitles = 0;
@@ -268,6 +279,7 @@ export class Player {
       dailyBest: this.dailyBest, boardGoal: this.boardGoal, weeklyGoal: weeklyGoalToJSON(this.weeklyGoal),
       boardConfidence: this.boardConfidence, boardUltimatums: this.boardUltimatums, boardCrisis: this.boardCrisis,
       difficulty: this.difficulty, difficultyChosen: this.difficultyChosen, debugMode: this.debugMode, pressPromise: this.pressPromise,
+      systemsRevealed: this.systemsRevealed, helpHintSeen: this.helpHintSeen,
       friendliesLeft: this.friendliesLeft, cup: this.cup ? this.cup.toJSON() : null, cupTitles: this.cupTitles,
       euroCupTitles: this.euroCupTitles,
       bestMarginWin: this.bestMarginWin, chemistry: this.chemistry, seasonsPlayed: this.seasonsPlayed,
@@ -329,6 +341,11 @@ export class Player {
     p.difficultyChosen = json.difficultyChosen ?? true; // guardados antiguos no vieron el selector: no interrumpir
     p.debugMode = json.debugMode ?? false;
     p.pressPromise = json.pressPromise || null;
+    // guardado de antes del revelado progresivo: se da por ya visto todo
+    // (nunca se tapa una pestaña a quien ya llevaba partida en marcha) —
+    // solo una partida NUEVA (Player recién construido) arranca oculta
+    p.systemsRevealed = json.systemsRevealed || { mercado: true, ojeadores: true, patrocinios: true, junta: true };
+    p.helpHintSeen = json.helpHintSeen ?? true;
     p.friendliesLeft = json.friendliesLeft ?? 3;
     p.cup = json.cup ? Cup.fromJSON(json.cup) : null;
     p.cupTitles = json.cupTitles || 0;
@@ -387,6 +404,8 @@ export class Player {
   static fromLegacyJSON(o) {
     const p = new Player();
     p.difficultyChosen = true; // guardado de una versión anterior al selector: no interrumpir
+    p.systemsRevealed = { mercado: true, ojeadores: true, patrocinios: true, junta: true }; // partida ya en marcha: nada que tapar
+    p.helpHintSeen = true;
     p.money = o.money ?? 150; p.xp = o.xp ?? 0; p.level = o.level ?? 1;
     p.wins = o.wins ?? 0; p.losses = o.losses ?? 0;
     if (o.roster) {

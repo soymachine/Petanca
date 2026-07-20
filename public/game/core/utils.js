@@ -77,17 +77,25 @@ export function hitRect(mx, my, x, y, w, h) {
 // repetido en Mi Peña, El Club, El Bar y Capítulos): dibuja cada pestaña,
 // la resalta al pasar el ratón por encima y devuelve el índice pulsado
 // este frame (o null). No sustituye el atajo de teclado, solo lo completa.
+// `opts.disabled`: array paralelo a `labels` — una pestaña tapada (ver
+// Player.systemsRevealed) se pinta apagada, no reacciona al hover y nunca
+// devuelve clic.
 export function drawTabRow(screen, input, x, y, labels, activeIndex, opts = {}) {
   const gap = opts.gap ?? 4;
+  const disabled = opts.disabled || [];
   let cx = x;
   let clicked = null;
   for (let i = 0; i < labels.length; i++) {
+    const isDisabled = !!disabled[i];
     const active = i === activeIndex;
     const text = active ? `▶ ${labels[i]} ◀` : `  ${labels[i]}  `;
-    const over = hitRect(input.mouse.cx, input.mouse.cy, cx, y, text.length, 1);
-    const col = active ? (opts.activeColor || '#ffe680') : over ? (opts.hoverColor || '#fff') : (opts.color || '#8a7f66');
+    const over = !isDisabled && hitRect(input.mouse.cx, input.mouse.cy, cx, y, text.length, 1);
+    const col = isDisabled ? (opts.disabledColor || '#5a5347')
+      : active ? (opts.activeColor || '#ffe680')
+      : over ? (opts.hoverColor || '#fff')
+      : (opts.color || '#8a7f66');
     screen.text(cx, y, text, col);
-    if (over && input.mouse.clicked) clicked = i;
+    if (!isDisabled && over && input.mouse.clicked) clicked = i;
     cx += text.length + gap;
   }
   return clicked;

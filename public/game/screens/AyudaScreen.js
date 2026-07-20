@@ -7,8 +7,11 @@ export class AyudaScreen {
   constructor(game) { this.game = game; this.page = 0; }
 
   draw() {
-    const { screen, input } = this.game;
+    const { screen, input, player } = this.game;
     screen.clear();
+    // visitar Ayuda una vez apaga el aviso de bienvenida de Inicio (ver
+    // HubScreen) — no hace falta esperar a que pase la primera semana
+    if (!player.helpHintSeen) { player.helpHintSeen = true; player.save(); }
     TabsBar.draw(this.game, 'ayuda');
     screen.textCenter(4, '═══ CÓMO SE JUEGA ═══', '#ffb347');
 
