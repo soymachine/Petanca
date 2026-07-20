@@ -1,11 +1,12 @@
 #!/usr/bin/env node
 // Verificaciones de consistencia del motor de datos/dominio (sin navegador,
 // sin UI): nombres, generación de clubes, mapa/geografía, economía del
-// Mercado y sorteo de la Copa de Europa. No sustituye probarlo en el
-// navegador (eso sigue haciendo falta para UI/render), pero cubre en
-// segundos in variantes de lógica que, si se rompen, rompen la partida
-// entera — y que hasta ahora se comprobaban a mano, una vez, sueltas en la
-// terminal, sin quedar como red de seguridad para el futuro.
+// Mercado, nómina/precios de fichajes y sorteo de la Copa de Europa. No
+// sustituye probarlo en el navegador (eso sigue haciendo falta para
+// UI/render), pero cubre en segundos variantes de lógica que, si se
+// rompen, rompen la partida entera — y que hasta ahora se comprobaban a
+// mano, una vez, sueltas en la terminal, sin quedar como red de seguridad
+// para el futuro.
 //
 // Uso: node tools/verify.mjs   (o `npm run verify`)
 
@@ -20,6 +21,10 @@ import { EuropeanCup } from '../public/game/domain/EuropeanCup.js';
 import { Court } from '../public/game/physics/Court.js';
 import { strengthFor } from '../public/game/data/countries.js';
 import { advanceScoutingWeek, rollLevelRange } from '../public/game/domain/Scouting.js';
+import { Career, leagueWageFactor } from '../public/game/model/Career.js';
+import { RivalPlayer } from '../public/game/domain/RivalPlayer.js';
+import { WeeklyMatchContext } from '../public/game/domain/WeeklyMatchContext.js';
+import { DIFFICULTIES } from '../public/game/data/difficulty.js';
 
 // entorno mínimo: Player.js usa localStorage para guardar/cargar partida
 globalThis.localStorage = { getItem: () => null, setItem: () => {}, removeItem: () => {} };
@@ -133,6 +138,99 @@ check('mercado: comprar (humano) saca al jugador de su club y paga al vendedor',
   if (newMoney !== p.money - listing.player.value) throw new Error('el comprador no paga el precio exacto');
   if (club.money !== sellerMoneyBefore + listing.player.value) throw new Error('el vendedor no cobra el precio exacto');
   if (club.players.some((pl) => pl.id === playerId)) throw new Error('el jugador sigue en la plantilla del vendedor tras la compra');
+});
+
+// --- economía: nómina y precios de mercado ---
+// hasta ahora esto se comprobaba a mano, en la terminal, con un script
+// suelto en /tmp — se detectó así que la nómina no escalaba con el nivel
+// de liga (se acumulaban ~20.000€ en 280 semanas sin fichar a nadie ni
+// repartir un punto) y que el precio de mercado era casi lineal con las
+// stats. Queda aquí como red de seguridad permanente para las dos cosas.
+check('economía: la nómina escala con el nivel de liga, y el precio de mercado crece de forma convexa con el nivel', () => {
+  const factorAlbacete = leagueWageFactor(1);
+  const factorMadrid = leagueWageFactor(8);
+  if (factorAlbacete !== 1) throw new Error(`el nivel 1 no debería llevar recargo de nómina, factor=${factorAlbacete}`);
+  if (factorMadrid < factorAlbacete * 3) {
+    throw new Error(`la nómina en Madrid (nivel 8) debería ser al menos 3x la de Albacete (nivel 1), es ${(factorMadrid / factorAlbacete).toFixed(2)}x`);
+  }
+
+  // convexidad del precio de mercado: la subida de precio de nivel 5 a 10
+  // debe ser mayor que la de nivel 1 a 5 — si la curva vuelve a ser
+  // lineal, un crack de nivel 10 apenas costaría el doble que uno de
+  // nivel 5, y el mercado deja de reflejar quién es de verdad top
+  const mk = (skill) => new RivalPlayer({
+    name: 'Test', nationality: { code: 'ES', label: 'España' },
+    stats: { pulso: skill, brazo: skill, mana: skill, temple: skill, aguante: skill }, age: 60,
+  });
+  const v1 = mk(1).value, v5 = mk(5).value, v10 = mk(10).value;
+  const lowGap = v5 - v1, highGap = v10 - v5;
+  if (highGap <= lowGap * 1.5) {
+    throw new Error(`la curva de precios no es lo bastante convexa: nivel 1→5 sube ${lowGap}€, nivel 5→10 sube ${highGap}€ (debería subir bastante más)`);
+  }
+});
+
+check('economía: sin fichar a nadie ni repartir puntos, el dinero no se dispara al escalar categorías (250 semanas simuladas)', () => {
+  const p = new Player();
+  const career = new Career(p, (id) => `abuelo${id}`);
+  let matchesPlayed = 0, day = 0;
+  const target = 250;
+  const maxDays = target * 20 + 1000; // margen generoso: cup/eurocup/decisión/negociación también consumen días
+  while (matchesPlayed < target && day < maxDays) {
+    day++;
+    const clock = p.seasonClock, league = p.league;
+    const result = clock.advanceOneDay(league, () => null, () => null);
+    if (result.type === 'match') {
+      const fixtures = league.fixturesForMatchday(result.matchdayIndex);
+      const myFixture = fixtures.find(([a, b]) => a === league.playerClub.id || b === league.playerClub.id);
+      const opponentId = myFixture ? (myFixture[0] === league.playerClub.id ? myFixture[1] : myFixture[0]) : null;
+      const opponent = opponentId ? league.clubById(opponentId) : league.clubs.find((c) => !c.isPlayer);
+      if (opponent) {
+        const ctx = new WeeklyMatchContext(league, opponent, p.money, null, null);
+        ctx.markUsed(p.roster.ids);
+        const mySkill = p.club.avgSkill(p.roster), oppSkill = opponent.avgSkill();
+        const won = Math.random() < mySkill / (mySkill + oppSkill);
+        const loserScore = Math.floor(Math.random() * 12);
+        career.finishWeeklyMatch(ctx, won, won ? 13 : loserScore, won ? loserScore : 13);
+        matchesPlayed++;
+      }
+    } else if (result.type === 'cup') {
+      clock.clearCup(result.day);
+      const cup = p.cup, opp = cup && !cup.finished ? cup.playerOpponent() : null;
+      if (opp) {
+        const won = Math.random() < p.club.avgSkill(p.roster) / (p.club.avgSkill(p.roster) + opp.skill);
+        cup.resolvePlayerPairing(won);
+        if (!won) p.addReward(40, 30);
+        else if (cup.roundComplete()) {
+          cup.advanceRound();
+          if (cup.finished && cup.isChampion()) { p.cupTitles++; p.addReward(400, 800); }
+          else p.addReward(80, 120);
+        }
+      }
+    } else if (result.type === 'eurocup') {
+      clock.clearEuroCup(result.day);
+      const cup = p.euroCup, opp = cup && !cup.finished ? cup.playerOpponent() : null;
+      if (opp) {
+        const won = Math.random() < p.club.avgSkill(p.roster) / (p.club.avgSkill(p.roster) + opp.skill);
+        cup.resolvePlayerPairing(won);
+        if (!won) p.addReward(80, 60);
+        else if (cup.roundComplete()) {
+          cup.advanceRound();
+          if (cup.finished && cup.isChampion()) { p.euroCupTitles++; p.addReward(900, 1800); }
+          else p.addReward(180, 260);
+        }
+      }
+    } else if (result.type === 'training') {
+      clock.clearTraining(result.day);
+    }
+    career.weeklyNews(league);
+    p.freeAgents.refresh();
+  }
+  if (matchesPlayed < target) throw new Error(`la simulación no completó las ${target} semanas (se quedó en ${matchesPlayed} tras ${day} días)`);
+  if (p.roster.ids.length !== 1) throw new Error(`la plantilla debería seguir teniendo un único abuelo (el de fundación), tiene ${p.roster.ids.length}`);
+  // antes de escalar la nómina con el nivel de liga, esta misma simulación
+  // llegaba a ~19.500€ en 280 semanas; el margen de 14.000€ a las 250
+  // separa con holgura el comportamiento roto del arreglado
+  if (p.money > 14000) throw new Error(`con una sola plantilla sin invertir, el dinero llegó a ${p.money}€ tras ${target} semanas (se esperaba <14.000€ — ¿ha dejado de escalar la nómina con el nivel de liga?)`);
 });
 
 // --- reputación de mánager ---

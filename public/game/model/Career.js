@@ -191,15 +191,7 @@ export class Career {
 
     p.roster.applyRivalryJealousy(ctx.usados);
     const diff = DIFFICULTIES.find((d) => d.id === p.difficulty) || DIFFICULTIES[1];
-    // la nómina también escala con el nivel de la liga: un club de Madrid
-    // (nivel 8) es una entidad mucho más grande que una peña de pueblo de
-    // Albacete (nivel 1), igual que ya reflejaba baseMoneyFor() para los
-    // clubes IA — antes la cuota de socio no subía nada con la categoría,
-    // así que el premio semanal (que sí escala fuerte con el nivel) se
-    // acumulaba casi sin gasto según se ascendía, aunque no se invirtiera
-    // ni un euro en fichajes
-    const leagueWageFactor = 1 + (league.level - 1) * 0.4;
-    const upkeep = Math.round(p.roster.totalUpkeep() * diff.wageMult * leagueWageFactor);
+    const upkeep = Math.round(p.roster.totalUpkeep() * diff.wageMult * leagueWageFactor(league.level));
     money -= upkeep;
     if (p.money + money < 0) {
       for (const id of p.roster.ids) p.roster.get(id).addMoral(-6);
@@ -276,6 +268,16 @@ export class Career {
       const fromLevel = league.level;
       p.currentLeagueLevel = fromLevel - 1;
       p.leagueWorld.movePlayer(fromLevel, p.currentLeagueLevel, p.clubName);
+      // movePlayer resetea a 0 el matchday de la liga de destino (temporada
+      // nueva de facto para el jugador) — sin recalibrar aquí el offset
+      // semana↔jornada, el calendario sigue calculando la jornada de la
+      // liga VIEJA (a mitad de temporada) sobre la liga NUEVA (que empieza
+      // en 0): la jornada calculada se dispara por encima de fixtures.length
+      // en pocas semanas y ningún domingo vuelve a detectarse como día de
+      // partido — la partida se queda encallada para siempre, sin poder
+      // volver a jugar en esa liga (bug real, no cosmético: el mismo que
+      // justifica seasonWeekOffset más arriba para el caso normal).
+      p.seasonClock.markSeasonStart();
     }
 
     // ¿se acaba la temporada? ascenso de los 2 primeros, descenso de los 2 últimos
@@ -569,6 +571,17 @@ function cityAt(level) {
   return map[level] || `nivel ${level}`;
 }
 function boardGoalFor(seasonNum, leagueLevel) { return BoardObjective.forSeason(seasonNum, leagueLevel).goal; }
+
+// cuánto se multiplica la nómina total de la plantilla según el nivel de
+// la liga: un club de Madrid (nivel 8) es una entidad mucho más grande que
+// una peña de pueblo de Albacete (nivel 1), igual que ya reflejaba
+// baseMoneyFor() para los clubes IA (ver domain/Club.js) — antes la cuota
+// de socio no subía nada con la categoría, así que el premio semanal (que
+// sí escala fuerte con el nivel) se acumulaba casi sin gasto según se
+// ascendía, aunque no se invirtiera ni un euro en fichajes. Exportada para
+// poder testear la escala directamente (ver tools/verify.mjs) sin tener
+// que jugar partidos.
+export function leagueWageFactor(level) { return 1 + (level - 1) * 0.4; }
 
 // cuánto cambia la confianza de la junta tras un partido: además del
 // resultado en bruto, pesa la contundencia (margen) y si el rival era
