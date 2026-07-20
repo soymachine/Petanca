@@ -3,9 +3,15 @@ import { Player } from '../model/Player.js';
 import { DIFFICULTIES } from '../data/difficulty.js';
 import { CITIES } from '../data/cities.js';
 import { LeagueWorld } from '../domain/LeagueWorld.js';
+import { ForeignLeagueWorld } from '../domain/ForeignLeagueWorld.js';
 import { Cup } from '../domain/Cup.js';
+import { Club } from '../domain/Club.js';
 import { setHomeCountry } from '../data/activeRoster.js';
+import { MetaProgress } from '../model/MetaProgress.js';
+import { citiesFor, awayCountriesFor, countryLabel } from '../data/countries.js';
 import { wrapText, hitRect } from '../core/utils.js';
+
+const PICKABLE_COUNTRIES = ['ES', 'FR', 'IT', 'BE', 'CH', 'PT'];
 
 export class TitleScreen {
   constructor(game) {
@@ -14,8 +20,13 @@ export class TitleScreen {
     this.pickingSlot = false;
     this.slotCursor = Player.activeSlot() - 1;
     this.importMsg = null;
-    this.levelChosen = false;
-    this.levelCursor = 0;
+    // selector de país/ciudad de una partida nueva (ver MetaProgress.js):
+    // solo se le pregunta esto a un Player recién construido, uno por uno
+    this.countryChosen = false;
+    this.countryCursor = 0;
+    this.selectedCountry = 'ES';
+    this.cityChosen = false;
+    this.cityCursor = 0;
   }
 
   draw() {
@@ -29,11 +40,12 @@ export class TitleScreen {
 
     if (this.pickingSlot) { this._drawSlotPicker(); return; }
     if (!player.difficultyChosen) {
-      // partida nueva de verdad (0-0, aún en Albacete): antes de la
-      // dificultad, se puede elegir de debug en qué liga empezar (para
-      // poder llegar rápido a nivel 8 y probar la Copa de Europa)
-      const isFreshGame = player.wins + player.losses === 0 && player.currentLeagueLevel === 1;
-      if (isFreshGame && !this.levelChosen) { this._drawLevelPicker(); return; }
+      // partida nueva de verdad: primero país (ver MetaProgress.js — todos
+      // bloqueados menos España hasta ganar la primera Copa de Europa),
+      // luego ciudad dentro de ese país (bloqueadas por encima del techo ya
+      // alcanzado alguna vez ahí), y solo entonces la dificultad de siempre
+      if (!this.countryChosen) { this._drawCountryPicker(); return; }
+      if (!this.cityChosen) { this._drawCityPicker(); return; }
       this._drawDifficultyPicker();
       return;
     }
@@ -134,39 +146,100 @@ export class TitleScreen {
     input.click();
   }
 
-  // DEBUG: elegir la liga (nivel 1-8) donde arranca la partida nueva, para
-  // no tener que subir jornada a jornada hasta Madrid solo para probar la
-  // Copa de Europa. Reconstruye leagueWorld/cup con el nivel elegido, igual
-  // que hace un ascenso/descenso normal (LeagueWorld.movePlayer los mueve;
-  // aquí como es el arranque, se regenera directamente en ese nivel).
-  _drawLevelPicker() {
-    const { screen, input, player } = this.game;
-    screen.textCenter(31, 'DEBUG: ¿EN QUÉ LIGA EMPEZAMOS?', '#ffb347');
-    screen.textCenter(32, '(para testear temporadas rápido — deja Albacete si no lo necesitas)', '#8a7f66');
-    const w = 15, gap = 1, total = CITIES.length * w + (CITIES.length - 1) * gap;
+  // Selector de país de una partida nueva: España siempre disponible, el
+  // resto bloqueado hasta ganar la primera Copa de Europa en cualquier
+  // partida (ver MetaProgress.unlockAllCountries, disparado desde
+  // Game._finishEuroCupMatch) — ese desbloqueo es de por vida, para
+  // cualquier partida futura, no solo la que estaba en marcha al ganarla.
+  _drawCountryPicker() {
+    const { screen, input } = this.game;
+    screen.textCenter(30, '¿DESDE QUÉ PAÍS EMPEZAMOS?', '#ffb347');
+    screen.textCenter(31, 'el resto se desbloquea al ganar la primera Copa de Europa', '#8a7f66');
+    const w = 20, gap = 2, total = PICKABLE_COUNTRIES.length * w + (PICKABLE_COUNTRIES.length - 1) * gap;
     const x0 = Math.floor((screen.cols - total) / 2);
-    CITIES.forEach((c, i) => {
+    PICKABLE_COUNTRIES.forEach((code, i) => {
       const x = x0 + i * (w + gap);
-      const sel = i === this.levelCursor;
-      screen.box(x, 35, w, 7, sel ? '#7CFC00' : '#8a7f66', sel ? 'double' : undefined);
-      screen.text(x + Math.floor((w - String(c.diff).length) / 2), 36, `${c.diff}`, sel ? '#ffe680' : '#c9c2a8');
-      wrapText(c.name, w - 2).slice(0, 2).forEach((l, k) => screen.text(x + 1, 38 + k, l, sel ? '#fff' : '#9a927a'));
+      const sel = i === this.countryCursor;
+      const unlocked = MetaProgress.isCountryUnlocked(code);
+      const boxCol = !unlocked ? '#4a453a' : sel ? '#7CFC00' : '#8a7f66';
+      screen.box(x, 34, w, 7, boxCol, sel && unlocked ? 'double' : undefined);
+      const label = countryLabel(code);
+      screen.text(x + Math.max(0, Math.floor((w - label.length) / 2)), 36, label, !unlocked ? '#6a6355' : sel ? '#ffe680' : '#c9c2a8');
+      if (!unlocked) screen.text(x + Math.floor((w - 9) / 2), 38, 'BLOQUEADO', '#8a5a3a');
     });
-    screen.textCenter(44, '[←/→] elegir liga   [ENTER] confirmar', '#c9c2a8');
+    screen.textCenter(44, '[←/→] elegir país   [ENTER] confirmar', '#c9c2a8');
 
-    if (input.hit('ArrowLeft')) this.levelCursor = (this.levelCursor + CITIES.length - 1) % CITIES.length;
-    if (input.hit('ArrowRight')) this.levelCursor = (this.levelCursor + 1) % CITIES.length;
+    if (input.hit('ArrowLeft')) this.countryCursor = (this.countryCursor + PICKABLE_COUNTRIES.length - 1) % PICKABLE_COUNTRIES.length;
+    if (input.hit('ArrowRight')) this.countryCursor = (this.countryCursor + 1) % PICKABLE_COUNTRIES.length;
     if (input.hit('Enter') || input.hit(' ')) {
-      const lvl = CITIES[this.levelCursor].diff;
-      if (lvl !== 1) {
-        player.currentLeagueLevel = lvl;
-        player.leagueWorld = LeagueWorld.generate(lvl, player.clubName);
-        player.cup = Cup.generate(player.leagueWorld, player.club, player.club.avgSkill(player.roster));
-        player.seasonClock.scheduleCup(player.seasonClock.firstFreeDayFrom(3, player.league));
-        player.save();
+      const code = PICKABLE_COUNTRIES[this.countryCursor];
+      if (MetaProgress.isCountryUnlocked(code)) {
+        this.selectedCountry = code;
+        this.countryChosen = true;
+        this.cityCursor = 0;
       }
-      this.levelChosen = true;
     }
+  }
+
+  // Selector de ciudad dentro del país elegido: solo el suelo de ese país
+  // (Albacete en España, la ciudad de nivel 6 en un extranjero) está
+  // garantizado; el resto se va desbloqueando partida a partida al
+  // ascender (ver MetaProgress.recordLevelReached, Career.js fin de
+  // temporada) — lo alcanzado en UNA partida sirve para elegir de entrada
+  // en la SIGUIENTE, no en la que está en marcha.
+  _drawCityPicker() {
+    const { screen, input } = this.game;
+    const country = this.selectedCountry;
+    const cities = citiesFor(country);
+    const maxSel = MetaProgress.maxSelectableLevel(country);
+    screen.textCenter(30, `¿EN QUÉ CIUDAD DE ${countryLabel(country).toUpperCase()} EMPEZAMOS?`, '#ffb347');
+    screen.textCenter(31, 'las demás se desbloquean subiendo de categoría en otras partidas', '#8a7f66');
+    const w = 15, gap = 1, total = cities.length * w + (cities.length - 1) * gap;
+    const x0 = Math.floor((screen.cols - total) / 2);
+    cities.forEach((c, i) => {
+      const x = x0 + i * (w + gap);
+      const sel = i === this.cityCursor;
+      const unlocked = c.diff <= maxSel;
+      const boxCol = !unlocked ? '#4a453a' : sel ? '#7CFC00' : '#8a7f66';
+      screen.box(x, 35, w, 7, boxCol, sel && unlocked ? 'double' : undefined);
+      screen.text(x + Math.floor((w - String(c.diff).length) / 2), 36, `${c.diff}`, !unlocked ? '#6a6355' : sel ? '#ffe680' : '#c9c2a8');
+      wrapText(c.name, w - 2).slice(0, 2).forEach((l, k) => screen.text(x + 1, 38 + k, l, !unlocked ? '#5a5347' : sel ? '#fff' : '#9a927a'));
+      if (!unlocked) screen.text(x + Math.floor((w - 9) / 2), 40, 'BLOQUEADA', '#8a5a3a');
+    });
+    screen.textCenter(44, '[←/→] elegir ciudad   [ENTER] confirmar   [ESC] cambiar de país', '#c9c2a8');
+
+    if (input.hit('ArrowLeft')) this.cityCursor = (this.cityCursor + cities.length - 1) % cities.length;
+    if (input.hit('ArrowRight')) this.cityCursor = (this.cityCursor + 1) % cities.length;
+    if (input.hit('Escape')) { this.countryChosen = false; input.pressed.Escape = false; }
+    if (input.hit('Enter') || input.hit(' ')) {
+      const city = cities[this.cityCursor];
+      if (city.diff <= maxSel) {
+        this._confirmCountryAndCity(country, city.diff);
+        this.cityChosen = true;
+      }
+    }
+  }
+
+  // aplica el país/ciudad elegidos al Player recién construido: si es
+  // España-Albacete (el estado por defecto del constructor) no hay nada
+  // que regenerar; para cualquier otra combinación, reconstruye clubName/
+  // leagueWorld/foreignLeagues/cup igual que ya hacía el viejo picker de
+  // debug para un nivel dentro de España, más el reparto de abuelos/
+  // retratos activo (ver data/activeRoster.js) y quién se simula de fondo.
+  _confirmCountryAndCity(country, level) {
+    const { player } = this.game;
+    if (country !== 'ES' || level !== 1) {
+      player.homeCountry = country;
+      player.clubName = Club.randomName(new Set(), country);
+      player.currentLeagueLevel = level;
+      setHomeCountry(country);
+      player.leagueWorld = LeagueWorld.generate(level, player.clubName, country);
+      player.foreignLeagues = new Map();
+      for (const { code, cities } of awayCountriesFor(country)) player.foreignLeagues.set(code, ForeignLeagueWorld.generate(code, cities));
+      player.cup = Cup.generate(player.leagueWorld, player.club, player.club.avgSkill(player.roster));
+      player.seasonClock.scheduleCup(player.seasonClock.firstFreeDayFrom(3, player.league));
+    }
+    player.save();
   }
 
   _drawDifficultyPicker() {
