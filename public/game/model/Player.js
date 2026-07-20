@@ -8,6 +8,7 @@ import { LineupPresets } from './LineupPresets.js';
 import { LeagueWorld } from '../domain/LeagueWorld.js';
 import { ForeignLeagueWorld } from '../domain/ForeignLeagueWorld.js';
 import { awayCountriesFor } from '../data/countries.js';
+import { emptyConsumableStock } from '../data/consumables.js';
 import { SeasonClock } from '../domain/SeasonClock.js';
 import { FreeAgentPool } from '../domain/FreeAgentPool.js';
 import { Cup } from '../domain/Cup.js';
@@ -48,6 +49,11 @@ export class Player {
     this.presets = new LineupPresets();
     this.bolasOwned = [0];
     this.bolaSel = 0;
+    // existencias de consumibles de un solo uso en partido (tila/gel/talco/
+    // "a por todas" — ver data/consumables.js): distinto de los amuletos de
+    // toda la vida (this.roster.get(id).item), esto es stock de club que se
+    // va gastando tirada a tirada, no algo equipado a un abuelo en concreto
+    this.consumables = emptyConsumableStock();
     this.nemesis = null;
     this.derbyClubId = null;
     this.derbyHistory = { wins: 0, losses: 0 };
@@ -281,7 +287,7 @@ export class Player {
       sponsorship: this.sponsorship.toJSON(),
       facilities: this.facilities.toJSON(),
       presets: this.presets.toJSON(),
-      bolasOwned: this.bolasOwned, bolaSel: this.bolaSel,
+      bolasOwned: this.bolasOwned, bolaSel: this.bolaSel, consumables: this.consumables,
       nemesis: this.nemesis, citiesWon: this.citiesWon,
       derbyClubId: this.derbyClubId, derbyHistory: this.derbyHistory,
       nemesisDefeats: this.nemesisDefeats, euroUpsets: this.euroUpsets, seasonTitles: this.seasonTitles, stormWins: this.stormWins,
@@ -336,6 +342,9 @@ export class Player {
     p.presets = LineupPresets.fromJSON(json.presets || []);
     p.bolasOwned = json.bolasOwned || [0];
     p.bolaSel = json.bolaSel ?? 0;
+    // guardado de antes de los consumibles: arranca con las existencias a
+    // cero (nunca se ha comprado ninguno todavía), nunca revienta la carga
+    p.consumables = { ...emptyConsumableStock(), ...(json.consumables || {}) };
     p.nemesis = json.nemesis || null;
     p.derbyClubId = json.derbyClubId || null;
     p.derbyHistory = json.derbyHistory || { wins: 0, losses: 0 };

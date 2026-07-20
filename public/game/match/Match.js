@@ -14,6 +14,7 @@ import { AIPlayer } from './AIPlayer.js';
 import { Narrator } from './Narrator.js';
 import { chemistryLevel, gamesFor } from '../domain/Chemistry.js';
 import { archetypeFor } from '../data/rivalArchetypes.js';
+import { MAX_CONSUMABLES_PER_MATCH } from '../data/consumables.js';
 
 const physicsWorld = new PhysicsWorld();
 
@@ -103,6 +104,16 @@ export class Match {
     this.chronicle = []; // hechos reales del partido para la crónica (ver match/Chronicle.js)
     this._worstDeficit = -999; this._worstDeficitScores = null; // para detectar una remontada de verdad
     this._maxStreakSeen = 0;
+
+    // consumibles de un solo uso EN este partido (ver data/consumables.js):
+    // el stock en sí vive en Player.consumables (Game.js lo gasta y llama a
+    // useConsumable), aquí solo se cuentan los usos de ESTE partido para no
+    // superar MAX_CONSUMABLES_PER_MATCH, y los "flags de la próxima tirada"
+    // que gasta throwBall al lanzar
+    this.consumablesUsedThisMatch = 0;
+    this._noPressureThisThrow = false;
+    this._grippedThisThrow = false;
+    this._allOutThisThrow = false;
 
     this.court = new Court(this.feature);
     const forecastMain = training ? 'SOL' : tournament.currentRound.forecast.main;
@@ -222,6 +233,32 @@ export class Match {
 
   throwProfile() { return ThrowProfile.compute(this); }
 
+  // ¿se puede usar todavía algún consumible en este partido? (nunca en
+  // entrenamiento/práctica, nunca pasado el tope, y solo antes de empezar a
+  // apuntar la tirada — ver Game.useConsumable, que gasta el stock de
+  // verdad en Player.consumables antes de llamar aquí)
+  canUseConsumable() {
+    return !this.training && this.phase === 'aim' && this.turn === 'P' &&
+      this.consumablesUsedThisMatch < MAX_CONSUMABLES_PER_MATCH;
+  }
+
+  // aplica el efecto de un consumible a la PRÓXIMA tirada (o al instante,
+  // en el caso del gel): tila anula la presión, talco garantiza agarre, "a
+  // por todas" quita el amortiguador de temblor a cambio de potencia/efecto
+  // al máximo — todo se limpia solo tras el lanzamiento (ver throwBall)
+  useConsumable(id) {
+    if (!this.canUseConsumable()) return false;
+    this.consumablesUsedThisMatch++;
+    if (id === 'tila') this._noPressureThisThrow = true;
+    else if (id === 'talco') this._grippedThisThrow = true;
+    else if (id === 'bravo') this._allOutThisThrow = true;
+    else if (id === 'gel') {
+      const s = this.roster.get(this.abuelo);
+      s.st = clamp(s.st + 25, 0, 100);
+    }
+    return true;
+  }
+
   _startRound(isFirst) {
     this.balls = [];
     this.ballsLeftP = this.training ? this.ballsLeftP : ballsPerPlayer(this.teamP.length) * this.teamP.length;
@@ -314,7 +351,7 @@ export class Match {
     b.windFactor = ((owner === 'P' && ABUELO_DATA[this.abuelo].clima.VIENTO === 1) ? 0.3 : 1) * (bm.wind || 1);
     b.rollMod = bm.roll || 1;
     b.impact = (bm.impact || 1) * (owner === 'P' ? (prof ? prof.impactBonus : 1) : 1);
-    b.grip = !!bm.grip;
+    b.grip = !!bm.grip || (owner === 'P' && this._grippedThisThrow);
     b.wetPenalty = bm.wetPenalty || 1;
     b.thrower = owner === 'P' ? this.abuelo : null;
     b.loft = loft;
@@ -336,6 +373,12 @@ export class Match {
     this.timeoutUsedThisThrow = false;
     this.lastWasFault = false;
     this.pairMoment = false; // el extra de "momento de pareja" solo vale para este tiro
+    // los flags de consumible eran "para esta tirada" — ya se han leído
+    // (arriba, y dentro de throwProfile()), así que se limpian para que no
+    // se cuelen en la siguiente
+    this._noPressureThisThrow = false;
+    this._grippedThisThrow = false;
+    this._allOutThisThrow = false;
   }
 
   // XP por calidad de tirada: cada bola propia de la mano que se acaba de

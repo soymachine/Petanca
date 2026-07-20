@@ -385,6 +385,20 @@ export class Game {
     this.player.save();
   }
 
+  // gasta un consumible de un solo uso (ver data/consumables.js): el stock
+  // de verdad vive en player.consumables (se compra en El Bar), aquí se
+  // comprueba que quede alguno Y que el propio partido no haya llegado ya
+  // al tope de usos, se descuenta del stock y se aplica el efecto a la
+  // próxima tirada (o al instante, en el caso del gel) — ver Match.useConsumable
+  useConsumable(id) {
+    const p = this.player;
+    if (!this.match || !(p.consumables[id] > 0) || !this.match.canUseConsumable()) return false;
+    if (!this.match.useConsumable(id)) return false;
+    p.consumables[id]--;
+    p.save();
+    return true;
+  }
+
   // XP de participar/ganar (liga usa su propio equivalente en
   // Career.finishWeeklyMatch); anuncia cada subida de nivel en las noticias
   _grantMatchXp(ctx, won, playXp, winXp) {

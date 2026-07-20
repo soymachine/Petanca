@@ -1,12 +1,14 @@
 import { BOLAS } from '../data/bolas.js';
 import { ITEMS, ITEM_IDS } from '../data/items.js';
+import { CONSUMABLES, CONSUMABLE_IDS } from '../data/consumables.js';
 import { itemArtFor, ITEM_ART_W, ITEM_ART_H } from '../data/art/itemArt.js';
 import { CLIMAS } from '../data/climas.js';
 import { wrapText, hitRect, drawTabRow } from '../core/utils.js';
 import { TabsBar } from './TabsBar.js';
 
-const SECTIONS = ['bolas', 'amuletos'];
-const SECTION_LABEL = { bolas: 'BOLAS', amuletos: 'AMULETOS' };
+const SECTIONS = ['bolas', 'amuletos', 'consumibles'];
+const SECTION_LABEL = { bolas: 'BOLAS', amuletos: 'AMULETOS', consumibles: 'CONSUMIBLES' };
+const CONSUMABLE_ROW_H = 4;
 const PANUELO_CLIMAS = ['LLUVIA', 'VIENTO', 'CALOR', 'NIEBLA', 'HELADA'];
 const AMULET_ROW_H = ITEM_ART_H + 2; // arte + un renglón de aire arriba/abajo
 
@@ -26,11 +28,56 @@ export class BarScreen {
     screen.text(80, 6, '[Q] cambiar de pestaña', '#8a7f66');
 
     if (this.section === 'bolas') this._drawBolas();
-    else this._drawAmuletos();
+    else if (this.section === 'amuletos') this._drawAmuletos();
+    else this._drawConsumibles();
 
     if (this.buying) { this._drawBuyModal(); return; }
     if (clicked !== null) { this.section = SECTIONS[clicked]; this.cursor = 0; }
-    else if (input.hit('q') || input.hit('Q')) { this.section = this.section === 'bolas' ? 'amuletos' : 'bolas'; this.cursor = 0; }
+    else if (input.hit('q') || input.hit('Q')) { this.section = SECTIONS[(SECTIONS.indexOf(this.section) + 1) % SECTIONS.length]; this.cursor = 0; }
+  }
+
+  // mostrador de consumibles de un solo uso EN partido (ver
+  // data/consumables.js): a diferencia de los amuletos, esto es stock de
+  // club (no hace falta elegir para quién es) — comprar simplemente suma
+  // una unidad, sin modal de compra.
+  _drawConsumibles() {
+    const { screen, input, player } = this.game;
+    const boxX = 4, boxY = 8, boxW = 118, boxH = 36;
+    screen.box(boxX, boxY, boxW, boxH, '#8a7f66');
+    screen.text(boxX + 3, boxY + 1, 'CONSUMIBLES DE UN SOLO USO', '#ffb347');
+    screen.text(boxX + 3, boxY + 2, 'de existencias de club, no de un abuelo — se gastan tirada a tirada en partido', '#8a7f66');
+
+    let yy = boxY + 4;
+    let rowHover = null;
+    CONSUMABLE_IDS.forEach((id, idx) => {
+      const c = CONSUMABLES[id];
+      const sel = idx === this.cursor;
+      const rowRect = { x: boxX + 1, y: yy, w: boxW - 2, h: CONSUMABLE_ROW_H };
+      const over = hitRect(input.mouse.cx, input.mouse.cy, rowRect.x, rowRect.y, rowRect.w, rowRect.h);
+      if (over) rowHover = idx;
+      if (sel || over) screen.box(rowRect.x, rowRect.y, rowRect.w, rowRect.h, sel ? '#7CFC00' : '#ffe680');
+
+      screen.text(boxX + 4, yy + 1, c.name, sel ? '#fff' : over ? '#ffe680' : '#88c8e8');
+      screen.text(boxX + 42, yy + 1, `${c.price}€`, player.money >= c.price ? '#7ec850' : '#ff5c5c');
+      screen.text(boxX + 52, yy + 1, `tienes: ${player.consumables[id] || 0}`, '#c9a35d');
+      wrapText(c.desc, boxW - 10).forEach((l, k) => screen.text(boxX + 4, yy + 2 + k, l, '#9a927a'));
+      yy += CONSUMABLE_ROW_H;
+    });
+
+    screen.text(boxX + 3, boxY + boxH - 1, '[↑/↓] elegir · ratón = seleccionar   [ENTER] comprar 1 unidad', '#c9c2a8');
+
+    if (rowHover !== null && input.mouse.clicked) this.cursor = rowHover;
+    if (input.hit('ArrowUp')) this.cursor = (this.cursor + CONSUMABLE_IDS.length - 1) % CONSUMABLE_IDS.length;
+    if (input.hit('ArrowDown')) this.cursor = (this.cursor + 1) % CONSUMABLE_IDS.length;
+    if (input.hit('Enter') || input.hit(' ')) {
+      const id = CONSUMABLE_IDS[this.cursor];
+      const c = CONSUMABLES[id];
+      if (player.money >= c.price) {
+        player.money -= c.price;
+        player.consumables[id] = (player.consumables[id] || 0) + 1;
+        player.save();
+      }
+    }
   }
 
   _drawBolas() {

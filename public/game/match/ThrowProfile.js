@@ -39,7 +39,9 @@ export class ThrowProfile {
     const fat = Math.max(0, Math.min(1, (60 - s.st) / 60));
     shake *= 1 + fatiguePenalty(s.st);
 
-    if (!match.training && match.scoreA > match.scoreP && i !== 5) {
+    // la tila (consumible, ver data/consumables.js) anula tanto la presión
+    // del marcador como el extra de Madrid ("pressure") en esta tirada
+    if (!match.training && match.scoreA > match.scoreP && i !== 5 && !match._noPressureThisThrow) {
       const press = (1 - s.getStat('temple') / 10) * 0.35;
       shake *= 1 + press * (match.feature === 'pressure' ? 1.7 : 1);
     }
@@ -104,6 +106,12 @@ export class ThrowProfile {
     let spinMax = (0.5 + s.getStat('mana') * 0.05) * (bm.spin || 1);
     if (s.item && s.item.id === 'botas') spinMax *= 1.15;
     if (i === 6) spinMax *= 1.1; // PEPE, "manos de santo": efecto de más, hasta el que no lleva de serie
+
+    // "a por todas" (consumible): vas sin red — más temblor, pero potencia y
+    // efecto al máximo. Se aplica el último, encima de cualquier otro ajuste
+    // (rol, ítems, rachas...), para que sea un empujón claro en ambos
+    // sentidos y no se diluya entre el resto de modificadores
+    if (match._allOutThisThrow) { shake *= 1.5; maxPow *= 1.3; spinMax *= 1.3; }
 
     return {
       shake: Math.max(0.006, shake),

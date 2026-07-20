@@ -3,15 +3,21 @@ import { CLIMAS, isRainy } from '../data/climas.js';
 import { ABUELO_DATA, STAT_KEYS, STAT_LABEL } from '../data/abuelos.js';
 import { BIG_DIGITS } from '../data/art/staticArt.js';
 import { drillFor } from '../data/trainingDrills.js';
+import { CONSUMABLES, CONSUMABLE_IDS, MAX_CONSUMABLES_PER_MATCH } from '../data/consumables.js';
 import { clamp, dist2d } from '../core/utils.js';
 
 export class MatchScreen {
   constructor(game) { this.game = game; }
 
   update(dt) {
-    const { match, input } = this.game;
+    const { match, input, player } = this.game;
     match.tickFrame(this.game.frame);
     match.update(dt, input);
+    if (match.canUseConsumable()) {
+      for (const id of CONSUMABLE_IDS) {
+        if (player.consumables[id] > 0 && input.hit(CONSUMABLES[id].hotkey)) this.game.useConsumable(id);
+      }
+    }
     if (match._finished) this.game.onMatchFinished();
   }
 
@@ -338,6 +344,20 @@ export class MatchScreen {
         : 'APUNTAR (más fino, menos alcance)';
       const roleCol = M.role === 'tirar' ? '#ff8c5b' : M.role === 'bloquear' ? '#c8a0e8' : '#88e088';
       screen.text(5, py + 2, `ángulo: ${deg}°     rol: ${roleTxt}`, roleCol);
+      if (M.canUseConsumable()) {
+        const { player } = this.game;
+        const usesLeft = MAX_CONSUMABLES_PER_MATCH - M.consumablesUsedThisMatch;
+        let cx = 5;
+        screen.text(cx, py + 4, 'CONSUMIBLES: ', '#8a7f66'); cx += 13;
+        for (const id of CONSUMABLE_IDS) {
+          const c = CONSUMABLES[id];
+          const n = player.consumables[id] || 0;
+          const label = `[${c.hotkey}]${c.short}(${n}) `;
+          screen.text(cx, py + 4, label, n > 0 ? '#ffe680' : '#5a5347');
+          cx += label.length;
+        }
+        screen.text(cx, py + 4, `  quedan ${usesLeft} uso(s) este partido`, '#8a7f66');
+      }
     } else if (M.phase === 'spin') {
       const prof = M.throwProfile();
       const retroReady = !M.training && M.role === 'tirar' && prof.spinMax > 0 && Math.abs(M.spin) > prof.spinMax * 0.5;
