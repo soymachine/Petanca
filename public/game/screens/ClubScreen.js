@@ -5,6 +5,8 @@ import { boardPresidentFor, boardAdj } from '../data/boardPresident.js';
 import { TRAINING_DRILLS } from '../data/trainingDrills.js';
 import { STAT_LABEL } from '../data/abuelos.js';
 import { BIG_DIGITS } from '../data/art/staticArt.js';
+import { DIFFICULTIES } from '../data/difficulty.js';
+import { leagueWageFactor } from '../model/Career.js';
 
 const SECTIONS = ['facilities', 'sponsor', 'junta', 'economia'];
 const SECTION_LABEL = { facilities: 'DESCAMPADO', sponsor: 'PATROCINIOS', junta: 'LA JUNTA', economia: 'ECONOMÍA' };
@@ -46,7 +48,13 @@ export class ClubScreen {
     // los sufijos "(semana N)" de las que aún están tapadas, la fila de
     // pestañas puede alargarse bastante y se comía este texto si compartían fila
     screen.text(4, 7, '[Q] cambiar de pestaña', '#8a7f66');
-    const nomina = this.game.player.roster.totalUpkeep();
+    // misma fórmula que Career.finishWeeklyMatch al descontarla de verdad
+    // cada semana: roster.totalUpkeep() a secas es solo la base, sin la
+    // dificultad ni el recargo por nivel de liga — mostrar solo eso hacía
+    // parecer que la nómina no subía nunca, cuando sí lo hacía por dentro
+    const { player } = this.game;
+    const diff = DIFFICULTIES.find((d) => d.id === player.difficulty) || DIFFICULTIES[1];
+    const nomina = Math.round(player.roster.totalUpkeep() * diff.wageMult * leagueWageFactor(player.currentLeagueLevel));
     screen.text(34, 7, `nómina semanal: ${nomina}€`, '#c98080');
 
     if (this.section === 'sponsor' && revealed.patrocinios) this._drawSponsor();
@@ -287,23 +295,33 @@ export class ClubScreen {
   // sitio) más el gráfico de barras semana a semana de las últimas 20
   // semanas (Player.economyLastWeeks)
   _drawEconomia() {
-    const { screen, player } = this.game;
-    screen.box(4, 8, 132, 9, '#8a7f66');
+    const { screen, input, player } = this.game;
+    // altura suficiente para título + etiqueta + subtítulo + los 5 renglones
+    // de BIG_DIGITS: con menos de esto el propio marco cortaba los números
+    // grandes por la mitad
+    screen.box(4, 8, 132, 11, '#8a7f66');
     screen.text(7, 9, 'RESUMEN DE LA CAJA', '#ffb347');
     const cols = [
-      { label: 'GASTADO', value: player.totalSpent, color: '#ff6a5c' },
-      { label: 'INGRESADO', value: player.totalEarned, color: '#7ec850' },
-      { label: 'RESULTADO', sub: '(para invertir ahora mismo)', value: player.money, color: '#ffe14d' },
+      { key: 'expense', label: 'GASTADO', value: player.totalSpent, color: '#ff6a5c' },
+      { key: 'income', label: 'INGRESADO', value: player.totalEarned, color: '#7ec850' },
+      { key: 'net', label: 'RESULTADO', sub: '(para invertir ahora mismo)', value: player.money, color: '#ffe14d' },
     ];
     const colW = Math.floor(128 / 3);
+    let hovered = null;
     cols.forEach((c, i) => {
       const cx = 6 + i * colW + Math.floor(colW / 2);
-      screen.text(cx - Math.floor(c.label.length / 2), 11, c.label, '#c9c2a8');
+      const rect = { x: 6 + i * colW, y: 10, w: colW, h: 8 };
+      const over = hitRect(input.mouse.cx, input.mouse.cy, rect.x, rect.y, rect.w, rect.h);
+      if (over) hovered = c;
+      screen.text(cx - Math.floor(c.label.length / 2), 11, c.label, over ? '#fff' : '#c9c2a8');
       if (c.sub) screen.text(cx - Math.floor(c.sub.length / 2), 12, c.sub, '#6a6355');
       this._drawBigNumber(cx, 13, c.value, c.color);
     });
 
     this._drawEconomyChart();
+    // el tooltip se pinta el último para quedar por encima del gráfico
+    // (mismo patrón que LeagueMapScreen._drawClubTooltip / HubScreen)
+    if (hovered) this._drawEconomyTooltip(hovered, input.mouse.cx, input.mouse.cy);
   }
 
   _drawBigNumber(cx, y, value, color) {
@@ -320,11 +338,33 @@ export class ClubScreen {
     screen.text(bx + 1, y + 2, '€', color);
   }
 
+  // ventana al pasar el ratón por GASTADO/INGRESADO/RESULTADO: desglose de
+  // las últimas 5 semanas de esa misma cifra, para no depender solo de leer
+  // la altura de las barras del gráfico a ojo
+  _drawEconomyTooltip(col, mx, my) {
+    const { screen, player } = this.game;
+    const weeks = player.economyLastWeeks(5);
+    const lines = [[`${col.label} — últimas 5 semanas`, '#ffe680']];
+    for (const w of weeks) {
+      if (w.weekIndex < 0) { lines.push(['(la partida no había empezado)', '#5a5347']); continue; }
+      const val = col.key === 'expense' ? w.expense : col.key === 'income' ? w.income : w.income - w.expense;
+      const sign = col.key === 'net' && val > 0 ? '+' : '';
+      lines.push([`semana ${w.weekIndex + 1}: ${sign}${Math.round(val)}€`, val === 0 ? '#8a8a7a' : col.color]);
+    }
+    const tw = Math.max(...lines.map((l) => l[0].length)) + 4;
+    const th = lines.length + 2;
+    const tx = Math.min(mx + 2, screen.cols - tw - 1);
+    const ty = Math.min(my + 1, screen.rows - th - 1);
+    for (let r = 0; r < th; r++) for (let c = 0; c < tw; c++) screen.put(tx + c, ty + r, '█', '#000');
+    screen.box(tx, ty, tw, th, '#ffe14d', 'double');
+    lines.forEach((l, i) => screen.text(tx + 2, ty + 1 + i, l[0], l[1]));
+  }
+
   // barras verde (ingreso) / roja (gasto) semana a semana, siempre las
   // últimas ECONOMY_WEEKS (las que aún no han pasado salen a 0, no vacías)
   _drawEconomyChart() {
     const { screen, player } = this.game;
-    const bx = 4, by = 18, bw = 132, bh = 25;
+    const bx = 4, by = 20, bw = 132, bh = 24;
     screen.box(bx, by, bw, bh, '#8a7f66');
     screen.text(bx + 3, by + 1, `INGRESOS Y GASTOS — ÚLTIMAS ${ECONOMY_WEEKS} SEMANAS`, '#ffb347');
     screen.text(bx + 3, by + 2, '■ ingreso', '#7ec850');
