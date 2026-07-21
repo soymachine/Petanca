@@ -237,6 +237,13 @@ export class TitleScreen {
       player.foreignLeagues = new Map();
       for (const { code, cities } of awayCountriesFor(country)) player.foreignLeagues.set(code, ForeignLeagueWorld.generate(code, cities));
       player.cup = Cup.generate(player.leagueWorld, player.club, player.club.avgSkill(player.roster));
+      // el constructor de Player ya había agendado un cruce de Copa por
+      // defecto (España/Albacete, antes de saber qué ciudad se iba a elegir
+      // de verdad) — sin limpiarlo primero, firstFreeDayFrom lo ve ocupado
+      // y agenda el cruce real al día SIGUIENTE, dejando dos partidos de
+      // Copa contra el mismo rival en días consecutivos (bug real, no solo
+      // cosmético: ambos leen del mismo `player.cup`)
+      player.seasonClock.cupMatches = {};
       player.seasonClock.scheduleCup(player.seasonClock.firstFreeDayFrom(3, player.league));
     }
     player.save();
