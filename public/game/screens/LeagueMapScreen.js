@@ -317,14 +317,14 @@ export class LeagueMapScreen {
       const label = `${row.name}${row.isPlayer ? ' ★' : ''}`.slice(0, nameW).padEnd(nameW);
       screen.text(x + 6, ty, label, nameCol);
       screen.text(x + 6 + nameW + 1, ty, `${row.won} (G) / ${row.lost} (P)`, nameCol);
-      if (!row.isPlayer) rowRects.push({ club: row, x, y: ty, w });
+      rowRects.push({ club: row, x, y: ty, w });
     }
 
-    // pasar el ratón por un equipo rival enseña su escudo y los nombres de
-    // su plantilla (información pública: quién juega en cada club no es
-    // ningún secreto). En modo Debugger, _drawClubTooltip añade encima
-    // stats/valor/estado de venta reales, para poder debugar el Mercado y
-    // la generación de jugadores sin tener que fichar a nadie.
+    // pasar el ratón por cualquier equipo (el nuestro incluido) enseña su
+    // escudo y los nombres de su plantilla — quién juega en cada club no es
+    // ningún secreto. Las stats reales, en cambio, sí son información
+    // privada: de un rival solo se destapan si ya lo hemos scouteado (ver
+    // _drawClubTooltip); las nuestras se ven siempre, es nuestra plantilla.
     // No se pinta aquí: se guarda y se pinta al final de draw() para que
     // quede siempre por encima del resto de la UI (ver draw()).
     const hovered = rowRects.find((r) => hitRect(input.mouse.cx, input.mouse.cy, r.x, r.y, r.w, 1));
@@ -382,27 +382,45 @@ export class LeagueMapScreen {
     screen.text(b.x + 2, b.y + b.h - 2, '[←] anterior   [→] siguiente', '#8a7f66');
   }
 
-  // escudo + nombre del club, y quién juega en él, para cualquier equipo
-  // de la tabla — quién forma la plantilla rival no es ningún secreto. En
-  // modo Debugger se añade además la caja del club y, por jugador, edad,
-  // valor de mercado, si está en venta y sus stats reales: eso sí es
-  // información que en juego normal solo se consigue ojeando o fichando.
+  // escudo + nombre del club, y quién juega en él, para cualquier equipo de
+  // la tabla — quién forma la plantilla rival no es ningún secreto. Las
+  // stats reales, en cambio, solo se destapan para nuestra propia plantilla
+  // (obviamente) o para un rival que ya hayamos scouteado en el Mercado
+  // (mismo `statsRevealed` que usa Game.marketEntries/PenyaScreen — si no,
+  // sería enseñar gratis lo que en Ojeadores cuesta tiempo y dinero
+  // averiguar). Modo Debugger solo añade la caja del club y, por jugador
+  // rival sin scoutear, su valor de mercado — nunca sus stats reales.
   _drawClubTooltip(club, mx, my) {
     const { screen, player } = this.game;
     const crest = CrestGenerator.generate(club.name);
     const countryTag = club.country && club.country !== player.homeCountry ? ` (${(foreignCountry(club.country) || {}).label || club.country})` : '';
 
     const lines = [[`${club.name}${countryTag}`, '#ffe680']];
-    if (player.debugMode) lines.push([`Caja del club: ${club.money ?? 0}€`, '#c9c2a8']);
+    if (player.debugMode && !club.isPlayer) lines.push([`Caja del club: ${club.money ?? 0}€`, '#c9c2a8']);
     lines.push(['', '#000']);
-    if (!club.players.length) lines.push(['(sin jugadores)', '#8a8a7a']);
-    for (const p of club.players) {
-      if (player.debugMode) {
-        lines.push([`${p.name}${p.forSale ? '  [EN VENTA]' : ''}  ·  ${p.age} años  ·  valor ${p.value}€`, p.forSale ? '#ffd75e' : '#a8e8a8']);
-        const statsTxt = STAT_KEYS.map((k) => `${STAT_LABEL[k].slice(0, 3)} ${p.stats[k]}`).join('  ');
+
+    if (club.isPlayer) {
+      // nuestra propia plantilla: es la nuestra, se ve entera siempre
+      const ids = player.roster.ids;
+      if (!ids.length) lines.push(['(sin jugadores)', '#8a8a7a']);
+      for (const id of ids) {
+        const s = player.roster.get(id);
+        lines.push([`${this.game.displayName(id)}  ·  ${s.age} años`, '#a8e8a8']);
+        const statsTxt = STAT_KEYS.map((k) => `${STAT_LABEL[k].slice(0, 3)} ${s.getStatDisplay(k)}`).join('  ');
         lines.push([`  ${statsTxt}`, '#88c8e8']);
-      } else {
-        lines.push([`· ${p.name}  ·  ${p.age} años`, '#a8e8a8']);
+      }
+    } else if (!club.players.length) {
+      lines.push(['(sin jugadores)', '#8a8a7a']);
+    } else {
+      for (const p of club.players) {
+        const forSaleTag = player.debugMode && p.forSale ? '  [EN VENTA]' : '';
+        lines.push([`· ${p.name}${forSaleTag}  ·  ${p.age} años`, player.debugMode && p.forSale ? '#ffd75e' : '#a8e8a8']);
+        if (p.statsRevealed) {
+          const statsTxt = STAT_KEYS.map((k) => `${STAT_LABEL[k].slice(0, 3)} ${p.stats[k]}`).join('  ');
+          lines.push([`  ${statsTxt}`, '#88c8e8']);
+        } else if (player.debugMode) {
+          lines.push([`  sin scoutear  ·  valor ${p.value}€`, '#5a5347']);
+        }
       }
     }
 
