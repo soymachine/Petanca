@@ -1,14 +1,14 @@
 import { ABUELO_DATA, RETIRE_AT, STAT_KEYS, STAT_LABEL } from '../data/abuelos.js';
 import { CLIMAS } from '../data/climas.js';
 import { ITEMS } from '../data/items.js';
-import { wrapText, truncate, drawTabRow, hitRect } from '../core/utils.js';
+import { wrapText, truncate, drawTabRow, hitRect, clamp } from '../core/utils.js';
 import { TabsBar } from './TabsBar.js';
 import { upkeepFor } from '../model/Roster.js';
 import { TransferPool } from '../domain/TransferPool.js';
 import { SCOUT_TEMPLATES } from '../data/scouts.js';
 import { FOREIGN_COUNTRIES } from '../data/countries.js';
 import { generateScoutPortrait } from '../data/art/scoutPortraits.js';
-import { resetChemistryFor, bondLabel } from '../domain/Chemistry.js';
+import { resetChemistryFor, bondLabel, gamesFor, chemistryLevel } from '../domain/Chemistry.js';
 import { CrestGenerator } from '../portraits/CrestGenerator.js';
 import { TRAINING_DRILLS } from '../data/trainingDrills.js';
 import { archetypeForAbuelo } from '../data/abueloArchetypes.js';
@@ -81,6 +81,9 @@ export class PenyaScreen {
     this.assignCountryFor = null; // modal: { scoutId, cursor } — a qué país lo pones a ojear
     this.assignScoutFor = null; // modal: { seedKey, name, cursor } — qué ojeador vigila a este jugador
     this.panteonCursor = 0; // qué hueco de la plantilla se mira en el Panteón
+    this.detailAbuelo = null; // id con la vista de detalle abierta (clic en una fila de Plantilla)
+    this.detailScroll = 0; // scroll del histórico temporada a temporada dentro del detalle
+    this.mentorPickFor = null; // modal: { pupilId, cursor } — qué mentor se busca para este pupilo
   }
 
   // nivel 0-100 de una fila del mercado, tal y como se le puede mostrar al
@@ -148,8 +151,10 @@ export class PenyaScreen {
     if (input.hit('Escape')) {
       if (this.allocating !== null) { this.allocating = null; input.pressed.Escape = false; }
       else if (this.trainDrillPick) { this.trainDrillPick = null; input.pressed.Escape = false; }
+      else if (this.mentorPickFor) { this.mentorPickFor = null; input.pressed.Escape = false; }
       else if (this.assignScoutFor) { this.assignScoutFor = null; input.pressed.Escape = false; }
       else if (this.assignCountryFor) { this.assignCountryFor = null; input.pressed.Escape = false; }
+      else if (this.detailAbuelo !== null) { this.detailAbuelo = null; input.pressed.Escape = false; }
     }
     TabsBar.draw(this.game, 'penya');
     screen.textCenter(4, '═══ MI PEÑA ═══', '#ffb347');
@@ -268,11 +273,18 @@ export class PenyaScreen {
       if (idx >= this.scroll + visibleRows) this.scroll = idx - visibleRows + 1;
       if (idx === 0) this.scroll = 0;
     }
-    if (activeHover !== null && input.mouse.clicked && nivelClicked === null) this.cursor = activeHover;
+    if (activeHover !== null && input.mouse.clicked && nivelClicked === null) {
+      this.cursor = activeHover;
+      if (!this.mentorMode) { this.detailAbuelo = activeHover; this.detailScroll = 0; }
+    }
     if (nivelClicked !== null) { this.cursor = nivelClicked; this.allocating = nivelClicked; this.allocCursor = 0; }
 
     if (this.allocating !== null) {
       this._drawAllocator(this.allocating);
+      return;
+    }
+    if (this.detailAbuelo !== null) {
+      this._drawAbueloDetail(this.detailAbuelo);
       return;
     }
     if (this.trainDrillPick) {
@@ -585,6 +597,232 @@ export class PenyaScreen {
       if (this.game.player.roster.get(id).mentorOf === pupilId) return id;
     }
     return null;
+  }
+
+  // compañero de plantilla con el que más partidos lleva jugados `id` — la
+  // compenetración (ver domain/Chemistry.js) no se acumula entre varios
+  // compañeros, así que solo interesa mostrar el vínculo más fuerte
+  _bestChemistryPartner(id) {
+    const { player } = this.game;
+    let best = null;
+    for (const oid of player.roster.ids) {
+      if (oid === id) continue;
+      const games = gamesFor(player.chemistry, id, oid);
+      if (games > 0 && (!best || games > best.games)) best = { oid, games };
+    }
+    return best;
+  }
+
+  // etiqueta puramente narrativa del riesgo por edad: nunca se enseña la
+  // probabilidad real de fallecimiento (ver AbueloState.deathChance), solo
+  // un tono acorde a AbueloState.ageDeclineFor/deathChance
+  _agingRiskLabel(age) {
+    if (age < 72) return { label: 'sin riesgo aparente todavía', color: '#7ec850' };
+    if (age < 78) return { label: 'empieza a acusar los años', color: '#ffe14d' };
+    if (age < 85) return { label: 'riesgo notable — cuidado con forzarlo de más', color: '#ff8c5b' };
+    return { label: 'muy mayor — cada temporada que juega ya es un regalo', color: '#ff5c5c' };
+  }
+
+  // histórico temporada a temporada, más reciente primero, con las
+  // victorias/derrotas de CADA temporada calculadas restando dos filas
+  // consecutivas de seasonLog (que guarda acumulados, ver
+  // AbueloState.recordSeasonSnapshot) — si `gen` cambia entre una fila y la
+  // siguiente, hubo un relevo de por medio y no hay fila anterior con la
+  // que restar, así que se muestra el acumulado tal cual
+  _seasonDeltas(s) {
+    const log = s.seasonLog;
+    const out = [];
+    for (let i = log.length - 1; i >= 0; i--) {
+      const cur = log[i];
+      const prev = i > 0 ? log[i - 1] : null;
+      let wins = cur.cumWins, losses = cur.cumLosses;
+      if (prev && prev.gen === cur.gen) { wins = cur.cumWins - prev.cumWins; losses = cur.cumLosses - prev.cumLosses; }
+      out.push({ ...cur, wins, losses });
+    }
+    return out;
+  }
+
+  // vista de detalle de un abuelo: retrato a la izquierda (reducido un 80%,
+  // ver Screen.drawPhotoArtScaled), panel de stats ampliado a la derecha e
+  // histórico temporada a temporada abajo, con accesos directos a agendar
+  // entreno, buscar mentor y retirar sin volver a la lista
+  _drawAbueloDetail(id) {
+    const { screen, input, player } = this.game;
+    const f = this.game.faces[id];
+    const s = player.roster.get(id);
+    const w = 132, h = 44;
+    const x = Math.floor((screen.cols - w) / 2), y = 1;
+    this._fillBlack(x, y, w, h);
+    screen.box(x, y, w, h, '#ffe14d', 'double');
+
+    const archetype = archetypeForAbuelo(s);
+    const header = `${this.game.displayName(id).toUpperCase()} — Nv.${s.level} · ${s.age} años · ${s.gen + 1}ª generación${archetype ? ` · ${archetype.label}` : ''}`;
+    screen.text(x + 2, y, ` ${truncate(header, w - 6)} `, '#ffe680');
+
+    // ---- retrato a la izquierda ----
+    const art = s.signed ? s.signed.portrait : f.photo;
+    const px = x + 2, py = y + 2;
+    let portraitW = 0, portraitH = 0;
+    if (art && !art.layers) {
+      screen.drawPhotoArtScaled(art, px, py, 0.8);
+      portraitW = Math.round(art.cols * 0.8);
+      portraitH = Math.round(art.rows * 0.8);
+    } else if (art) {
+      screen.drawPortrait(art, px, py);
+      portraitW = Math.max(...art.layers.map(([, lines]) => Math.max(...lines.map((l) => l.length))));
+      portraitH = Math.max(...art.layers.map(([, lines]) => lines.length));
+    }
+
+    // ---- columna de stats, a la derecha del retrato ----
+    const ix = x + Math.max(portraitW + 5, 42);
+    let ry = y + 2;
+    screen.text(ix, ry, 'STATS', '#ffb347'); ry++;
+    for (const k of STAT_KEYS) {
+      const val = s.getStatDisplay(k);
+      const bar = Math.round(val / 5);
+      const trained = (s.bonus[k] || 0) > 0;
+      const cap = s.potentialCap ? s.potentialCap[k] * 10 : null;
+      const decline = s.ageDeclineFor(k);
+      let extra = '';
+      if (cap && cap < 100) extra += ` techo ${cap}`;
+      if (decline > 0) extra += ` -${decline} edad`;
+      screen.text(ix, ry, `${STAT_LABEL[k].padEnd(8)} ${'▮'.repeat(bar)}${'▯'.repeat(20 - bar)} ${val}${trained ? '▲' : ''}`, trained ? '#a8e8a8' : '#c9c2a8');
+      if (extra) screen.text(ix + 33, ry, extra.trim(), '#ff8c5b');
+      ry++;
+    }
+    ry++;
+    const stBar = Math.round(s.st / 5);
+    screen.text(ix, ry, `STAMINA  ${'▮'.repeat(stBar)}${'▯'.repeat(20 - stBar)} ${s.st}`, s.st > 60 ? '#7ec850' : s.st > 30 ? '#ffe14d' : '#ff5c5c'); ry++;
+    const moPct = clamp((s.mo + 100) / 200, 0, 1);
+    const moBar = Math.round(moPct * 20);
+    screen.text(ix, ry, `ESTADO   ${'▮'.repeat(moBar)}${'▯'.repeat(20 - moBar)} ${s.mo >= 0 ? '+' : ''}${s.mo}`, s.mo >= 0 ? '#88e088' : '#ef9f9f'); ry += 2;
+
+    screen.text(ix, ry, 'CARRERA (esta generación)', '#ffb347'); ry++;
+    screen.text(ix, ry, `${s.career.wins}G ${s.career.losses}P  ·  racha máxima ${s.career.bestStreak}  ·  ${s.torneos} partidas / ${RETIRE_AT}`, '#c9c2a8'); ry++;
+    if (s.career.closestWin !== null) { screen.text(ix, ry, `victoria más ajustada: por ${s.career.closestWin} punto(s)`, '#c9c2a8'); ry++; }
+    ry++;
+
+    const bond = this._bestChemistryPartner(id);
+    screen.text(ix, ry, 'MEJOR COMPENETRACIÓN', '#ffb347'); ry++;
+    if (bond) {
+      const label = bondLabel(player.chemistry, id, bond.oid);
+      screen.text(ix, ry, `con ${this.game.displayName(bond.oid)} (${bond.games} partidos)${label ? `: ${label}` : ''}`, '#a8e8c8');
+    } else {
+      screen.text(ix, ry, 'sin vínculos todavía', '#8a7f66');
+    }
+    ry += 2;
+
+    const mentorId = this._mentorOf(id);
+    screen.text(ix, ry, 'MENTOR', '#ffb347'); ry++;
+    if (mentorId !== null) {
+      const statLabel = STAT_LABEL[player.roster.mentorStatOf(mentorId)];
+      screen.text(ix, ry, `${this.game.displayName(mentorId)} — enseña ${statLabel} extra`, '#c8a0e8');
+    } else {
+      screen.text(ix, ry, 'sin mentor asignado — [N] buscar uno', '#8a7f66');
+    }
+    ry += 2;
+
+    const risk = this._agingRiskLabel(s.age);
+    screen.text(ix, ry, 'RIESGO POR EDAD', '#ffb347'); ry++;
+    screen.text(ix, ry, risk.label, risk.color);
+
+    // ---- histórico temporada a temporada, tira inferior con scroll ----
+    // arranca DESPUÉS de lo más bajo entre el retrato y la columna de stats
+    // (nunca a una fila fija desde abajo): el retrato reescalado a 80% es más
+    // alto que las stats, así que un offset fijo lo recortaba por debajo
+    const histY = Math.max(py + portraitH, ry + 1) + 1;
+    screen.text(x + 2, histY, '─'.repeat(w - 4), '#5a5347');
+    screen.text(x + 2, histY + 1, 'HISTÓRICO TEMPORADA A TEMPORADA', '#ffb347');
+    const deltas = this._seasonDeltas(s);
+    const footerY = y + h - 2;
+    const visible = Math.max(1, Math.min(5, footerY - (histY + 3)));
+    const maxScroll = Math.max(0, deltas.length - visible);
+    this.detailScroll = clamp(this.detailScroll, 0, maxScroll);
+    const histBoxY = histY + 2;
+    if (hitRect(input.mouse.cx, input.mouse.cy, x + 2, histBoxY, w - 4, visible)) {
+      this.detailScroll = clamp(this.detailScroll + input.wheel, 0, maxScroll);
+    }
+    if (!deltas.length) {
+      screen.text(x + 2, histBoxY, 'Todavía no ha completado ninguna temporada.', '#8a8a7a');
+    } else {
+      deltas.slice(this.detailScroll, this.detailScroll + visible).forEach((d, i) => {
+        const ry2 = histBoxY + i;
+        screen.text(x + 2, ry2, `T${d.season} (nivel ${d.level})`.padEnd(18), '#c9c2a8');
+        screen.text(x + 20, ry2, `${d.wins}G ${d.losses}P`.padEnd(10), d.wins >= d.losses ? '#88e088' : '#ef9f9f');
+        screen.text(x + 32, ry2, `media stats ${d.avgStat}`.padEnd(18), '#a8d8ff');
+        screen.text(x + 52, ry2, `${d.age} años  ·  moral ${d.moral >= 0 ? '+' : ''}${d.moral}`, '#8a7f66');
+      });
+      if (maxScroll > 0) {
+        screen.text(x + w - 30, histBoxY + visible, `rueda = más (${this.detailScroll + 1}-${Math.min(this.detailScroll + visible, deltas.length)}/${deltas.length})`, '#8a7f66');
+      }
+    }
+
+    // ---- acciones ----
+    const already = this.game.trainingScheduledFor(id);
+    const canTrain = s.st >= player.facilities.trainingCost() && !already && !s.isInjured(player.seasonClock.day);
+    const canRetire = s.torneos >= RETIRE_AT;
+    const hints = [];
+    hints.push(canTrain ? '[T] agendar entrenamiento' : already ? `entreno agendado: ${already.drill} (${already.dayLabel})` : 'sin stamina para entrenar');
+    hints.push('[N] buscar mentor');
+    if (canRetire) hints.push('[G] retirar');
+    hints.push('[ESC] cerrar');
+    screen.text(x + 2, y + h - 2, truncate(hints.join('   ·   '), w - 4), '#c9c2a8');
+
+    // los modales anidados (agendar entreno / buscar mentor) se dibujan
+    // encima de este detalle en vez de sustituirlo, igual que el resto de
+    // pickers de la pantalla (ver _drawAssignScoutModal)
+    if (this.trainDrillPick) { this._drawTrainDrillModal(); return; }
+    if (this.mentorPickFor) { this._drawMentorPickModal(); return; }
+
+    if (canTrain && (input.hit('t') || input.hit('T'))) this.trainDrillPick = { abueloId: id, cursor: 0 };
+    if (input.hit('n') || input.hit('N')) this.mentorPickFor = { pupilId: id, cursor: 0 };
+    if (canRetire && (input.hit('g') || input.hit('G'))) {
+      const hadLegend = resetChemistryFor(player, id);
+      const { inherited } = s.retireToGrandchild();
+      player.news.push(this._inheritanceNews(id, inherited));
+      if (hadLegend) player.news.push(`FIN DE UNA ERA: la pareja de leyenda de ${this.game.displayName(id)} se deshace con el relevo. Al nieto le toca hacerse un hueco desde cero.`);
+      player.save();
+      this.detailAbuelo = null;
+    }
+  }
+
+  // modal para buscarle un mentor a ESTE pupilo — dirección opuesta a
+  // mentorMode (que hace de un abuelo elegido en la lista mentor de OTRO,
+  // con [M]); se abre con [N] desde la vista de detalle
+  _drawMentorPickModal() {
+    const { screen, input, player } = this.game;
+    const pupilId = this.mentorPickFor.pupilId;
+    const candidates = player.roster.ids.filter((oid) => oid !== pupilId);
+    const w = 66, h = Math.min(32, 8 + Math.max(candidates.length, 1) * 2);
+    const x = Math.floor((screen.cols - w) / 2), y = Math.floor((screen.rows - h) / 2);
+    this._fillBlack(x, y, w, h);
+    screen.box(x, y, w, h, '#ffe14d', 'double');
+    screen.textCenter(y + 1, `¿QUIÉN ENSEÑA A ${this.game.displayName(pupilId).toUpperCase()}?`, '#ffe680');
+    if (!candidates.length) {
+      screen.textCenter(y + 4, 'No hay nadie más en la plantilla para hacer de mentor.', '#8a8a7a');
+      screen.textCenter(y + h - 2, '[ESC] cerrar', '#c9c2a8');
+      if (input.hit('Escape') || input.hit('Enter')) this.mentorPickFor = null;
+      return;
+    }
+    this.mentorPickFor.cursor = ((this.mentorPickFor.cursor % candidates.length) + candidates.length) % candidates.length;
+    candidates.forEach((cid, i) => {
+      const cs = player.roster.get(cid);
+      const statLabel = STAT_LABEL[player.roster.mentorStatOf(cid)];
+      const sel = i === this.mentorPickFor.cursor;
+      const busyTxt = cs.mentorOf !== null && cs.mentorOf !== pupilId ? ` (ya enseña a ${this.game.displayName(cs.mentorOf)})` : '';
+      const rowY = y + 3 + i * 2;
+      const overRow = hitRect(input.mouse.cx, input.mouse.cy, x + 2, rowY, w - 4, 1);
+      if (overRow && input.mouse.clicked) this.mentorPickFor.cursor = i;
+      screen.text(x + 4, rowY, `${sel ? '▶' : ' '} ${this.game.displayName(cid)} — fuerte en ${statLabel}${busyTxt}`, sel ? '#fff' : busyTxt ? '#8a7f66' : '#c9c2a8');
+    });
+    screen.textCenter(y + h - 2, '[↑/↓] elegir   [ENTER] asignar   [ESC] cancelar', '#c9c2a8');
+    if (input.hit('ArrowUp')) this.mentorPickFor.cursor = (this.mentorPickFor.cursor + candidates.length - 1) % candidates.length;
+    if (input.hit('ArrowDown')) this.mentorPickFor.cursor = (this.mentorPickFor.cursor + 1) % candidates.length;
+    if (input.hit('Enter') || input.hit(' ')) {
+      const chosen = candidates[this.mentorPickFor.cursor];
+      if (player.roster.assignMentor(chosen, pupilId)) player.save();
+      this.mentorPickFor = null;
+    }
   }
 
   // =============================== MERCADO ===============================

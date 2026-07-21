@@ -383,6 +383,9 @@ export class Career {
         promoted, relegated,
         awards: awards.map((a) => ({ stat: a.stat, name: this.nameOf(a.id) })),
       });
+      // fotografía de esta temporada para cada abuelo de la plantilla (ver
+      // AbueloState.recordSeasonSnapshot / vista de detalle de Mi Peña)
+      for (const id of p.roster.ids) p.roster.get(id).recordSeasonSnapshot(p.seasonsPlayed, fromLevel);
     }
 
     const claimed = p.campaign.checkAndClaim(p.snapshotForCampaign());

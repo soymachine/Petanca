@@ -53,6 +53,14 @@ export class AbueloState {
     // Game.js._maybeAgingForeshadow): como mucho una vez por generación,
     // para no repetir el mismo aviso cada semana
     this.agingFlavorSeen = data.agingFlavorSeen ?? false;
+    // histórico temporada a temporada de ESTE hueco de la plantilla (ver
+    // recordSeasonSnapshot, llamado desde Career.js al cerrar cada
+    // temporada): a diferencia de `career` (que se resetea a cero en cada
+    // relevo generacional) y de `legacy` (un resumen por GENERACIÓN, no por
+    // temporada), esto es una fila por cada temporada jugada, generación
+    // tras generación, para poder ver la evolución real del hueco en la
+    // vista de detalle de Mi Peña
+    this.seasonLog = data.seasonLog ?? [];
   }
 
   static fromJSON(id, json) {
@@ -74,7 +82,7 @@ export class AbueloState {
       age: this.age, signed: this.signed, formStreak: this.formStreak, injuredUntil: this.injuredUntil,
       legacy: this.legacy, xp: this.xp, level: this.level, points: this.points,
       potentialCap: this.potentialCap, inherited: this.inherited, debt: this.debt,
-      agingFlavorSeen: this.agingFlavorSeen,
+      agingFlavorSeen: this.agingFlavorSeen, seasonLog: this.seasonLog,
     };
   }
 
@@ -290,6 +298,22 @@ export class AbueloState {
         }
       }
     } else { this.career.losses++; this.formStreak = 0; }
+  }
+
+  // fotografía de fin de temporada para el histórico de la vista de detalle
+  // (ver PenyaScreen._drawAbueloDetail): se guardan las victorias/derrotas
+  // ACUMULADAS de la generación actual (career.wins/losses, que ya vive en
+  // el propio estado) en vez de intentar llevar la cuenta de un delta por
+  // separado — la diferencia entre dos filas consecutivas de la misma
+  // generación ya da las victorias/derrotas de esa temporada en concreto;
+  // si `gen` cambia de una fila a la siguiente, el salto se debe a un
+  // relevo (la cuenta vuelve a cero), no a una temporada floja de verdad.
+  recordSeasonSnapshot(season, level) {
+    const avgStat = Math.round(STAT_KEYS.reduce((sum, k) => sum + this.getStatDisplay(k), 0) / STAT_KEYS.length);
+    this.seasonLog.push({
+      season, level, gen: this.gen, age: this.age, moral: this.mo,
+      cumWins: this.career.wins, cumLosses: this.career.losses, avgStat,
+    });
   }
 
   // en racha (3+ victorias seguidas): un pelín más firme en la mesa

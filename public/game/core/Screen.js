@@ -62,6 +62,25 @@ export class Screen {
     }
   }
 
+  // arte fotográfico reescalado (muestreo del vecino más cercano): no hay
+  // ningún activo pre-generado a un tamaño intermedio (solo la foto
+  // completa y una miniatura mucho más pequeña, "mini"), así que para un
+  // tamaño arbitrario (p.ej. la vista de detalle de un abuelo, ~80% del
+  // original) hace falta reescalar sobre la marcha en vez de dibujar un
+  // activo ya hecho a ese tamaño
+  drawPhotoArtScaled(art, x, y, scale) {
+    const newCols = Math.max(1, Math.round(art.cols * scale));
+    const newRows = Math.max(1, Math.round(art.rows * scale));
+    for (let r = 0; r < newRows; r++) {
+      const sr = Math.min(art.rows - 1, Math.floor(r / scale));
+      const line = art.chars[sr], idx = art.colorIdx[sr];
+      for (let c = 0; c < newCols; c++) {
+        const sc = Math.min(art.cols - 1, Math.floor(c / scale));
+        if (line[sc] !== ' ') this.put(x + c, y + r, line[sc], art.palette[idx[sc]]);
+      }
+    }
+  }
+
   // retrato procedural por capas (ver PortraitGenerator): cada capa se
   // dibuja encima de la anterior, dejando huecos en los espacios en blanco
   drawPortrait(portrait, x, y) {
