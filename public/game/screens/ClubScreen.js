@@ -4,9 +4,11 @@ import { SHIRT_SPONSOR_POOL } from '../data/sponsors.js';
 import { boardPresidentFor, boardAdj } from '../data/boardPresident.js';
 import { TRAINING_DRILLS } from '../data/trainingDrills.js';
 import { STAT_LABEL } from '../data/abuelos.js';
+import { BIG_DIGITS } from '../data/art/staticArt.js';
 
-const SECTIONS = ['facilities', 'sponsor', 'junta'];
-const SECTION_LABEL = { facilities: 'DESCAMPADO', sponsor: 'PATROCINIOS', junta: 'LA JUNTA' };
+const SECTIONS = ['facilities', 'sponsor', 'junta', 'economia'];
+const SECTION_LABEL = { facilities: 'DESCAMPADO', sponsor: 'PATROCINIOS', junta: 'LA JUNTA', economia: 'ECONOMÍA' };
+const ECONOMY_WEEKS = 20;
 
 // Gestión del club: mejoras del descampado, patrocinios y la junta
 // directiva (objetivos, confianza, presidente). Los ojeadores (contratar
@@ -40,12 +42,16 @@ export class ClubScreen {
       return SECTION_LABEL[s];
     });
     const clicked = drawTabRow(screen, input, 4, 6, labels, SECTIONS.indexOf(this.section), { activeColor: '#ffe680', color: '#ffe680', disabled: locked });
-    screen.text(80, 6, '[Q] cambiar de pestaña', '#8a7f66');
+    // en su propia fila, no en la misma que las pestañas: con 4 pestañas y
+    // los sufijos "(semana N)" de las que aún están tapadas, la fila de
+    // pestañas puede alargarse bastante y se comía este texto si compartían fila
+    screen.text(4, 7, '[Q] cambiar de pestaña', '#8a7f66');
     const nomina = this.game.player.roster.totalUpkeep();
-    screen.text(110, 6, `nómina semanal: ${nomina}€`, '#c98080');
+    screen.text(34, 7, `nómina semanal: ${nomina}€`, '#c98080');
 
     if (this.section === 'sponsor' && revealed.patrocinios) this._drawSponsor();
     else if (this.section === 'junta' && revealed.junta) this._drawJunta();
+    else if (this.section === 'economia') this._drawEconomia();
     else { this._drawFacilities(); this._drawPractice(); }
 
     if (clicked !== null) { this.section = SECTIONS[clicked]; this.cursor = 0; }
@@ -273,5 +279,82 @@ export class ClubScreen {
     } else {
       screen.text(bx + 3, 20, 'Sin objetivo semanal activo ahora mismo.', '#8a8a7a');
     }
+  }
+
+  // resumen de caja (gastado/ingresado/resultado de toda la vida, ver
+  // Player.js — el dinero es un getter/setter que intercepta cualquier
+  // += / -= sobre player.money en TODO el juego, sin tener que tocar cada
+  // sitio) más el gráfico de barras semana a semana de las últimas 20
+  // semanas (Player.economyLastWeeks)
+  _drawEconomia() {
+    const { screen, player } = this.game;
+    screen.box(4, 8, 132, 9, '#8a7f66');
+    screen.text(7, 9, 'RESUMEN DE LA CAJA', '#ffb347');
+    const cols = [
+      { label: 'GASTADO', value: player.totalSpent, color: '#ff6a5c' },
+      { label: 'INGRESADO', value: player.totalEarned, color: '#7ec850' },
+      { label: 'RESULTADO', sub: '(para invertir ahora mismo)', value: player.money, color: '#ffe14d' },
+    ];
+    const colW = Math.floor(128 / 3);
+    cols.forEach((c, i) => {
+      const cx = 6 + i * colW + Math.floor(colW / 2);
+      screen.text(cx - Math.floor(c.label.length / 2), 11, c.label, '#c9c2a8');
+      if (c.sub) screen.text(cx - Math.floor(c.sub.length / 2), 12, c.sub, '#6a6355');
+      this._drawBigNumber(cx, 13, c.value, c.color);
+    });
+
+    this._drawEconomyChart();
+  }
+
+  _drawBigNumber(cx, y, value, color) {
+    const { screen } = this.game;
+    const str = `${Math.round(value)}€`;
+    const digits = str.replace('€', '');
+    const w = digits.length * 5 - 1;
+    let bx = cx - Math.floor(w / 2);
+    for (const c of digits) {
+      const glyph = BIG_DIGITS[c];
+      if (glyph) screen.block(bx, y, glyph, color);
+      bx += 5;
+    }
+    screen.text(bx + 1, y + 2, '€', color);
+  }
+
+  // barras verde (ingreso) / roja (gasto) semana a semana, siempre las
+  // últimas ECONOMY_WEEKS (las que aún no han pasado salen a 0, no vacías)
+  _drawEconomyChart() {
+    const { screen, player } = this.game;
+    const bx = 4, by = 18, bw = 132, bh = 25;
+    screen.box(bx, by, bw, bh, '#8a7f66');
+    screen.text(bx + 3, by + 1, `INGRESOS Y GASTOS — ÚLTIMAS ${ECONOMY_WEEKS} SEMANAS`, '#ffb347');
+    screen.text(bx + 3, by + 2, '■ ingreso', '#7ec850');
+    screen.text(bx + 15, by + 2, '■ gasto', '#ff6a5c');
+
+    const weeks = player.economyLastWeeks(ECONOMY_WEEKS);
+    const maxVal = Math.max(1, ...weeks.flatMap((w) => [w.income, w.expense]));
+    const hasData = weeks.some((w) => w.income > 0 || w.expense > 0);
+
+    const chartTop = by + 4, chartBottom = by + bh - 6, chartH = chartBottom - chartTop + 1;
+    screen.text(bx + 2, chartTop - 1, `${Math.round(maxVal)}€`, '#6a6355');
+    screen.text(bx + 2, chartBottom, '0€', '#6a6355');
+    for (let r = 0; r < chartH; r++) screen.put(bx + 8, chartTop + r, '│', '#4a453a');
+
+    const stride = 5, x0 = bx + 10;
+    weeks.forEach((w, i) => {
+      const gx = x0 + i * stride;
+      const incH = w.income > 0 ? Math.max(1, Math.round((w.income / maxVal) * chartH)) : 0;
+      const expH = w.expense > 0 ? Math.max(1, Math.round((w.expense / maxVal) * chartH)) : 0;
+      for (let r = 0; r < chartH; r++) {
+        const yy = chartBottom - r;
+        screen.text(gx, yy, r < incH ? '██' : '  ', '#7ec850');
+        screen.text(gx + 2, yy, r < expH ? '██' : '  ', '#ff6a5c');
+      }
+      if (w.weekIndex >= 0 && (i % 4 === 0 || i === weeks.length - 1)) {
+        const label = `${w.weekIndex + 1}`;
+        screen.text(gx + 2 - Math.floor(label.length / 2), chartBottom + 2, label, '#8a7f66');
+      }
+    });
+    screen.text(bx + 3, by + bh - 3, 'semana (número absoluto de partida) en el eje X · € en el eje Y', '#6a6355');
+    if (!hasData) screen.textCenter(chartTop + Math.floor(chartH / 2), 'todavía no hay movimiento de caja que enseñar', '#8a8a7a');
   }
 }

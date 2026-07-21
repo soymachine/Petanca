@@ -33,6 +33,15 @@ function xpForLevel(lv) { return lv * 300; }
 // clases de modelo en vez de ser un objeto plano gigante.
 export class Player {
   constructor() {
+    // seguimiento de economía (ver pestaña Economía en El Club /
+    // economyLastWeeks): se declara ANTES de fijar el dinero inicial porque
+    // this.money ya pasa por el setter de más abajo — con seasonClock
+    // todavía sin existir en este punto, ese primer ajuste no se cuenta
+    // como ingreso (es capital de fundación, no una transacción de verdad)
+    this._money = 0;
+    this.totalEarned = 0; // suma histórica de toda la vida, nunca se poda
+    this.totalSpent = 0;
+    this.economyByWeek = {}; // { [weekIndex]: { income, expense } } — ventana móvil (ver el setter de money), no crece sin límite
     this.money = 150;
     this.xp = 0;
     this.level = 1;
@@ -166,6 +175,43 @@ export class Player {
 
   get league() { return this.leagueWorld.leagueOf(this.currentLeagueLevel); }
   get club() { return this.league.playerClub; }
+
+  // el dinero se lee/escribe en TODO el código como un campo normal
+  // (`player.money += x`, `player.money -= y`...): en vez de tocar cada uno
+  // de esos sitios para llevar la cuenta de ingresos/gastos, se intercepta
+  // aquí — cualquier `+=`/`-=`/`=` sobre player.money pasa por este setter
+  // sin que el resto del juego tenga que enterarse. Solo cuenta cuando
+  // seasonClock ya existe (fuera del propio constructor): el dinero inicial
+  // de fundación no es una "transacción" que tenga sentido en el gráfico.
+  get money() { return this._money; }
+  set money(v) {
+    const delta = v - this._money;
+    this._money = v;
+    if (!delta || !this.seasonClock) return;
+    if (delta > 0) this.totalEarned += delta; else this.totalSpent += -delta;
+    const wk = this.seasonClock.weekIndex;
+    if (!this.economyByWeek[wk]) this.economyByWeek[wk] = { income: 0, expense: 0 };
+    if (delta > 0) this.economyByWeek[wk].income += delta; else this.economyByWeek[wk].expense += -delta;
+    // ventana móvil: solo hacen falta unas pocas semanas de sobra sobre las
+    // 20 que enseña el gráfico de Economía — el resto no aporta nada y
+    // haría crecer el guardado sin límite en una partida larga
+    const cutoff = wk - 30;
+    for (const k of Object.keys(this.economyByWeek)) { if (Number(k) < cutoff) delete this.economyByWeek[k]; }
+  }
+
+  // últimas `n` semanas de ingreso/gasto, terminando en la semana actual,
+  // siempre con `n` entradas (las semanas sin movimiento salen a 0) — para
+  // que el gráfico de barras de Economía tenga siempre el mismo ancho
+  economyLastWeeks(n) {
+    const current = this.seasonClock.weekIndex;
+    const out = [];
+    for (let i = n - 1; i >= 0; i--) {
+      const wk = current - i;
+      const e = wk >= 0 ? this.economyByWeek[wk] : null;
+      out.push({ weekIndex: wk, income: e ? e.income : 0, expense: e ? e.expense : 0 });
+    }
+    return out;
+  }
 
   // reputación de mánager: prestigio en el circuito, distinto del "renombre"
   // (que solo mide XP). Crece con los logros gordos, no con jugar partidos
@@ -310,6 +356,7 @@ export class Player {
       promotions: this.promotions, relegations: this.relegations,
       foreignLeagues: Object.fromEntries([...this.foreignLeagues].map(([code, w]) => [code, w.toJSON()])),
       euroCup: this.euroCup ? this.euroCup.toJSON() : null,
+      totalEarned: this.totalEarned, totalSpent: this.totalSpent, economyByWeek: this.economyByWeek,
     };
   }
 
@@ -330,7 +377,12 @@ export class Player {
 
   static fromJSON(json) {
     const p = new Player(); // ya genera un mundo de ligas nuevo; lo sustituimos si hay guardado
-    p.money = json.money ?? 150; p.xp = json.xp ?? 0; p.level = json.level ?? 1;
+    // se asigna directamente al campo interno (no player.money = ...): pasar
+    // por el setter aquí registraría la diferencia entre el dinero recién
+    // construido (150€) y el guardado como si fuera una transacción real de
+    // esta semana, inflando el gráfico de Economía con un ingreso fantasma
+    // cada vez que se carga la partida
+    p._money = json.money ?? 150; p.xp = json.xp ?? 0; p.level = json.level ?? 1;
     p.wins = json.wins ?? 0; p.losses = json.losses ?? 0;
     p.captain = json.captain ?? 0; p.freePick = json.freePick ?? false;
     p.roster = Roster.fromJSON(json);
@@ -419,6 +471,11 @@ export class Player {
       }
     }
     p.euroCup = json.euroCup ? EuropeanCup.fromJSON(json.euroCup) : null;
+    // guardado de antes de la pestaña Economía: se arranca sin histórico
+    // (no hay forma de reconstruir semanas pasadas), no revienta la carga
+    p.totalEarned = json.totalEarned || 0;
+    p.totalSpent = json.totalSpent || 0;
+    p.economyByWeek = json.economyByWeek || {};
     return p;
   }
 
@@ -431,7 +488,7 @@ export class Player {
     p.systemsRevealed = { mercado: true, ojeadores: true, patrocinios: true, junta: true }; // partida ya en marcha: nada que tapar
     p.helpHintSeen = true;
     p.homeCountry = 'ES'; // el único país jugable cuando se guardó esta partida
-    p.money = o.money ?? 150; p.xp = o.xp ?? 0; p.level = o.level ?? 1;
+    p._money = o.money ?? 150; p.xp = o.xp ?? 0; p.level = o.level ?? 1; // ver nota de fromJSON: bypass del setter
     p.wins = o.wins ?? 0; p.losses = o.losses ?? 0;
     if (o.roster) {
       p.roster = new Roster(o.roster, o.state || {});

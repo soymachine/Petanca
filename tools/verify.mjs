@@ -339,6 +339,34 @@ check('Copa de Europa: 24 entrantes (top 4 × 6 países), el jugador nunca recib
   }
 });
 
+// --- pestaña Economía: el getter/setter de money intercepta TODO ---
+// Player.money ahora es un getter/setter (money/_money) que lleva la cuenta
+// de ingreso/gasto sin tocar ninguno de los muchos sitios que hacen
+// `player.money += x` / `-= x` por todo el código. Este check comprueba que
+// ese enganche sigue funcionando con dinero de verdad movido por Career.js
+// (premios, nómina, multas de junta...), no solo con mutaciones sintéticas.
+check('Economía: totalEarned/totalSpent cuadran con player.money tras partidos reales, y la carga no infla el histórico', () => {
+  const p = new Player();
+  const career = new Career(p, (id) => `abuelo${id}`);
+  const moneyStart = p.money;
+  for (let i = 0; i < 30; i++) {
+    const league = p.league;
+    const opp = league.clubs.find((c) => !c.isPlayer);
+    const ctx = new WeeklyMatchContext(league, opp, p.money, null, null);
+    ctx.markUsed(p.roster.ids);
+    career.finishWeeklyMatch(ctx, Math.random() < 0.5, 13, 6);
+  }
+  if (p.totalEarned === 0 || p.totalSpent === 0) throw new Error('tras 30 partidos con premios y nómina, ambos contadores deberían moverse');
+  if (moneyStart + p.totalEarned - p.totalSpent !== p.money) {
+    throw new Error(`no cuadra: ${moneyStart} + ${p.totalEarned} - ${p.totalSpent} != ${p.money}`);
+  }
+  const earnedBefore = p.totalEarned;
+  const p2 = Player.fromJSON(p.toJSON());
+  if (p2.totalEarned !== earnedBefore) throw new Error('cargar un guardado no debería alterar totalEarned (transacción fantasma al restaurar money)');
+  const last20 = p2.economyLastWeeks(20);
+  if (last20.length !== 20) throw new Error(`economyLastWeeks(20) debería devolver siempre 20 entradas, dio ${last20.length}`);
+});
+
 // --- país de casa distinto de España ---
 // hasta ahora "jugar como Francia" no se había probado de verdad: LeagueWorld
 // siempre generaba las 8 ligas españolas pasara lo que pasara. Este check
