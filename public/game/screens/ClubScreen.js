@@ -360,10 +360,31 @@ export class ClubScreen {
     lines.forEach((l, i) => screen.text(tx + 2, ty + 1 + i, l[0], l[1]));
   }
 
+  // ventana al pasar el ratón por una barra del gráfico: ingreso/gasto/neto
+  // de esa semana en concreto, en vez de tener que leer la altura a ojo
+  _drawWeekTooltip(w, mx, my) {
+    const { screen } = this.game;
+    const lines = w.weekIndex < 0
+      ? [[`SEMANA ${w.weekIndex + 1}`, '#ffe680'], ['(la partida aún no había empezado)', '#8a8a7a']]
+      : [
+          [`SEMANA ${w.weekIndex + 1}`, '#ffe680'],
+          [`ingreso: ${Math.round(w.income)}€`, '#7ec850'],
+          [`gasto: ${Math.round(w.expense)}€`, '#ff6a5c'],
+          [`neto: ${w.income - w.expense > 0 ? '+' : ''}${Math.round(w.income - w.expense)}€`, w.income - w.expense >= 0 ? '#7ec850' : '#ff6a5c'],
+        ];
+    const tw = Math.max(...lines.map((l) => l[0].length)) + 4;
+    const th = lines.length + 2;
+    const tx = Math.min(mx + 2, screen.cols - tw - 1);
+    const ty = Math.min(my + 1, screen.rows - th - 1);
+    for (let r = 0; r < th; r++) for (let c = 0; c < tw; c++) screen.put(tx + c, ty + r, '█', '#000');
+    screen.box(tx, ty, tw, th, '#ffe14d', 'double');
+    lines.forEach((l, i) => screen.text(tx + 2, ty + 1 + i, l[0], l[1]));
+  }
+
   // barras verde (ingreso) / roja (gasto) semana a semana, siempre las
   // últimas ECONOMY_WEEKS (las que aún no han pasado salen a 0, no vacías)
   _drawEconomyChart() {
-    const { screen, player } = this.game;
+    const { screen, input, player } = this.game;
     const bx = 4, by = 20, bw = 132, bh = 24;
     screen.box(bx, by, bw, bh, '#8a7f66');
     screen.text(bx + 3, by + 1, `INGRESOS Y GASTOS — ÚLTIMAS ${ECONOMY_WEEKS} SEMANAS`, '#ffb347');
@@ -380,21 +401,26 @@ export class ClubScreen {
     for (let r = 0; r < chartH; r++) screen.put(bx + 8, chartTop + r, '│', '#4a453a');
 
     const stride = 5, x0 = bx + 10;
+    let hoveredWeek = null;
     weeks.forEach((w, i) => {
       const gx = x0 + i * stride;
       const incH = w.income > 0 ? Math.max(1, Math.round((w.income / maxVal) * chartH)) : 0;
       const expH = w.expense > 0 ? Math.max(1, Math.round((w.expense / maxVal) * chartH)) : 0;
+      const over = hitRect(input.mouse.cx, input.mouse.cy, gx, chartTop, 4, chartH);
+      if (over) hoveredWeek = w;
       for (let r = 0; r < chartH; r++) {
         const yy = chartBottom - r;
-        screen.text(gx, yy, r < incH ? '██' : '  ', '#7ec850');
-        screen.text(gx + 2, yy, r < expH ? '██' : '  ', '#ff6a5c');
+        screen.text(gx, yy, r < incH ? '██' : '  ', over ? '#a8f0a8' : '#7ec850');
+        screen.text(gx + 2, yy, r < expH ? '██' : '  ', over ? '#ffb0a8' : '#ff6a5c');
       }
       if (w.weekIndex >= 0 && (i % 4 === 0 || i === weeks.length - 1)) {
         const label = `${w.weekIndex + 1}`;
         screen.text(gx + 2 - Math.floor(label.length / 2), chartBottom + 2, label, '#8a7f66');
       }
     });
-    screen.text(bx + 3, by + bh - 3, 'semana (número absoluto de partida) en el eje X · € en el eje Y', '#6a6355');
+    screen.text(bx + 3, by + bh - 3, 'semana (número absoluto de partida) en el eje X · € en el eje Y · ratón sobre una barra = detalle', '#6a6355');
     if (!hasData) screen.textCenter(chartTop + Math.floor(chartH / 2), 'todavía no hay movimiento de caja que enseñar', '#8a8a7a');
+    // el tooltip se pinta el último para quedar por encima de las propias barras
+    if (hoveredWeek) this._drawWeekTooltip(hoveredWeek, input.mouse.cx, input.mouse.cy);
   }
 }
