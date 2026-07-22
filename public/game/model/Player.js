@@ -79,6 +79,13 @@ export class Player {
     this.boardConfidence = 60; // 0-100: paciencia de la junta directiva
     this.boardUltimatums = 0;
     this.boardCrisis = false; // true tras un primer ultimátum de la temporada: el segundo ya no es solo una multa
+    // números rojos sostenidos: jornadas SEGUIDAS cerrando la semana con
+    // dinero negativo (ver Career.finishWeeklyMatch/GAME_OVER_NEGATIVE_WEEKS)
+    // — al llegar al límite, gameOver se queda fijo en true para siempre
+    // (no se resetea ni cargando la partida) y bloquea el juego en
+    // GameOverScreen hasta empezar una partida nueva en este perfil.
+    this.negativeWeeksStreak = 0;
+    this.gameOver = false;
     this.difficulty = 'normal';
     this.difficultyChosen = false;
     // modo Debugger: fuerza los partidos a resolverse por estadísticas y
@@ -345,6 +352,7 @@ export class Player {
       nemesisDefeats: this.nemesisDefeats, euroUpsets: this.euroUpsets, seasonTitles: this.seasonTitles, stormWins: this.stormWins,
       dailyBest: this.dailyBest, boardGoal: this.boardGoal, weeklyGoal: weeklyGoalToJSON(this.weeklyGoal),
       boardConfidence: this.boardConfidence, boardUltimatums: this.boardUltimatums, boardCrisis: this.boardCrisis,
+      negativeWeeksStreak: this.negativeWeeksStreak, gameOver: this.gameOver,
       difficulty: this.difficulty, difficultyChosen: this.difficultyChosen, debugMode: this.debugMode, pressPromise: this.pressPromise,
       systemsRevealed: this.systemsRevealed, helpHintSeen: this.helpHintSeen,
       friendliesLeft: this.friendliesLeft, cup: this.cup ? this.cup.toJSON() : null, cupTitles: this.cupTitles,
@@ -414,6 +422,8 @@ export class Player {
     p.boardConfidence = json.boardConfidence ?? 60;
     p.boardUltimatums = json.boardUltimatums || 0;
     p.boardCrisis = json.boardCrisis || false;
+    p.negativeWeeksStreak = json.negativeWeeksStreak || 0;
+    p.gameOver = json.gameOver || false;
     p.difficulty = json.difficulty || 'normal';
     p.difficultyChosen = json.difficultyChosen ?? true; // guardados antiguos no vieron el selector: no interrumpir
     p.debugMode = json.debugMode ?? false;

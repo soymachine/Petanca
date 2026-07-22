@@ -7,7 +7,7 @@ export const JACK_R = 0.55;
 export const FRICTION = 22; // fricción base de rodadura
 export const GRAV = 26;
 export const THROW_X = 7;
-export const TARGET = 13;   // partida a 13 puntos, como la petanca real
+export const TARGET = 7;    // partida a la mitad de los 13 de la petanca real: partidos más cortos
 
 // petanca real: en tripletas cada jugador lanza 2 bolas (6 por bando); en
 // individual y dobletes, 3 bolas por jugador

@@ -23,13 +23,24 @@ function roundRobin(clubIds) {
   return rounds;
 }
 
+// ida y vuelta: la vuelta repite las mismas jornadas de la ida con el
+// local/visitante invertido — 18 jornadas de 5 partidos con 10 clubes en
+// vez de 9, cada rival se juega dos veces. Se aplica a TODAS las ligas
+// (la tuya y las de fondo, propias y extranjeras) porque todas pasan por
+// este mismo constructor de League.
+function doubleRoundRobin(clubIds) {
+  const firstLeg = roundRobin(clubIds);
+  const secondLeg = firstLeg.map((round) => round.map(([a, b]) => [b, a]));
+  return [...firstLeg, ...secondLeg];
+}
+
 export class League {
   constructor(level, cityName, clubs) {
     this.level = level; // 1 (Albacete) .. 8 (Madrid)
     this.cityName = cityName;
     this.clubs = clubs; // Club[10], incluye el club del jugador
-    this.fixtures = roundRobin(clubs.map((c) => c.id));
-    this.matchday = 0; // índice de la próxima jornada a jugar (0..8)
+    this.fixtures = doubleRoundRobin(clubs.map((c) => c.id));
+    this.matchday = 0; // índice de la próxima jornada a jugar (0..17, ida y vuelta)
     this.results = []; // results[jornada] = [{a, b, scoreA, scoreB}, ...] jornadas ya jugadas
   }
 
@@ -56,7 +67,7 @@ export class League {
   startNewSeason() {
     this.matchday = 0;
     for (const c of this.clubs) { c.pts = 0; c.played = 0; c.won = 0; c.lost = 0; }
-    this.fixtures = roundRobin(this.clubs.map((c) => c.id));
+    this.fixtures = doubleRoundRobin(this.clubs.map((c) => c.id));
     this.results = [];
   }
 

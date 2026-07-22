@@ -1,5 +1,6 @@
 import { Screen } from './Screen.js';
 import { Input } from './Input.js';
+import { TARGET } from '../physics/constants.js';
 import { Geography } from '../data/geography.js';
 import { PHOTO_BANNER } from '../data/art/photoBanner.js';
 import { FACES } from '../data/art/faces.js';
@@ -43,6 +44,7 @@ import { LineupScreen } from '../screens/LineupScreen.js';
 import { MatchScreen } from '../screens/MatchScreen.js';
 import { ResultScreen } from '../screens/ResultScreen.js';
 import { SeasonEndScreen } from '../screens/SeasonEndScreen.js';
+import { GameOverScreen } from '../screens/GameOverScreen.js';
 
 const COLS = 140, ROWS = 46;
 const calendar = new Calendar();
@@ -107,6 +109,7 @@ export class Game {
       match: new MatchScreen(this),
       result: new ResultScreen(this),
       seasonEnd: new SeasonEndScreen(this),
+      gameover: new GameOverScreen(this),
     };
   }
 
@@ -739,8 +742,8 @@ export class Game {
   // --- debug: resolver el partido actual por estadísticas en vez de
   // jugarlo, para poder testear temporadas/Copa de Europa rápido. Mismo
   // criterio de probabilidad que la IA usa entre sí (Career._simulateLeagueMatchday),
-  // con un marcador de pega (13 el que gana, entre 0 y 11 el que pierde,
-  // como cualquier partida real de petanca).
+  // con un marcador de pega (TARGET el que gana, entre 0 y TARGET-2 el que
+  // pierde, como cualquier partida real).
   simulateMatch() {
     const ctx = this.weeklyMatch;
     if (!ctx) return;
@@ -750,15 +753,15 @@ export class Game {
     const mySkill = this.player.club.avgSkill(this.player.roster);
     const oppSkill = (this.isCupMatch || this.isEuroCupMatch) ? ctx.opponentEntry.skill : ctx.opponentClub.avgSkill();
     const won = Math.random() < mySkill / (mySkill + oppSkill);
-    const loserScore = Math.floor(Math.random() * 12);
-    const scoreP = won ? 13 : loserScore;
-    const scoreA = won ? loserScore : 13;
+    const loserScore = Math.floor(Math.random() * (TARGET - 1));
+    const scoreP = won ? TARGET : loserScore;
+    const scoreA = won ? loserScore : TARGET;
 
     if (this.isFriendlyMatch) { this._finishFriendlyMatch(won); return; }
     if (this.isEuroCupMatch) { this._finishEuroCupMatch(won, scoreP, scoreA); return; }
     if (this.isCupMatch) { this._finishCupMatch(won, scoreP, scoreA); return; }
     this.outcome = this.career.finishWeeklyMatch(ctx, won, scoreP, scoreA);
-    this.state = 'result';
+    this.state = this.outcome.gameOver ? 'gameover' : 'result';
   }
 
   // factor de fatiga sobre el "skill" efectivo al resolver un partido por
@@ -782,7 +785,7 @@ export class Game {
     const ids = this.player.roster.ids;
     const mySkill = this.player.club.avgSkill(this.player.roster) * this._staminaFactor(ids);
     const won = Math.random() < mySkill / (mySkill + oppSkill);
-    const loserScore = Math.floor(Math.random() * 12);
+    const loserScore = Math.floor(Math.random() * (TARGET - 1));
     // el partido también gasta stamina de verdad (antes, al no jugarse un
     // Match.js de la forma normal, nunca se restaba nada y solo se
     // recuperaba cada semana — ver AbueloState.recoverWeekly — así que
@@ -804,7 +807,7 @@ export class Game {
     // mínimo se retira solo (Career.retireWithHonors ya se niega a
     // retirar al único abuelo de la plantilla).
     for (const id of ids) this.career.retireWithHonors(id);
-    return { won, scoreP: won ? 13 : loserScore, scoreA: won ? loserScore : 13 };
+    return { won, scoreP: won ? TARGET : loserScore, scoreA: won ? loserScore : TARGET };
   }
 
   debugAdvanceOneDay() {
@@ -813,6 +816,7 @@ export class Game {
     const league = p.league;
     const prevState = this.state;
     const result = clock.advanceOneDay(league, () => negotiationMarket.rollOffer(p.roster.ids), () => this._rollDecision());
+    let gameOverTriggered = false;
 
     if (result.type === 'match') {
       // igual que _startWeeklyMatch: cada jornada de liga es también el
@@ -830,7 +834,8 @@ export class Game {
         const ctx = new WeeklyMatchContext(league, opponent, p.money, p.nemesis && p.nemesis.city, p.derbyClub && p.derbyClub.id);
         ctx.markUsed(p.roster.ids);
         const { won, scoreP, scoreA } = this._debugRollOutcome(opponent.avgSkill());
-        this.career.finishWeeklyMatch(ctx, won, scoreP, scoreA);
+        const weekOutcome = this.career.finishWeeklyMatch(ctx, won, scoreP, scoreA);
+        if (weekOutcome.gameOver) gameOverTriggered = true;
       }
     } else if (result.type === 'cup') {
       clock.clearCup(result.day);
@@ -866,7 +871,8 @@ export class Game {
 
     this.career.weeklyNews(league);
     p.freeAgents.refresh();
-    this.state = prevState; // no te saca de la pantalla que estes mirando
+    if (gameOverTriggered) { this.stopSimulating(); this.state = 'gameover'; }
+    else this.state = prevState; // no te saca de la pantalla que estes mirando
     p.save();
     return result;
   }
@@ -922,7 +928,7 @@ export class Game {
       xpPerAbuelo[id] = (xpPerAbuelo[id] || 0) + M.xpGain[idStr];
     }
     this.outcome.xpPerAbuelo = xpPerAbuelo;
-    this.state = 'result';
+    this.state = this.outcome.gameOver ? 'gameover' : 'result';
   }
 
   loop = (now) => {

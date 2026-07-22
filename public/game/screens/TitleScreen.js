@@ -40,6 +40,10 @@ export class TitleScreen {
     screen.drawPhotoArt(photoBanner, bx, 12);
 
     if (this.pickingSlot) { this._drawSlotPicker(); return; }
+    // un perfil que ya llegó a GAME OVER (ver Career.finishWeeklyMatch)
+    // se queda bloqueado ahí aunque se recargue la página — no hay "seguir
+    // jugando" posible, solo empezar de cero (ver GameOverScreen)
+    if (player.gameOver) { this.game.state = 'gameover'; return; }
     if (!player.difficultyChosen) {
       // partida nueva de verdad: primero país (ver MetaProgress.js — todos
       // bloqueados menos España hasta ganar la primera Copa de Europa),

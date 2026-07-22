@@ -3,6 +3,7 @@ import { cityByName } from '../data/countries.js';
 import { seaCell } from '../core/seaFx.js';
 import { TabsBar } from './TabsBar.js';
 import { CrestGenerator } from '../portraits/CrestGenerator.js';
+import { GAME_OVER_NEGATIVE_WEEKS } from '../model/Career.js';
 
 const RANK_COL = ['#ffd75e', '#d8d8e0', '#c88a4a'];
 
@@ -27,11 +28,14 @@ export class HubScreen {
     screen.textCenter(4, `╣ ${player.clubName} — LIGA DE ${league.cityName} (nivel ${league.level}/8) ╠`, '#ffb347');
     screen.text(4, 5, `Hoy: ${player.seasonClock.dateLabel()}${this.game.simulating ? (frame % 24 < 16 ? '  ● SIMULANDO' : '  ○ SIMULANDO') : ''}`, this.game.simulating ? '#ffe680' : '#c9c2a8');
     // fila reservada siempre para el aviso de crisis, aunque no aplique —
-    // así el resto de la cuadrícula no salta de sitio según el estado. En
-    // partidas nuevas, esa misma fila señala Ayuda hasta que se visita una
-    // vez (ver AyudaScreen) o pasa la primera semana — la crisis, si la
-    // hay, manda siempre sobre el aviso de bienvenida.
-    if (player.boardCrisis) {
+    // así el resto de la cuadrícula no salta de sitio según el estado.
+    // Prioridad: números rojos sostenidos (riesgo de GAME OVER, ver
+    // Career.finishWeeklyMatch) manda sobre la crisis de junta, que a su
+    // vez manda sobre el aviso de bienvenida de una partida nueva.
+    if (player.negativeWeeksStreak > 0) {
+      const left = GAME_OVER_NEGATIVE_WEEKS - player.negativeWeeksStreak;
+      screen.textCenter(6, `⚠ NÚMEROS ROJOS: ${player.negativeWeeksStreak}/${GAME_OVER_NEGATIVE_WEEKS} jornadas seguidas · ${left <= 0 ? 'GAME OVER inminente' : `${left} más y GAME OVER`} ⚠`, frame % 24 < 16 ? '#ff5c5c' : '#a03838');
+    } else if (player.boardCrisis) {
       screen.textCenter(6, '⚠ LA JUNTA ESTÁ AL LÍMITE: un ultimátum más y os bajan de categoría ⚠', frame % 24 < 16 ? '#ff5c5c' : '#a03838');
     } else if (!player.helpHintSeen && player.seasonClock.day < 8) {
       screen.textCenter(6, '¿primera vez en la peña? pulsa [9] AYUDA para la guía rápida', '#88c8e8');

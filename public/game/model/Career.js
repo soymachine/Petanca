@@ -1,5 +1,6 @@
 import { ITEMS, ITEM_IDS } from '../data/items.js';
 import { rnd, clamp } from '../core/utils.js';
+import { TARGET } from '../physics/constants.js';
 import { BoardObjective } from './BoardObjective.js';
 import { rollWeeklyGoal } from '../data/boardObjectives.js';
 import { STAT_KEYS, STAT_LABEL, RETIRE_AT } from '../data/abuelos.js';
@@ -16,6 +17,13 @@ import { chemistryKey, chemistryLevel, CHEMISTRY_LEVELS, resetChemistryFor } fro
 import { Chronicle } from '../match/Chronicle.js';
 import { composeBiography } from '../data/biografias.js';
 import { boardPresidentFor, boardAdj } from '../data/boardPresident.js';
+
+// jornadas SEGUIDAS cerrando la semana con dinero negativo antes de un
+// GAME OVER (ver finishWeeklyMatch más abajo y HubScreen, que avisa de la
+// cuenta atrás en cuanto empieza la racha) — el margen es a propósito
+// generoso (mes y medio largo) para dar tiempo real a reaccionar: vender
+// un fichaje, bajar de categoría, recortar plantilla...
+export const GAME_OVER_NEGATIVE_WEEKS = 6;
 
 function maybeDropItem(roster, candidates) {
   const eligible = candidates.filter((i) => !roster.get(i).item);
@@ -396,8 +404,24 @@ export class Career {
     }
 
     const ups = p.addReward(xp, money);
+
+    // números rojos sostenidos: se comprueba aquí, el único punto que
+    // cierra "una jornada" de verdad (liga), tanto jugada a mano como
+    // simulada en Modo Debugger (ver Game._debugRollOutcome/debugAdvanceOneDay)
+    let gameOver = false;
+    if (p.money < 0) {
+      p.negativeWeeksStreak++;
+      if (p.negativeWeeksStreak >= GAME_OVER_NEGATIVE_WEEKS && !p.gameOver) {
+        p.gameOver = true;
+        gameOver = true;
+        p.addAnnal(`GAME OVER: ${p.clubName} echa el cierre tras ${p.negativeWeeksStreak} jornadas seguidas en números rojos.`);
+      }
+    } else {
+      p.negativeWeeksStreak = 0;
+    }
+
     p.save();
-    return { won, xp, money, ups, revenge, stormWin, itemDrop, betResult, sponsorResult, seasonEnd, weeklyGoalResult, ultimatum, crisisDemotion, xpPerAbuelo };
+    return { won, xp, money, ups, revenge, stormWin, itemDrop, betResult, sponsorResult, seasonEnd, weeklyGoalResult, ultimatum, crisisDemotion, xpPerAbuelo, gameOver };
   }
 
   // otorga XP a un abuelo y anuncia en las noticias cada subida de nivel
@@ -625,11 +649,11 @@ export class Career {
 }
 
 // marcador de pega para partidos IA-IA que no se juegan a mano: el ganador
-// se planta en 13 (como cualquier partida real de petanca) y el perdedor
-// saca algo entre 0 y 11 — mismo criterio que Game.simulateMatch()
+// se planta en TARGET y el perdedor saca algo entre 0 y TARGET-2 — mismo
+// criterio que Game.simulateMatch()
 function fakeLeagueScore(won) {
-  const loserScore = Math.floor(Math.random() * 12);
-  return won ? [13, loserScore] : [loserScore, 13];
+  const loserScore = Math.floor(Math.random() * (TARGET - 1));
+  return won ? [TARGET, loserScore] : [loserScore, TARGET];
 }
 
 function cityAt(level, country) {
