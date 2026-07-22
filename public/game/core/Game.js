@@ -793,7 +793,17 @@ export class Game {
       const s = this.player.roster.get(id);
       const cost = (45 - ABUELO_DATA[id].stats.aguante * 2) / ids.length;
       s.st = clamp(s.st - cost, 0, 100);
+      // igual que Match.js incrementa `torneos` al arrancar un partido
+      // jugado a mano: sin esto, el contador que habilita "retirar con
+      // honores" (RETIRE_AT) nunca subía simulando, así que nadie llegaba
+      // nunca a ser candidato al relevo por esta vía (solo por fallecer).
+      s.torneos++;
     }
+    // retiro automático con honores: en Modo Debugger nadie está mirando
+    // Mi Peña para decidir el momento, así que en cuanto alguien cumple el
+    // mínimo se retira solo (Career.retireWithHonors ya se niega a
+    // retirar al único abuelo de la plantilla).
+    for (const id of ids) this.career.retireWithHonors(id);
     return { won, scoreP: won ? 13 : loserScore, scoreA: won ? loserScore : 13 };
   }
 

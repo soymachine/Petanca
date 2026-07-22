@@ -2,7 +2,8 @@ import { ITEMS, ITEM_IDS } from '../data/items.js';
 import { rnd, clamp } from '../core/utils.js';
 import { BoardObjective } from './BoardObjective.js';
 import { rollWeeklyGoal } from '../data/boardObjectives.js';
-import { STAT_KEYS, STAT_LABEL } from '../data/abuelos.js';
+import { STAT_KEYS, STAT_LABEL, RETIRE_AT } from '../data/abuelos.js';
+import { CLIMAS } from '../data/climas.js';
 import { DIFFICULTIES } from '../data/difficulty.js';
 import { Cup } from '../domain/Cup.js';
 import { TransferPool } from '../domain/TransferPool.js';
@@ -11,7 +12,7 @@ import { EuropeanCup } from '../domain/EuropeanCup.js';
 import { rivalPersonalityLine } from '../data/rivalPersonality.js';
 import { countryTag, countryLabel, citiesFor, levelBoundsFor } from '../data/countries.js';
 import { MetaProgress } from './MetaProgress.js';
-import { chemistryKey, chemistryLevel, CHEMISTRY_LEVELS } from '../domain/Chemistry.js';
+import { chemistryKey, chemistryLevel, CHEMISTRY_LEVELS, resetChemistryFor } from '../domain/Chemistry.js';
 import { Chronicle } from '../match/Chronicle.js';
 import { composeBiography } from '../data/biografias.js';
 import { boardPresidentFor, boardAdj } from '../data/boardPresident.js';
@@ -451,6 +452,38 @@ export class Career {
       this._grantXp(p, id, 40);
       p.news.push(`DEUDA SALDADA: ${this.nameOf(id)} por fin ajusta cuentas con ${label}. Su abuelo puede descansar tranquilo.`);
     }
+  }
+
+  // retira con honores al abuelo del hueco `id` (por méritos propios, no
+  // por fallecimiento — ver Game.js._maybeRollDeath para ese otro caso):
+  // mismo relevo generacional (retireToGrandchild) con su propio texto de
+  // noticia. Único punto de entrada al retiro voluntario, usado tanto por
+  // el [G] manual de Mi Peña (lista y detalle) como por el retiro
+  // automático al simular (ver Game.js._debugRollOutcome) — así el mismo
+  // par de guardas (mínimo de partidas, nunca el último de la plantilla)
+  // se cumple sea cual sea el camino. Devuelve false sin hacer nada si no
+  // se cumplen.
+  retireWithHonors(id) {
+    const p = this.player;
+    const s = p.roster.get(id);
+    if (!s || s.torneos < RETIRE_AT || p.roster.ids.length <= 1) return false;
+    const hadLegend = resetChemistryFor(p, id);
+    const { inherited } = s.retireToGrandchild();
+    p.news.push(this._inheritanceNews(id, inherited));
+    if (hadLegend) p.news.push(`FIN DE UNA ERA: la pareja de leyenda de ${this.nameOf(id)} se deshace con el relevo. Al nieto le toca hacerse un hueco desde cero.`);
+    p.save();
+    return true;
+  }
+
+  // titular del relevo generacional: cita el eco heredado (ver
+  // AbueloState.retireToGrandchild) con el nombre de la familia del hueco
+  _inheritanceNews(id, inherited) {
+    const name = this.nameOf(id);
+    if (inherited.clima) {
+      const cl = CLIMAS[inherited.clima];
+      return `RELEVO EN LA PEÑA: el nieto de ${name} coge el testigo. Dicen que ${cl.label.toLowerCase()} tampoco le hace mella — ha salido a su abuelo.`;
+    }
+    return `RELEVO EN LA PEÑA: el nieto de ${name} coge el testigo. Se le nota de familia el ${STAT_LABEL[inherited.stat].toLowerCase()}.`;
   }
 
   // suma un partido jugado juntos a cada pareja de `usados`; anuncia cada

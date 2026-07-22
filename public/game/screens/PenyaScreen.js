@@ -8,7 +8,7 @@ import { TransferPool } from '../domain/TransferPool.js';
 import { SCOUT_TEMPLATES } from '../data/scouts.js';
 import { FOREIGN_COUNTRIES } from '../data/countries.js';
 import { generateScoutPortrait } from '../data/art/scoutPortraits.js';
-import { resetChemistryFor, bondLabel, gamesFor, chemistryLevel } from '../domain/Chemistry.js';
+import { bondLabel, gamesFor, chemistryLevel } from '../domain/Chemistry.js';
 import { CrestGenerator } from '../portraits/CrestGenerator.js';
 import { TRAINING_DRILLS } from '../data/trainingDrills.js';
 import { archetypeForAbuelo } from '../data/abueloArchetypes.js';
@@ -308,28 +308,14 @@ export class PenyaScreen {
     if (s.st >= player.facilities.trainingCost() && !this.game.trainingScheduledFor(this.cursor) && !s.isInjured(player.seasonClock.day)) {
       if (input.hit('t') || input.hit('T')) this.trainDrillPick = { abueloId: this.cursor, cursor: 0 };
     }
-    if (s.torneos >= RETIRE_AT && (input.hit('g') || input.hit('G'))) {
-      const hadLegend = resetChemistryFor(player, this.cursor);
-      const { inherited } = s.retireToGrandchild();
-      player.news.push(this._inheritanceNews(this.cursor, inherited));
-      if (hadLegend) player.news.push(`FIN DE UNA ERA: la pareja de leyenda de ${this.game.displayName(this.cursor)} se deshace con el relevo. Al nieto le toca hacerse un hueco desde cero.`);
-      player.save();
-    }
+    // el [G] pasa por Career.retireWithHonors: mismas guardas (mínimo de
+    // partidas, nunca el único de la plantilla) que el retiro automático
+    // al simular y que el [G] de la vista de detalle — ver _drawAbueloDetail
+    if (input.hit('g') || input.hit('G')) this.game.career.retireWithHonors(this.cursor);
     if (input.hit('m') || input.hit('M')) {
       this.mentorMode = true;
       this._pendingMentor = this.cursor;
     }
-  }
-
-  // titular del relevo generacional: cita el eco heredado (ver
-  // AbueloState.retireToGrandchild) con el nombre de la familia del hueco
-  _inheritanceNews(id, inherited) {
-    const name = this.game.displayName(id);
-    if (inherited.clima) {
-      const cl = CLIMAS[inherited.clima];
-      return `RELEVO EN LA PEÑA: el nieto de ${name} coge el testigo. Dicen que ${cl.label.toLowerCase()} tampoco le hace mella — ha salido a su abuelo.`;
-    }
-    return `RELEVO EN LA PEÑA: el nieto de ${name} coge el testigo. Se le nota de familia el ${STAT_LABEL[inherited.stat].toLowerCase()}.`;
   }
 
   _levelInfo(s) {
@@ -760,11 +746,12 @@ export class PenyaScreen {
     // ---- acciones ----
     const already = this.game.trainingScheduledFor(id);
     const canTrain = s.st >= player.facilities.trainingCost() && !already && !s.isInjured(player.seasonClock.day);
-    const canRetire = s.torneos >= RETIRE_AT;
+    const soloEnPlantilla = player.roster.ids.length <= 1;
+    const canRetire = s.torneos >= RETIRE_AT && !soloEnPlantilla;
     const hints = [];
     hints.push(canTrain ? '[T] agendar entrenamiento' : already ? `entreno agendado: ${already.drill} (${already.dayLabel})` : 'sin stamina para entrenar');
     hints.push('[N] buscar mentor');
-    if (canRetire) hints.push('[G] retirar');
+    if (s.torneos >= RETIRE_AT) hints.push(canRetire ? '[G] retirar' : 'no se puede retirar: es tu único jugador');
     hints.push('[ESC] cerrar');
     screen.text(x + 2, y + h - 2, truncate(hints.join('   ·   '), w - 4), '#c9c2a8');
 
@@ -777,12 +764,7 @@ export class PenyaScreen {
     if (canTrain && (input.hit('t') || input.hit('T'))) this.trainDrillPick = { abueloId: id, cursor: 0 };
     if (input.hit('n') || input.hit('N')) this.mentorPickFor = { pupilId: id, cursor: 0 };
     if (canRetire && (input.hit('g') || input.hit('G'))) {
-      const hadLegend = resetChemistryFor(player, id);
-      const { inherited } = s.retireToGrandchild();
-      player.news.push(this._inheritanceNews(id, inherited));
-      if (hadLegend) player.news.push(`FIN DE UNA ERA: la pareja de leyenda de ${this.game.displayName(id)} se deshace con el relevo. Al nieto le toca hacerse un hueco desde cero.`);
-      player.save();
-      this.detailAbuelo = null;
+      if (this.game.career.retireWithHonors(id)) this.detailAbuelo = null;
     }
   }
 
