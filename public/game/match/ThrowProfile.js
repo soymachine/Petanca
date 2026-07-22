@@ -7,7 +7,7 @@ import { drillFor } from '../data/trainingDrills.js';
 // debajo una "pared del cansancio" con el doble de pendiente — jugar
 // agotado deja de ser un empeoramiento proporcional y pasa a ser un riesgo
 // real, para que rotar plantilla pese de verdad en vez de ser cosmético.
-function fatiguePenalty(st) {
+export function fatiguePenalty(st) {
   if (st >= 60) return 0;
   const soft = (60 - Math.max(30, st)) / 60 * 1.2;
   if (st >= 30) return soft;

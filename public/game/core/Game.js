@@ -19,7 +19,8 @@ import { CupMatchContext } from '../domain/CupMatchContext.js';
 import { FriendlyMatchContext } from '../domain/FriendlyMatchContext.js';
 import { DIFFICULTIES } from '../data/difficulty.js';
 import { CLIMAS } from '../data/climas.js';
-import { STAT_LABEL } from '../data/abuelos.js';
+import { STAT_LABEL, ABUELO_DATA } from '../data/abuelos.js';
+import { fatiguePenalty } from '../match/ThrowProfile.js';
 import { drillFor } from '../data/trainingDrills.js';
 import { resetChemistryFor } from '../domain/Chemistry.js';
 import { Chronicle } from '../match/Chronicle.js';
@@ -760,15 +761,39 @@ export class Game {
     this.state = 'result';
   }
 
+  // factor de fatiga sobre el "skill" efectivo al resolver un partido por
+  // estadísticas (Modo Debugger/Simular): mismo fatiguePenalty que castiga
+  // el temblor en un partido jugado a mano (ver ThrowProfile.js), aplicado
+  // a la stamina MEDIA de la plantilla usada — antes la stamina no pintaba
+  // nada aquí (solo importaba en un partido jugado de verdad), así que
+  // simular no distinguía entre una plantilla descansada y una reventada.
+  _staminaFactor(ids) {
+    if (!ids.length) return 1;
+    const avgSt = ids.reduce((sum, id) => sum + this.player.roster.get(id).st, 0) / ids.length;
+    return 1 / (1 + fatiguePenalty(avgSt));
+  }
+
   // --- modo Debugger: avanza la partida un día por estadísticas, sin pasar
   // por ninguna pantalla de partido — mismo criterio que simulateMatch() de
   // arriba, pero autónomo: se encarga también de resolver Copa/Copa de
   // Europa si tocan, y descarta entrenos/ofertas puntuales para no
   // bloquearse esperando una decisión que nadie va a tomar.
   _debugRollOutcome(oppSkill) {
-    const mySkill = this.player.club.avgSkill(this.player.roster);
+    const ids = this.player.roster.ids;
+    const mySkill = this.player.club.avgSkill(this.player.roster) * this._staminaFactor(ids);
     const won = Math.random() < mySkill / (mySkill + oppSkill);
     const loserScore = Math.floor(Math.random() * 12);
+    // el partido también gasta stamina de verdad (antes, al no jugarse un
+    // Match.js de la forma normal, nunca se restaba nada y solo se
+    // recuperaba cada semana — ver AbueloState.recoverWeekly — así que
+    // simular temporadas dejaba a todo el mundo permanentemente a tope).
+    // Mismo coste por abuelo que un partido jugado a mano (Match.js,
+    // fase matchEnd), repartido entre toda la plantilla usada.
+    for (const id of ids) {
+      const s = this.player.roster.get(id);
+      const cost = (45 - ABUELO_DATA[id].stats.aguante * 2) / ids.length;
+      s.st = clamp(s.st - cost, 0, 100);
+    }
     return { won, scoreP: won ? 13 : loserScore, scoreA: won ? loserScore : 13 };
   }
 

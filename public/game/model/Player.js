@@ -16,6 +16,8 @@ import { EuropeanCup } from '../domain/EuropeanCup.js';
 import { ScoutStaff } from './ScoutStaff.js';
 import { boardObjectiveFor, rollWeeklyGoal, weeklyGoalToJSON, weeklyGoalFromJSON } from '../data/boardObjectives.js';
 import { hashStr, clamp } from '../core/utils.js';
+import { founderStatsForLevel } from '../data/abuelos.js';
+import { strengthFor } from '../data/countries.js';
 
 const SAVE_KEY = 'petanka_save_v4';
 const LEGACY_KEYS = ['petanka_save_v3', 'petanka_save_v2', 'petanka_save_v1'];
@@ -152,6 +154,10 @@ export class Player {
     // liga y calendario
     this.clubName = CLUB_NAMES[Math.floor(Math.random() * CLUB_NAMES.length)];
     this.currentLeagueLevel = 1; // Albacete
+    // el fundador arranca a la altura de esta liga, no con stats fijas de
+    // serie (ver founderStatsForLevel) — así en una liga alta cuesta de
+    // verdad, y en una baja no llega ya sobrado
+    this.roster.get(0).genStats = founderStatsForLevel(this.currentLeagueLevel * strengthFor(this.homeCountry));
     this.leagueWorld = LeagueWorld.generate(this.currentLeagueLevel, this.clubName, this.homeCountry);
     this.seasonClock = new SeasonClock();
     this.freeAgents = new FreeAgentPool();

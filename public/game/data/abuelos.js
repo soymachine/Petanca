@@ -1,3 +1,5 @@
+import { clamp } from '../core/utils.js';
+
 // Datos base de los 10 abuelos fichables. stats 1..10; clima: -1 le afecta
 // doble, 0 normal, +1 inmune. El índice de este array es el "id" del abuelo
 // en todo el juego (roster, FACES, RIVAL_FACES no comparten índice).
@@ -38,3 +40,22 @@ export const RETIRE_AT = 8; // partidas jugadas para poder retirarse con honores
 
 export const STAT_KEYS = ['pulso', 'brazo', 'mana', 'temple', 'aguante'];
 export const STAT_LABEL = { pulso: 'Pulso', brazo: 'Brazo', mana: 'Maña', temple: 'Temple', aguante: 'Aguante' };
+
+// stats de partida del capitán fundador (id 0), a la altura de la liga
+// donde arranca la partida (ver Player constructor / TitleScreen
+// _confirmCountryAndCity) — antes eran siempre las mismas fijas de
+// ABUELO_DATA[0], sin mirar dónde empezabas: en una liga baja quedaba de
+// serie muy por encima de la media rival (subir de categoría sin tocar sus
+// stats era demasiado fácil) y en una liga alta, muy por debajo. Se
+// desplaza cada stat manteniendo su forma relativa (el pulso sigue siendo
+// su punto fuerte) y con el mismo ruido (±2) que usa RivalPlayer.generate,
+// para que el fundador arranque "parecido" a cualquier otro jugador de esa
+// liga en concreto, ni más ni menos.
+export function founderStatsForLevel(effLevel) {
+  const base = ABUELO_DATA[0].stats;
+  const baseAvg = STAT_KEYS.reduce((sum, k) => sum + base[k], 0) / STAT_KEYS.length;
+  const shift = effLevel - baseAvg;
+  const out = {};
+  for (const k of STAT_KEYS) out[k] = clamp(Math.round(base[k] + shift + (Math.random() - 0.5) * 4), 1, 10);
+  return out;
+}

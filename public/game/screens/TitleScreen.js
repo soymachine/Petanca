@@ -8,8 +8,9 @@ import { Cup } from '../domain/Cup.js';
 import { Club } from '../domain/Club.js';
 import { setHomeCountry } from '../data/activeRoster.js';
 import { MetaProgress } from '../model/MetaProgress.js';
-import { citiesFor, awayCountriesFor, countryLabel } from '../data/countries.js';
+import { citiesFor, awayCountriesFor, countryLabel, strengthFor } from '../data/countries.js';
 import { wrapText, hitRect } from '../core/utils.js';
+import { founderStatsForLevel } from '../data/abuelos.js';
 
 const PICKABLE_COUNTRIES = ['ES', 'FR', 'IT', 'BE', 'CH', 'PT'];
 
@@ -236,6 +237,10 @@ export class TitleScreen {
       player.leagueWorld = LeagueWorld.generate(level, player.clubName, country);
       player.foreignLeagues = new Map();
       for (const { code, cities } of awayCountriesFor(country)) player.foreignLeagues.set(code, ForeignLeagueWorld.generate(code, cities));
+      // el fundador arranca a la altura de la liga elegida, no con las
+      // stats fijas de serie del constructor (pensadas para Albacete) —
+      // ver founderStatsForLevel
+      player.roster.get(0).genStats = founderStatsForLevel(level * strengthFor(country));
       player.cup = Cup.generate(player.leagueWorld, player.club, player.club.avgSkill(player.roster));
       // el constructor de Player ya había agendado un cruce de Copa por
       // defecto (España/Albacete, antes de saber qué ciudad se iba a elegir
