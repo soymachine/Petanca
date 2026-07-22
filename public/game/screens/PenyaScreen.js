@@ -14,7 +14,7 @@ import { TRAINING_DRILLS } from '../data/trainingDrills.js';
 import { archetypeForAbuelo } from '../data/abueloArchetypes.js';
 
 const TABLE_X = 4, TABLE_Y0 = 10;
-const TABLE_W = 132;
+const TABLE_W = 138;
 const COLUMNS = [
   { key: 'name', label: 'ABUELO', x: 6, w: 24 },
   { key: 'nivel', label: 'NIVEL', x: 32, w: 15 },
@@ -24,8 +24,9 @@ const COLUMNS = [
   { key: 'temple', label: 'TEMPLE', x: 73, w: 7 },
   { key: 'aguante', label: 'AGUANTE', x: 82, w: 8 },
   { key: 'edad', label: 'EDAD', x: 92, w: 5 },
-  { key: 'sta', label: 'STAMINA', x: 99, w: 13 },
-  { key: 'moral', label: 'ESTADO', x: 114, w: 16 },
+  { key: 'sta', label: 'STAMINA', x: 99, w: 11 },
+  { key: 'moral', label: 'ESTADO', x: 112, w: 16 },
+  { key: 'nomina', label: 'NÓMINA', x: 130, w: 8 },
 ];
 const STAT_INFO = {
   nivel: 'Nivel de experiencia (se gana jugando) y progreso hasta el siguiente. Clic para repartir puntos si tiene pendientes.',
@@ -37,6 +38,7 @@ const STAT_INFO = {
   edad: 'Los años del abuelo. No afecta a las stats, pero marca cuándo se acerca la jubilación.',
   sta: 'Stamina actual: la energía que le queda. Si baja demasiado, no puede entrenar ni rendir igual.',
   moral: 'Estado de ánimo: sube y baja con resultados y rachas, y afecta a su rendimiento en la mesa.',
+  nomina: 'Cuota semanal de este abuelo: sube con su nivel de fichajes/precio original y con el nivel de experiencia ganado jugando.',
 };
 const MX = 4, MY0 = 10;
 const MTABLE_W = 132;
@@ -363,6 +365,8 @@ export class PenyaScreen {
       const moCol = s.mo >= 0 ? '#88e088' : '#ef9f9f';
       screen.text(COLUMNS[9].x, rowY, `moral ${s.mo >= 0 ? '+' : ''}${s.mo}`, moCol);
     }
+
+    screen.text(COLUMNS[10].x, rowY, `${upkeepFor(id, this.game.player.roster)}€`, '#c98080');
   }
 
   _drawHeaderTooltip(key, mx, my) {
@@ -686,6 +690,7 @@ export class PenyaScreen {
     screen.text(ix, ry, 'CARRERA (esta generación)', '#ffb347'); ry++;
     screen.text(ix, ry, `${s.career.wins}G ${s.career.losses}P  ·  racha máxima ${s.career.bestStreak}  ·  ${s.torneos} partidas / ${RETIRE_AT}`, '#c9c2a8'); ry++;
     if (s.career.closestWin !== null) { screen.text(ix, ry, `victoria más ajustada: por ${s.career.closestWin} punto(s)`, '#c9c2a8'); ry++; }
+    screen.text(ix, ry, `nómina semanal: ${upkeepFor(id, player.roster)}€  (sube con su nivel de experiencia)`, '#c98080'); ry++;
     ry++;
 
     const bond = this._bestChemistryPartner(id);

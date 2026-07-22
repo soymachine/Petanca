@@ -91,11 +91,15 @@ export class Roster {
 // (media de sus 5 stats de grano fino) promediado con su potencial si
 // viene de Sin Equipo (se paga también por la promesa, no solo por el
 // rendimiento actual) — y el nivel ganado jugando añade un poco más en
-// cualquier caso, fichaje o no.
+// cualquier caso, fichaje o no (recargo por nivel subido de 1.5 a 3€ por
+// nivel: antes se notaba tan poco en la nómina que era invisible incluso
+// mostrándola — ver la columna NÓMINA de Mi Peña y la ficha de detalle).
+function levelSurcharge(level) { return Math.round(level * 3); }
+
 export function upkeepFor(id, roster) {
   if (!roster) return 5 + Math.round(ABUELO_DATA[id].price / 100); // compat: llamadas antiguas sin roster
   const s = roster.get(id);
-  if (!s.signed) return 5 + Math.round(ABUELO_DATA[id].price / 100) + Math.round(s.level * 1.5);
+  if (!s.signed) return 5 + Math.round(ABUELO_DATA[id].price / 100) + levelSurcharge(s.level);
   const avgStat = STAT_KEYS.reduce((sum, k) => sum + s.getStatDisplay(k), 0) / STAT_KEYS.length;
   const potentialAvg = s.potentialCap
     ? (STAT_KEYS.reduce((sum, k) => sum + s.potentialCap[k], 0) / STAT_KEYS.length) * 10
@@ -106,5 +110,5 @@ export function upkeepFor(id, roster) {
   // top se nota de verdad en la nómina, no solo en el precio de compra.
   const qualityFrac = (avgStat + potentialAvg) / 200;
   const effectivePrice = 50 + Math.pow(qualityFrac, 1.8) * 4000;
-  return 5 + Math.round(effectivePrice / 100) + Math.round(s.level * 1.5);
+  return 5 + Math.round(effectivePrice / 100) + levelSurcharge(s.level);
 }

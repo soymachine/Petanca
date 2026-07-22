@@ -8,7 +8,7 @@ import { BIG_DIGITS } from '../data/art/staticArt.js';
 import { DIFFICULTIES } from '../data/difficulty.js';
 import { leagueWageFactor } from '../model/Career.js';
 
-const SECTIONS = ['facilities', 'sponsor', 'junta', 'economia'];
+const SECTIONS = ['economia', 'facilities', 'sponsor', 'junta'];
 const SECTION_LABEL = { facilities: 'DESCAMPADO', sponsor: 'PATROCINIOS', junta: 'LA JUNTA', economia: 'ECONOMÍA' };
 const ECONOMY_WEEKS = 20;
 
@@ -18,7 +18,7 @@ const ECONOMY_WEEKS = 20;
 // PenyaScreen.js.
 export class ClubScreen {
   constructor(game) {
-    this.game = game; this.cursor = 0; this.section = 'facilities';
+    this.game = game; this.cursor = 0; this.section = 'economia';
     this.practiceCursor = 0; // qué drill se mira en el panel de Practicar
     this.practiceStep = null; // null | 'abuelo' — abre el selector de abuelo
     this.practiceAbueloCursor = 0;
