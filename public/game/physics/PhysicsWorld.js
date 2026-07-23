@@ -4,11 +4,11 @@ import { CW, CH, GRAV, BALL_R, JACK_R } from './constants.js';
 // Simula el vuelo, la rodadura y las colisiones de todas las bolas de una
 // mano. No conoce reglas de petanca: solo física.
 export class PhysicsWorld {
-  step(balls, dt, court, weather, onTreeHit, trail, lastThrown, frame) {
+  step(balls, dt, court, weather, onTreeHit, trail, lastThrown, frame, onLand) {
     for (const b of balls) {
       if (!b.moving) continue;
       const z = b.z || 0;
-      if (z > 0 || (b.vz || 0) > 0) this._stepFlight(b, dt, court, weather, onTreeHit);
+      if (z > 0 || (b.vz || 0) > 0) this._stepFlight(b, dt, court, weather, onTreeHit, onLand);
       else this._stepRoll(b, dt, court, weather);
 
       const wb = court.wallBounce || 0.4;
@@ -31,7 +31,7 @@ export class PhysicsWorld {
     return collided;
   }
 
-  _stepFlight(b, dt, court, weather, onTreeHit) {
+  _stepFlight(b, dt, court, weather, onTreeHit, onLand) {
     b.vz -= GRAV * dt;
     b.z += b.vz * dt;
     const wf = 1.4 * (b.windFactor === undefined ? 1 : b.windFactor) * court.localWindFactor(b.x, b.y);
@@ -51,7 +51,7 @@ export class PhysicsWorld {
     if (b.z <= 0) {
       b.z = 0;
       if (b.vz < -9) { b.vz = -b.vz * 0.28; b.vx *= 0.75; b.vy *= 0.75; }
-      else { b.vz = 0; if (!b.landed) { b.vx *= 0.5; b.vy *= 0.5; b.landed = true; } }
+      else { b.vz = 0; if (!b.landed) { b.vx *= 0.5; b.vy *= 0.5; b.landed = true; if (onLand) onLand(b); } }
     }
   }
 

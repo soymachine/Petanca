@@ -1,3 +1,5 @@
+import { Sfx } from './Sfx.js';
+
 // Estado de teclado y ratón, con cursor ASCII propio.
 // Responsabilidad única: traducir eventos DOM en un estado consultable por frame.
 export class Input {
@@ -11,6 +13,7 @@ export class Input {
 
     window.addEventListener('keydown', (e) => {
       if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', ' ', 'Tab'].includes(e.key)) e.preventDefault();
+      Sfx.unlock();
       if (!this.keys[e.key]) this.pressed[e.key] = true;
       this.keys[e.key] = true;
     });
@@ -28,10 +31,10 @@ export class Input {
       m.cx = ncx; m.cy = ncy;
     });
     screenEl.addEventListener('mouseleave', () => { this.mouse.cx = -1; this.mouse.cy = -1; this.mouse.down = false; });
-    screenEl.addEventListener('mousedown', () => { this.mouse.down = true; this.mouse.dragDist = 0; });
+    screenEl.addEventListener('mousedown', () => { Sfx.unlock(); this.mouse.down = true; this.mouse.dragDist = 0; });
     window.addEventListener('mouseup', () => {
       const m = this.mouse;
-      if (m.down && m.dragDist < 3) m.clicked = true;
+      if (m.down && m.dragDist < 3) { m.clicked = true; Sfx.click(); }
       m.down = false; m.dx = 0; m.dy = 0;
     });
     screenEl.addEventListener('wheel', (e) => {

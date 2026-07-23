@@ -94,7 +94,7 @@ export class Match {
     this.sweetSpot = null; this.sweetWidth = 0.045;
     this.jitterA = 0; this.jitterP = 0;
     this.trail = []; this.decisive = false;
-    this.lastCollision = false; this.lastThrown = null; this.lastWasFault = false; this.timeoutUsedThisThrow = false;
+    this.lastCollision = false; this.lastLanded = false; this.lastThrown = null; this.lastWasFault = false; this.timeoutUsedThisThrow = false;
     this.injuryEvent = null;
     this.score = 0; this.targetsHit = 0; this.success = false; // entrenamientos
     this.measured = false; this.measureBalls = null;
@@ -367,6 +367,7 @@ export class Match {
     this.balls.push(b);
     this.lastThrown = b;
     this.lastCollision = false;
+    this.lastLanded = false;
     this.trail = [];
     if (owner === 'P') { this.ballsLeftP--; this.teamPTurn++; } else this.ballsLeftA--;
     this.phase = 'sim';
@@ -505,8 +506,11 @@ export class Match {
 
       case 'jackSim': {
         const frame = this._frame || 0;
-        physicsWorld.step(this.allBalls(), dt, this.court, this.weather, () => {}, this.trail, this.jack, frame);
-        physicsWorld.step(this.allBalls(), dt, this.court, this.weather, () => {}, this.trail, this.jack, frame);
+        let landed = false;
+        const onLand = () => { landed = true; };
+        physicsWorld.step(this.allBalls(), dt, this.court, this.weather, () => {}, this.trail, this.jack, frame, onLand);
+        physicsWorld.step(this.allBalls(), dt, this.court, this.weather, () => {}, this.trail, this.jack, frame, onLand);
+        this.lastLanded = landed;
         if (!this.jack.moving) {
           this._resolveJackThrow();
           this.phase = this.turn === 'P' ? 'aim' : 'aiTurn';
@@ -601,9 +605,12 @@ export class Match {
       case 'sim': {
         const treeHit = () => { this.narr = '¡A las ramas del plátano! La bola cae muerta entre hojas.'; };
         const frame = this._frame || 0;
-        const c1 = physicsWorld.step(this.allBalls(), dt, this.court, this.weather, treeHit, this.trail, this.lastThrown, frame);
-        const c2 = physicsWorld.step(this.allBalls(), dt, this.court, this.weather, treeHit, this.trail, this.lastThrown, frame);
+        let landed = false;
+        const onLand = () => { landed = true; };
+        const c1 = physicsWorld.step(this.allBalls(), dt, this.court, this.weather, treeHit, this.trail, this.lastThrown, frame, onLand);
+        const c2 = physicsWorld.step(this.allBalls(), dt, this.court, this.weather, treeHit, this.trail, this.lastThrown, frame, onLand);
         this.lastCollision = c1 || c2;
+        this.lastLanded = landed;
         if (!this.anyMoving()) {
           const lt = this.lastThrown;
           // plomada: bombeo alto (globo) que cae y se queda casi muerta

@@ -5,14 +5,30 @@ import { BIG_DIGITS } from '../data/art/staticArt.js';
 import { drillFor } from '../data/trainingDrills.js';
 import { CONSUMABLES, CONSUMABLE_IDS, MAX_CONSUMABLES_PER_MATCH } from '../data/consumables.js';
 import { clamp, dist2d } from '../core/utils.js';
+import { Sfx } from '../core/Sfx.js';
 
 export class MatchScreen {
   constructor(game) { this.game = game; }
 
   update(dt) {
     const { match, input, player } = this.game;
+    const prevPhase = this._prevMatchPhase;
     match.tickFrame(this.game.frame);
     match.update(dt, input);
+    if (prevPhase !== match.phase) {
+      if ((prevPhase === 'power' || prevPhase === 'aiTurn') && match.phase === 'sim') {
+        Sfx.throwSound();
+        this._collideSoundPlayed = false;
+      } else if (prevPhase === 'jackPower' && match.phase === 'jackSim') {
+        Sfx.throwSound();
+      }
+    }
+    if (match.lastCollision && !this._collideSoundPlayed) {
+      Sfx.collide();
+      this._collideSoundPlayed = true;
+    }
+    if (match.lastLanded) Sfx.land();
+    this._prevMatchPhase = match.phase;
     if (match.canUseConsumable()) {
       for (const id of CONSUMABLE_IDS) {
         if (player.consumables[id] > 0 && input.hit(CONSUMABLES[id].hotkey)) this.game.useConsumable(id);
