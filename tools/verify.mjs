@@ -28,6 +28,7 @@ import { RivalPlayer } from '../public/game/domain/RivalPlayer.js';
 import { WeeklyMatchContext } from '../public/game/domain/WeeklyMatchContext.js';
 import { DIFFICULTIES } from '../public/game/data/difficulty.js';
 import { LeagueWorld } from '../public/game/domain/LeagueWorld.js';
+import { TARGET } from '../public/game/physics/constants.js';
 import { ForeignLeagueWorld } from '../public/game/domain/ForeignLeagueWorld.js';
 import { awayCountriesFor, levelBoundsFor } from '../public/game/data/countries.js';
 import { setHomeCountry } from '../public/game/data/activeRoster.js';
@@ -199,8 +200,8 @@ check('economía: sin fichar a nadie ni repartir puntos, el dinero no se dispara
         ctx.markUsed(p.roster.ids);
         const mySkill = p.club.avgSkill(p.roster), oppSkill = opponent.avgSkill();
         const won = Math.random() < mySkill / (mySkill + oppSkill);
-        const loserScore = Math.floor(Math.random() * 12);
-        career.finishWeeklyMatch(ctx, won, won ? 13 : loserScore, won ? loserScore : 13);
+        const loserScore = Math.floor(Math.random() * (TARGET - 1));
+        career.finishWeeklyMatch(ctx, won, won ? TARGET : loserScore, won ? loserScore : TARGET);
         matchesPlayed++;
       }
     } else if (result.type === 'cup') {
@@ -354,7 +355,7 @@ check('Economía: totalEarned/totalSpent cuadran con player.money tras partidos 
     const opp = league.clubs.find((c) => !c.isPlayer);
     const ctx = new WeeklyMatchContext(league, opp, p.money, null, null);
     ctx.markUsed(p.roster.ids);
-    career.finishWeeklyMatch(ctx, Math.random() < 0.5, 13, 6);
+    career.finishWeeklyMatch(ctx, Math.random() < 0.5, TARGET, 3);
   }
   if (p.totalEarned === 0 || p.totalSpent === 0) throw new Error('tras 30 partidos con premios y nómina, ambos contadores deberían moverse');
   if (moneyStart + p.totalEarned - p.totalSpent !== p.money) {
@@ -405,7 +406,7 @@ check('país de casa: Francia genera su propia pirámide (6-8), su propio roster
       const opp = league.clubs.find((c) => !c.isPlayer);
       const ctx = new WeeklyMatchContext(league, opp, p.money, null, null);
       const won = Math.random() < 0.85;
-      const r = career.finishWeeklyMatch(ctx, won, won ? 13 : 6, won ? 6 : 13);
+      const r = career.finishWeeklyMatch(ctx, won, won ? TARGET : 3, won ? 3 : TARGET);
       if (p.currentLeagueLevel < bounds.min) throw new Error(`el descenso bajó del suelo de Francia (nivel ${p.currentLeagueLevel} < ${bounds.min})`);
       if (r.seasonEnd) {
         const cityName = league.cityName;
@@ -435,7 +436,7 @@ check('meta-progresión: ascender registra el techo de nivel para poder elegir e
       const league = p.league;
       const opp = league.clubs.find((c) => !c.isPlayer);
       const ctx = new WeeklyMatchContext(league, opp, p.money, null, null);
-      career.finishWeeklyMatch(ctx, true, 13, 4);
+      career.finishWeeklyMatch(ctx, true, TARGET, 2);
     }
     if (p.currentLeagueLevel < 3) throw new Error(`no llegó a nivel 3 en 60 semanas ganando siempre (se quedó en ${p.currentLeagueLevel})`);
     if (MetaProgress.maxSelectableLevel('ES') < p.currentLeagueLevel) {

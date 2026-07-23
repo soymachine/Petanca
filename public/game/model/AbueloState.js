@@ -156,15 +156,27 @@ export class AbueloState {
   // recuperación semanal de stamina: los años pasan factura (a partir de
   // los 65, cada año de más recupera algo menos, con suelo del 55% a edad
   // muy avanzada) y el aguante ayuda un poco más allá de bajar el coste en
-  // partido — antes era un +30 fijo para todo el mundo, sin distinción, y
-  // encima ahora que jugar (de verdad o simulado, ver Game._debugRollOutcome)
-  // gasta stamina de verdad, un +30 recuperaba casi tan rápido como se
-  // gastaba: se baja a +28 para que rotar plantilla / gestionar el
-  // descanso importe algo más que antes.
+  // partido.
+  //
+  // BUG real encontrado simulando cientos de semanas seguidas (una sola
+  // plantilla, sin rotar): con +28 (o incluso con el +30 de antes de bajar
+  // esto), el coste por partido — (45 - aguante*2), ver Match.js matchEnd y
+  // Game._debugRollOutcome — supera a esta recuperación para CUALQUIER
+  // abuelo de aguante medio (5-7), así que la stamina no se estabiliza en
+  // ningún punto intermedio: cae en picado hasta el suelo (0) y se queda
+  // ahí para siempre. A stamina 0, fatiguePenalty castiga el "skill"
+  // efectivo casi a un tercio — un jugador que nunca rota queda permanente
+  // e invisiblemente mermado, arrastrando su ratio de victorias muy por
+  // debajo del 50% y arriesgando la quiebra (ver GAME OVER) sin que nada en
+  // pantalla explique por qué. Subir a +34 hace que un aguante medio (5)
+  // quede casi en equilibrio (leve declive) y aguante 6+ ya sea sostenible
+  // en solitario — el aguante bajo sigue penalizando de verdad, y rotar
+  // sigue ayudando, pero jugar siempre con el mismo abuelo deja de ser un
+  // agujero negro de rendimiento.
   recoverWeekly(baseBonus = 0) {
     const ageFactor = clamp(1 - Math.max(0, this.age - 65) * 0.01, 0.55, 1);
     const aguanteHelp = (ABUELO_DATA[this.id].stats.aguante - 5) * 0.6;
-    this.st = clamp(this.st + (28 + baseBonus) * ageFactor + aguanteHelp, 0, 100);
+    this.st = clamp(this.st + (34 + baseBonus) * ageFactor + aguanteHelp, 0, 100);
   }
 
   hasImmunity(weatherKey) {
