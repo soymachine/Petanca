@@ -147,8 +147,17 @@ export class Club {
       id: this.id, name: this.name, isPlayer: this.isPlayer, country: this.country,
       money: this.money, seenArchetype: this.seenArchetype,
       pts: this.pts, played: this.played, won: this.won, lost: this.lost,
+      // BUG real (causa principal de un QuotaExceededError al guardar):
+      // p.nationality no es un simple {code,label}, es la entrada COMPLETA
+      // de NATIONALITIES (ver data/names.js), con weight y el pool entero
+      // de ~200 nombres del país — guardarla tal cual duplicaba ese pool
+      // de 200 nombres en CADA jugador rival de CADA club de las 23 ligas
+      // simuladas (230 clubes, ~575 jugadores), inflando el guardado a
+      // varios MB. Solo hace falta el código para reconstruirla al cargar
+      // (ver fromJSON).
       players: this.players.map((p) => ({
-        id: p.id, name: p.name, nationality: p.nationality, stats: p.stats, age: p.age,
+        id: p.id, name: p.name, nationality: { code: p.nationality.code, label: p.nationality.label },
+        stats: p.stats, age: p.age,
         forSale: !!p.forSale, discovered: !!p.discovered, levelRange: p.levelRange, statsRevealed: !!p.statsRevealed,
       })),
     };
@@ -160,8 +169,12 @@ export class Club {
     c.money = json.money ?? baseMoneyFor(5);
     c.seenArchetype = json.seenArchetype ?? false;
     c.players = (json.players || []).map((pd) => {
+      // reconstruye la entrada COMPLETA de NATIONALITIES (con su pool de
+      // nombres) a partir del código guardado — ver toJSON más arriba;
+      // ageAndRenew() necesita ese pool completo (nationality.names) para
+      // generar el reemplazo de un jugador retirado con su misma nacionalidad
       const p = new RivalPlayer({
-        id: pd.id, name: pd.name, nationality: pd.nationality, stats: pd.stats, age: pd.age,
+        id: pd.id, name: pd.name, nationality: nationalityByCode(pd.nationality.code), stats: pd.stats, age: pd.age,
         discovered: pd.discovered, levelRange: pd.levelRange, statsRevealed: pd.statsRevealed,
       });
       p.clubId = json.id;

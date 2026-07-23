@@ -307,8 +307,22 @@ export class Player {
     };
   }
 
+  // save() se llama constantemente (cada acción, cada día simulado) desde
+  // dentro del bucle de render — un QuotaExceededError sin capturar aquí
+  // no es solo "no se guardó esta vez": revienta hacia arriba a través de
+  // loop() en Game.js y con eso se corta el propio requestAnimationFrame,
+  // dejando el juego congelado para siempre hasta recargar la página (un
+  // bloqueo total, no solo una partida sin guardar). Ver también el arreglo
+  // en AbueloState.js (legacy/seasonLog sin podar, la causa real más
+  // probable de agotar la cuota) — esto es la red de seguridad para
+  // cualquier otro motivo de fallo (cuota compartida con otras pestañas,
+  // modo incógnito, etc.), no un sustituto de arreglar el crecimiento.
   save() {
-    localStorage.setItem(keyForSlot(Player.activeSlot()), JSON.stringify(this.toJSON()));
+    try {
+      localStorage.setItem(keyForSlot(Player.activeSlot()), JSON.stringify(this.toJSON()));
+    } catch (e) {
+      console.error('No se pudo guardar la partida (se sigue jugando, pero el progreso de este momento podría perderse):', e);
+    }
   }
 
   static activeSlot() { return Number(localStorage.getItem(ACTIVE_SLOT_KEY)) || 1; }

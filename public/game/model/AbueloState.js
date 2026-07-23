@@ -13,6 +13,17 @@ const LEVEL_CAP = 12;
 function xpToNextLevel(level) { return 60 + level * 25 + level * level * 4; }
 function pointsForLevel(level) { return Math.max(1, Math.round((10 + (level - 1) * 5) * 0.85 * 0.25 * 0.5)); }
 
+// tope de `legacy`/`seasonLog` por hueco de plantilla: BUG real (no solo
+// cosmético) encontrado tras un "QuotaExceededError" al guardar — ninguno
+// de los dos arrays se podaba nunca, y desde que el retiro con honores se
+// dispara solo al simular (ver Career.retireWithHonors / Game.js
+// _debugRollOutcome), un hueco puede acumular cientos de generaciones en
+// una sola sesión larga de Modo Debugger, cada una añadiendo su fila para
+// siempre. La Panteón y la ficha de detalle nunca muestran ni de lejos
+// tantas filas, así que podar las más antiguas no quita nada visible.
+const MAX_LEGACY = 20;
+const MAX_SEASON_LOG = 60;
+
 // Estado vivo de un abuelo de la peña: stamina, moral, entrenamiento
 // acumulado, amuleto, generación (nietos) y estadísticas de carrera.
 // Responsabilidad única: todo lo que cambia turno a turno para UN abuelo.
@@ -33,9 +44,19 @@ export class AbueloState {
     this.formStreak = data.formStreak ?? 0; // partidos de liga ganados seguidos (se corta al perder)
     this.mentorOf = data.mentorOf ?? null; // id de otro abuelo al que hace de mentor
     this.age = data.age ?? Math.round(rnd(64, 78));
-    this.signed = data.signed ?? null; // {name, nationality, portrait} si el hueco lo ocupa un fichaje
+    // {name, nationality, portrait} si el hueco lo ocupa un fichaje —
+    // nationality se recorta a {code,label} también al cargar, por si venía
+    // de un guardado de antes del arreglo del bug de Club.toJSON (ver ese
+    // comentario) con el objeto de NATIONALITIES completo embebido
+    this.signed = data.signed
+      ? { ...data.signed, nationality: data.signed.nationality ? { code: data.signed.nationality.code, label: data.signed.nationality.label } : data.signed.nationality }
+      : null;
     this.injuredUntil = data.injuredUntil ?? 0; // día de temporada hasta el que está de baja (0 = sano)
-    this.legacy = data.legacy ?? []; // generaciones anteriores de este mismo hueco (ver retireToGrandchild)
+    // generaciones anteriores de este mismo hueco (ver retireToGrandchild) —
+    // recortado a MAX_LEGACY también al cargar, para que un guardado ya
+    // hinchado por partidas de antes de este arreglo se autocure solo en
+    // cuanto se abra de nuevo (ver comentario en MAX_LEGACY más arriba)
+    this.legacy = (data.legacy ?? []).slice(-MAX_LEGACY);
     this.xp = data.xp ?? 0; // progreso de XP dentro del nivel actual
     this.level = data.level ?? 0;
     this.points = data.points ?? 0; // puntos ganados y aún sin repartir entre stats
@@ -61,7 +82,7 @@ export class AbueloState {
     // temporada), esto es una fila por cada temporada jugada, generación
     // tras generación, para poder ver la evolución real del hueco en la
     // vista de detalle de Mi Peña
-    this.seasonLog = data.seasonLog ?? [];
+    this.seasonLog = (data.seasonLog ?? []).slice(-MAX_SEASON_LOG);
   }
 
   static fromJSON(id, json) {
@@ -98,7 +119,10 @@ export class AbueloState {
     this.xp = 0; this.level = 0; this.points = 0;
     this.age = rivalPlayer.age;
     this.potentialCap = rivalPlayer.potentialCap ?? null;
-    this.signed = { name: rivalPlayer.name, nationality: rivalPlayer.nationality, portrait: rivalPlayer.portrait, miniPortrait: rivalPlayer.miniPortrait };
+    // solo code/label, nunca el objeto de NATIONALITIES completo (con su
+    // pool de ~200 nombres) — mismo bug que en Club.toJSON, ver ese
+    // comentario; aquí nunca hace falta el pool, solo se lee .label/.code
+    this.signed = { name: rivalPlayer.name, nationality: { code: rivalPlayer.nationality.code, label: rivalPlayer.nationality.label }, portrait: rivalPlayer.portrait, miniPortrait: rivalPlayer.miniPortrait };
   }
 
   get displayName() { return this.signed ? this.signed.name : null; }
@@ -256,6 +280,7 @@ export class AbueloState {
       wins: this.career.wins, losses: this.career.losses, bestStreak: this.career.bestStreak,
       reason,
     });
+    if (this.legacy.length > MAX_LEGACY) this.legacy = this.legacy.slice(-MAX_LEGACY);
     const outgoingBestStat = this._bestOutgoingStat();
     const immuneClimas = Object.keys(ABUELO_DATA[this.id].clima).filter((k) => ABUELO_DATA[this.id].clima[k] === 1);
 
@@ -331,6 +356,7 @@ export class AbueloState {
       season, level, gen: this.gen, age: this.age, moral: this.mo,
       cumWins: this.career.wins, cumLosses: this.career.losses, avgStat,
     });
+    if (this.seasonLog.length > MAX_SEASON_LOG) this.seasonLog = this.seasonLog.slice(-MAX_SEASON_LOG);
   }
 
   // en racha (3+ victorias seguidas): un pelín más firme en la mesa
