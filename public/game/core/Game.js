@@ -23,9 +23,10 @@ import { CLIMAS } from '../data/climas.js';
 import { STAT_LABEL, ABUELO_DATA } from '../data/abuelos.js';
 import { fatiguePenalty } from '../match/ThrowProfile.js';
 import { drillFor } from '../data/trainingDrills.js';
-import { resetChemistryFor } from '../domain/Chemistry.js';
+import { resetChemistryFor, chemistryKey } from '../domain/Chemistry.js';
 import { Chronicle } from '../match/Chronicle.js';
-import { DECISION_EVENTS, decisionEventById, fillDecisionText } from '../data/decisionEvents.js';
+import { DECISION_EVENTS, decisionEventById, fillDecisionText, presentRivalryPair } from '../data/decisionEvents.js';
+import { levelUpLine } from '../data/journalistFlavor.js';
 import { AGING_FLAVOR } from '../data/agingFlavor.js';
 import { clamp } from './utils.js';
 
@@ -275,6 +276,15 @@ export class Game {
 
   _buildDecisionCtx(event) {
     const p = this.player;
+    if (event.pick === 'rivalry') {
+      const pair = presentRivalryPair(p);
+      return pair ? { abueloId: pair.a, abueloId2: pair.b, pairDesc: pair.desc } : {};
+    }
+    if (event.pick === 'benched') {
+      const ids = p.roster.ids;
+      const abueloId = ids.reduce((a, b) => ((p.roster.get(a).benchStreak || 0) >= (p.roster.get(b).benchStreak || 0) ? a : b));
+      return { abueloId, benchStreak: p.roster.get(abueloId).benchStreak || 0 };
+    }
     if (!event.pick || !p.roster.ids.length) return {};
     const ids = p.roster.ids;
     let abueloId;
@@ -285,19 +295,24 @@ export class Game {
   }
 
   // aplica la opción elegida: efectos, noticia, y siembra la secuela (si la
-  // opción tiene una) en la cola de Player.pendingDecisions
+  // opción tiene una) en la cola de Player.pendingDecisions — si la opción
+  // es dinámica (`resolve`), el efecto y el texto se calculan aquí mismo,
+  // en el momento de confirmar, no antes (para que dependan de verdad de
+  // las stats actuales del protagonista y no de una foto tomada al abrir
+  // el modal)
   resolveDecision(optionIndex) {
     const de = this.decisionEvent;
     if (!de) return;
     const opt = de.event.options[optionIndex];
     if (!opt) return;
     const p = this.player;
-    this._applyDecisionEffects(opt.effects, de.ctx);
+    const { effects, resultText } = opt.resolve ? opt.resolve(p, de.ctx) : opt;
+    this._applyDecisionEffects(effects, de.ctx);
     if (!p.seenDecisions.includes(de.event.id)) p.seenDecisions.push(de.event.id);
     if (opt.sequel) {
       p.pendingDecisions.push({ day: p.seasonClock.day + opt.sequel.inWeeks * 7, id: opt.sequel.id, ctx: de.ctx });
     }
-    p.news.push(fillDecisionText(opt.resultText, de.ctx, (id) => this.displayName(id)));
+    p.news.push(fillDecisionText(resultText, de.ctx, (id) => this.displayName(id)));
     this.decisionEvent = null;
     p.save();
   }
@@ -309,12 +324,23 @@ export class Game {
     if (effects.boardConfidence) p.boardConfidence = clamp(p.boardConfidence + effects.boardConfidence, 0, 100);
     const targets = (t) => {
       if (t === 'all') return p.roster.ids;
+      if (typeof t === 'number') return p.roster.has(t) ? [t] : [];
+      if (t === 'abuelo2') return (ctx.abueloId2 !== undefined && ctx.abueloId2 !== null && p.roster.has(ctx.abueloId2)) ? [ctx.abueloId2] : [];
       return (ctx.abueloId !== undefined && ctx.abueloId !== null && p.roster.has(ctx.abueloId)) ? [ctx.abueloId] : [];
     };
     if (effects.moral) for (const id of targets(effects.moral.target)) p.roster.get(id).addMoral(effects.moral.d);
+    if (effects.moral2) for (const id of targets(effects.moral2.target)) p.roster.get(id).addMoral(effects.moral2.d);
     if (effects.stamina) for (const id of targets(effects.stamina.target)) { const s = p.roster.get(id); s.st = clamp(s.st + effects.stamina.d, 0, 100); }
     if (effects.xp) for (const id of targets(effects.xp.target)) p.roster.get(id).addXp(effects.xp.amount);
     if (effects.item) for (const id of targets(effects.item.target || 'abuelo')) p.roster.get(id).item = { id: effects.item.itemId };
+    // roce entre dos abuelos concretos (ver discusion_jugadores): resta
+    // partidos jugados juntos de Player.chemistry, sin bajar de 0 — un roce
+    // fuerte de verdad puede notarse hasta en la pista, no solo en la moral
+    if (effects.chemistryHit) {
+      const { a, b, d } = effects.chemistryHit;
+      const key = chemistryKey(a, b);
+      if (p.chemistry[key]) p.chemistry[key] = Math.max(0, p.chemistry[key] - d);
+    }
   }
 
   // amistoso de pretemporada: solo disponible al empezar temporada (jornada
@@ -410,7 +436,7 @@ export class Game {
     for (const id of ctx.usados) {
       const ups = p.roster.get(id).addXp(won ? playXp + winXp : playXp);
       for (const up of ups) {
-        p.news.push(`¡${this.displayName(id)} sube a nivel ${up.level}! ${up.points} puntos por repartir en Mi Peña.`);
+        p.news.push(levelUpLine(this.displayName(id), up.level, up.points));
       }
     }
   }
@@ -437,7 +463,7 @@ export class Game {
       if (!p.roster.has(id)) continue;
       const ups = p.roster.get(id).addXp(M.xpGain[idStr]);
       for (const up of ups) {
-        p.news.push(`¡${this.displayName(id)} sube a nivel ${up.level}! ${up.points} puntos por repartir en Mi Peña.`);
+        p.news.push(levelUpLine(this.displayName(id), up.level, up.points));
       }
     }
   }

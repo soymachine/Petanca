@@ -1,5 +1,7 @@
 import { TabsBar } from './TabsBar.js';
 import { wrapText, mulberry32, hashStr, clamp } from '../core/utils.js';
+import { REPORTERS, VOX_POPULI } from '../data/journalistFlavor.js';
+import { worldSportsEdition } from '../data/worldSports.js';
 
 const PAGE_X = 5, PAGE_Y = 4, PAGE_W = 130, PAGE_H = 39;
 const FILLER = ['▓', '▓', '▒', '░'];
@@ -20,6 +22,10 @@ const BIG_FONT = {
   U: ['█···█', '█···█', '█···█', '█···█', '·███·'],
   B: ['████·', '█···█', '████·', '█···█', '████·'],
   Ñ: { dy: -1, lines: ['·~~··', '█···█', '██··█', '█·█·█', '█··██', '█···█'] },
+  R: ['████·', '█···█', '████·', '█··█·', '█···█'],
+  F: ['█████', '█····', '████·', '█····', '█····'],
+  T: ['█████', '··█··', '··█··', '··█··', '··█··'],
+  W: ['█···█', '█···█', '█·█·█', '██·██', '█···█'],
 };
 const BIG_GLYPH_W = 5, BIG_GLYPH_GAP = 1, BIG_SPACE_W = 4;
 
@@ -29,7 +35,7 @@ const BIG_GLYPH_W = 5, BIG_GLYPH_GAP = 1, BIG_SPACE_W = 4;
 // de la página en cada edición, como si tocara buscarlo. Se pasa página
 // con flechas, como quien hojea un diario viejo.
 export class HemerotecaScreen {
-  constructor(game) { this.game = game; this.page = 0; this.mode = 'normal'; this.annalScroll = 0; }
+  constructor(game) { this.game = game; this.page = 0; this.mode = 'normal'; this.annalScroll = 0; this.worldPage = 0; }
 
   draw() {
     const { screen, input, player, frame } = this.game;
@@ -40,7 +46,12 @@ export class HemerotecaScreen {
       this.mode = this.mode === 'normal' ? 'historica' : 'normal';
       this.annalScroll = 0;
     }
+    if (input.hit('w') || input.hit('W')) {
+      this.mode = this.mode === 'mundo' ? 'normal' : 'mundo';
+      this.worldPage = 0;
+    }
     if (this.mode === 'historica') { this._drawHistorica(); return; }
+    if (this.mode === 'mundo') { this._drawWorldSports(); return; }
 
     const news = player.news.latest(30);
     if (this.page >= news.length) this.page = Math.max(0, news.length - 1);
@@ -52,6 +63,16 @@ export class HemerotecaScreen {
     this._drawBigTextCenter(PAGE_Y + 1, 'EL ECO DE LA PEÑA', '#e8ddb8');
     screen.textCenter(PAGE_Y + 7, player.seasonClock.dateLabel().toUpperCase(), '#c9a35d');
     screen.textCenter(PAGE_Y + 8, `— Edición Nº ${edition || '0'} · ${player.clubName} —`, '#8a7f66');
+    // firma de cronista rotatoria (solo de cara, no cambia ni un dato real
+    // de la noticia): junto a Eladio y Paco (los dos con nombre propio de
+    // Chronicle.js, que firman la crónica detallada de un partido jugado a
+    // mano) hay más reporteros de plantilla, elegidos deterministas por
+    // edición para que cada página se sienta distinta al hojearla
+    if (news.length) {
+      const reporterRng = mulberry32(hashStr(`hemeroteca-reporter-${this.page}`));
+      const reporter = REPORTERS[Math.floor(reporterRng() * REPORTERS.length)];
+      screen.textCenter(PAGE_Y + 10, `Firma: ${reporter}, enviado especial`, '#6a6152');
+    }
     screen.text(PAGE_X + 1, PAGE_Y + 9, '─'.repeat(PAGE_W - 2), '#8a7f66');
 
     if (!news.length) {
@@ -67,7 +88,7 @@ export class HemerotecaScreen {
     const nextLabel = 'más reciente [→] ▶';
     screen.text(PAGE_X + PAGE_W - 2 - nextLabel.length, PAGE_Y + PAGE_H - 1, canNext && frame % 20 < 14 ? nextLabel : '', canNext ? '#ffe680' : '#3a352c');
 
-    screen.textCenter(45, '[←/→] pasar página   [H] anales del club   [1] inicio', '#c9c2a8');
+    screen.textCenter(45, '[←/→] pasar página   [H] anales del club   [W] World of Sports   [1] inicio', '#c9c2a8');
 
     if (input.hit('ArrowLeft') && canPrev) this.page++;
     if (input.hit('ArrowRight') && canNext) this.page--;
@@ -108,7 +129,49 @@ export class HemerotecaScreen {
     }
 
     screen.textCenter(PAGE_Y + PAGE_H - 1, `${annals.length} hito${annals.length === 1 ? '' : 's'} en la historia del club`, '#8a7f66');
-    screen.textCenter(45, '[↑/↓] desplazar   [H] volver a la hemeroteca   [1] inicio', '#c9c2a8');
+    screen.textCenter(45, '[↑/↓] desplazar   [H] volver a la hemeroteca   [W] World of Sports   [1] inicio', '#c9c2a8');
+  }
+
+  // "WORLD OF SPORTS": el semanario internacional, con datos REALES de las
+  // ligas de fondo que se simulan solas cada semana (ver
+  // data/worldSports.js) — a diferencia de El Eco de la Peña, aquí no hay
+  // nada que esconder entre relleno: 2-3 párrafos legibles de un tirón. El
+  // número de ediciones disponibles crece con las semanas jugadas (no se
+  // guarda en el save: se recalcula al vuelo a partir del estado actual de
+  // las ligas de fondo).
+  _drawWorldSports() {
+    const { screen, input, player, frame } = this.game;
+    screen.box(PAGE_X - 1, PAGE_Y - 1, PAGE_W + 2, PAGE_H + 2, '#5a7ea8');
+    this._fillPaper();
+
+    const totalEditions = clamp(player.seasonClock.weekIndex + 1, 1, 40);
+    this.worldPage = clamp(this.worldPage, 0, totalEditions - 1);
+    const editionIndex = totalEditions - 1 - this.worldPage;
+
+    this._drawBigTextCenter(PAGE_Y + 1, 'WORLD OF SPORTS', '#cfe8ff');
+    screen.textCenter(PAGE_Y + 7, `— Edición Nº ${editionIndex + 1} — CRÓNICA INTERNACIONAL —`, '#8aa8c8');
+    screen.text(PAGE_X + 1, PAGE_Y + 8, '─'.repeat(PAGE_W - 2), '#4a6a88');
+
+    const paragraphs = worldSportsEdition(player, editionIndex);
+    let y = PAGE_Y + 11;
+    const textW = PAGE_W - 16;
+    const textX = PAGE_X + 8;
+    for (const para of paragraphs) {
+      const lines = wrapText(para, textW);
+      for (const l of lines) { screen.text(textX, y, l, '#e8ecf2'); y++; }
+      y += 2;
+    }
+
+    const canPrev = this.worldPage < totalEditions - 1;
+    const canNext = this.worldPage > 0;
+    screen.text(PAGE_X + 2, PAGE_Y + PAGE_H - 1, canPrev && frame % 20 < 14 ? '◀ [←] más antigua' : '', canPrev ? '#bcd8f2' : '#3a4a58');
+    screen.textCenter(PAGE_Y + PAGE_H - 1, `pág. ${this.worldPage + 1} / ${totalEditions}`, '#8aa8c8');
+    const nextLabel = 'más reciente [→] ▶';
+    screen.text(PAGE_X + PAGE_W - 2 - nextLabel.length, PAGE_Y + PAGE_H - 1, canNext && frame % 20 < 14 ? nextLabel : '', canNext ? '#bcd8f2' : '#3a4a58');
+    screen.textCenter(45, '[←/→] pasar página   [W] volver a la hemeroteca   [1] inicio', '#c9c2a8');
+
+    if (input.hit('ArrowLeft') && canPrev) this.worldPage++;
+    if (input.hit('ArrowRight') && canNext) this.worldPage--;
   }
 
   _fillPaper() {
@@ -150,9 +213,13 @@ export class HemerotecaScreen {
     const rng = mulberry32(hashStr(`hemeroteca-${this.page}`));
 
     // un renglón en blanco antes y después del titular, para que no quede
-    // pegado al relleno como si fuera un párrafo más cualquiera
+    // pegado al relleno como si fuera un párrafo más cualquiera — y, tras
+    // un blanco más, una línea corta de "vox populi" (ver
+    // data/journalistFlavor.js) puramente de sabor: no cambia la noticia
+    // en sí, pero hace que cada edición se note distinta al hojearla
     const headlineLines = wrapText(headlineText, colW - 2);
-    const headlineBlock = headlineLines.length + 2;
+    const voxLines = wrapText(VOX_POPULI[Math.floor(rng() * VOX_POPULI.length)], colW - 2);
+    const headlineBlock = headlineLines.length + voxLines.length + 3;
     const targetCol = Math.floor(rng() * cols);
     const span = Math.max(1, bottomY - headlineBlock - topY);
     const targetY = topY + Math.floor(rng() * span);
@@ -161,12 +228,14 @@ export class HemerotecaScreen {
     for (let ci = 0; ci < cols; ci++) {
       const cx = startX + ci * (colW + gap);
       const isTargetCol = ci === targetCol;
-      let y = topY, hiIndex = 0;
+      let y = topY;
       while (y < bottomY) {
         if (isTargetCol && y >= targetY && y < headlineEnd) {
-          if (y > targetY && y < headlineEnd - 1) {
-            screen.text(cx, y, headlineLines[hiIndex], '#fff6dc');
-            hiIndex++;
+          const rel = y - targetY;
+          if (rel >= 1 && rel <= headlineLines.length) {
+            screen.text(cx, y, headlineLines[rel - 1], '#fff6dc');
+          } else if (rel >= headlineLines.length + 2 && rel < headlineLines.length + 2 + voxLines.length) {
+            screen.text(cx, y, voxLines[rel - (headlineLines.length + 2)], '#8a7a5a');
           }
           y++; continue;
         }

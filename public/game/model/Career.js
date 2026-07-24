@@ -17,6 +17,7 @@ import { chemistryKey, chemistryLevel, CHEMISTRY_LEVELS, resetChemistryFor } fro
 import { Chronicle } from '../match/Chronicle.js';
 import { composeBiography } from '../data/biografias.js';
 import { boardPresidentFor, boardAdj } from '../data/boardPresident.js';
+import { resultLine, weeklyGoalMetLine, weeklyGoalMissedLine, nominaRojaLine, sponsorCumplidoLine, sponsorFallidoLine, levelUpLine } from '../data/journalistFlavor.js';
 
 // jornadas SEGUIDAS cerrando la semana con dinero negativo antes de un
 // GAME OVER (ver finishWeeklyMatch más abajo y HubScreen, que avisa de la
@@ -142,9 +143,7 @@ export class Career {
           clubName: p.clubName, venueLabel: `la liga de ${league.cityName}`, promiseBroken,
           publicImage: p.publicImage,
         })
-      : (won
-          ? `${p.clubName} gana ${finalScoreP}-${finalScoreA} a ${opponent.name} en la liga de ${league.cityName}.`
-          : `${opponent.name} se lleva la jornada ${finalScoreA}-${finalScoreP} frente a ${p.clubName}.`);
+      : resultLine(won, { clubName: p.clubName, oppName: opponent.name, cityName: league.cityName, scoreP: finalScoreP, scoreA: finalScoreA });
     if (won) {
       p.wins++;
       if (!p.citiesWon.includes(league.cityName)) p.citiesWon.push(league.cityName);
@@ -165,13 +164,17 @@ export class Career {
     // guarda para poder enseñarla en ResultScreen, no solo aplicarla
     const xpPerAbuelo = {};
     for (const id of p.roster.ids) {
+      const s = p.roster.get(id);
       if (ctx.usados.includes(id)) {
-        if (won) p.roster.get(id).addMoral(8);
+        if (won) s.addMoral(8);
         const gained = won ? 6 + 10 : 6;
         this._grantXp(p, id, gained);
         xpPerAbuelo[id] = (xpPerAbuelo[id] || 0) + gained;
+        s.benchStreak = 0;
+      } else {
+        s.addMoral(-4);
+        s.benchStreak = (s.benchStreak || 0) + 1;
       }
-      else p.roster.get(id).addMoral(-4);
     }
     this.settleDebts(p, ctx.usados, opponent.id, won);
     this.trackChemistry(p, ctx.usados, won);
@@ -190,10 +193,10 @@ export class Career {
       const metWeekly = p.weeklyGoal.check(won, margin, bestStreak);
       if (metWeekly) {
         money += p.weeklyGoal.reward;
-        p.news.push(`OBJETIVO DE LA JUNTA CUMPLIDO: ${p.weeklyGoal.desc} +${p.weeklyGoal.reward}€.`);
+        p.news.push(weeklyGoalMetLine(p.weeklyGoal.desc, p.weeklyGoal.reward));
       } else if (p.weeklyGoal.penalty > 0) {
         money -= p.weeklyGoal.penalty;
-        p.news.push(`La junta no ve cumplido su objetivo semanal (${p.weeklyGoal.desc}). -${p.weeklyGoal.penalty}€.`);
+        p.news.push(weeklyGoalMissedLine(p.weeklyGoal.desc, p.weeklyGoal.penalty));
       }
       weeklyGoalResult = { met: metWeekly, goal: p.weeklyGoal };
       p.weeklyGoal = rollWeeklyGoal();
@@ -205,7 +208,7 @@ export class Career {
     money -= upkeep;
     if (p.money + money < 0) {
       for (const id of p.roster.ids) p.roster.get(id).addMoral(-6);
-      p.news.push(`Las arcas de ${p.clubName} están en números rojos: la nómina de ${upkeep}€ pasa factura a la moral de la peña.`);
+      p.news.push(nominaRojaLine(p.clubName, upkeep));
     }
     for (const id of p.roster.ids) {
       const s = p.roster.get(id);
@@ -236,9 +239,9 @@ export class Career {
       const bonus = Math.round(sponsorResult.reward * p.facilities.sponsorMultiplier());
       sponsorResult.reward = bonus;
       money += bonus;
-      p.news.push(`Patrocinio cumplido: ${sponsorResult.deal.name} paga ${bonus}€.`);
+      p.news.push(sponsorCumplidoLine(sponsorResult.deal.name, bonus));
     } else if (sponsorResult && sponsorResult.expired) {
-      p.news.push(`El patrocinio de ${sponsorResult.deal.name} se acaba sin cumplirse.`);
+      p.news.push(sponsorFallidoLine(sponsorResult.deal.name));
     }
 
     // resto de la jornada: los otros 4 partidos se resuelven por estadísticas
@@ -429,7 +432,7 @@ export class Career {
   _grantXp(p, id, amount) {
     const ups = p.roster.get(id).addXp(amount);
     for (const up of ups) {
-      p.news.push(`¡${this.nameOf(id)} sube a nivel ${up.level}! ${up.points} puntos por repartir en Mi Peña.`);
+      p.news.push(levelUpLine(this.nameOf(id), up.level, up.points));
     }
   }
 

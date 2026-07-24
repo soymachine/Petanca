@@ -1,3 +1,5 @@
+import { RIVALRY_PAIRS } from './rivalries.js';
+
 // Eventos de decisión del calendario: a diferencia de los imprevistos
 // pasivos de Calendar.js (lesión, muerte, evento de moral), aquí el
 // jugador elige entre 2-3 opciones con efecto inmediato — y algunas
@@ -12,8 +14,21 @@
 //   xp: { target: 'abuelo', amount }
 //   item: { target: 'abuelo', itemId }   (ver data/items.js)
 //
-// `pick` decide qué abuelo protagoniza el evento (queda en ctx.abueloId,
-// usado por {abuelo} en los textos): 'random' | 'oldest' | 'youngest'.
+// `pick` decide qué abuelo(s) protagonizan el evento:
+//   'random' | 'oldest' | 'youngest' -> ctx.abueloId
+//   'benched' -> el hueco con más semanas seguidas sin jugar (ver
+//                AbueloState.benchStreak) -> ctx.abueloId, ctx.benchStreak
+//   'rivalry' -> un par de RIVALRY_PAIRS con ambos en plantilla ->
+//                ctx.abueloId, ctx.abueloId2, ctx.pairDesc
+//
+// Una opción puede fijar su efecto de dos formas:
+//   - estática: `effects` + `resultText`, como siempre (visibles de
+//     antemano en el modal, "nada de letra pequeña")
+//   - dinámica: `resolve(player, ctx) -> { effects, resultText }`, para
+//     que el resultado dependa de verdad de las stats del abuelo
+//     protagonista (p.ej. su temple) en vez de ser siempre el mismo
+//     número — en ese caso el modal muestra `previewText` en vez de
+//     intentar adivinar el efecto exacto (ver AgendaScreen._drawDecisionModal)
 export const DECISION_EVENTS = [
   {
     id: 'nieto_fermin', weight: 1, pick: 'random',
@@ -187,13 +202,100 @@ export const DECISION_EVENTS = [
         resultText: 'Respuestas cortas y a otra cosa. Nada que contar.' },
     ],
   },
+  {
+    // banquillo_queja: storytelling emergente ligado a un hueco real de la
+    // plantilla (ver AbueloState.benchStreak, incrementado en
+    // Career.finishWeeklyMatch) — no es un evento genérico de sabor, solo
+    // dispara si de verdad hay alguien criando polvo en el banquillo. El
+    // resultado real de cada opción depende del TEMPLE del propio abuelo
+    // (ver `resolve`, no `effects` fijo): a un temple bajo la respuesta seria
+    // le sienta mucho peor, y calmarlo de verdad solo cuaja si aguanta el
+    // pulso emocional.
+    id: 'banquillo_queja', weight: 2, pick: 'benched',
+    cond: (p) => p.roster.ids.length >= 2 && p.roster.ids.some((id) => (p.roster.get(id).benchStreak || 0) >= 3),
+    title: 'SE HARTA DEL BANQUILLO',
+    text: '{abuelo} lleva varias jornadas seguidas sin pisar la pista y quiere hablar con vosotros, serio: quiere jugar.',
+    options: [
+      { label: 'CALMARLO', previewText: 'Efecto real según el temple de {abuelo}: puede quedar tranquilo del todo o solo a medias.',
+        resolve: (p, ctx) => {
+          const s = p.roster.get(ctx.abueloId);
+          const temple = s.getStat('temple');
+          const ok = Math.random() < clampChance(temple / 10, 0.15, 0.9);
+          return ok
+            ? { effects: { moral: { target: 'abuelo', d: 14 } },
+                resultText: 'La charla surte efecto de verdad: {abuelo} se queda tranquilo, entiende que le toca esperar su turno.' }
+            : { effects: { moral: { target: 'abuelo', d: 4 } },
+                resultText: 'La charla ayuda algo, pero {abuelo} sigue mascullando por lo bajo. No se lo cree del todo.' };
+        } },
+      { label: 'RESPONDER SERIO: AQUÍ DECIDO YO', previewText: 'Efecto real según el temple de {abuelo}: se lo puede tomar bien, o muy mal.',
+        resolve: (p, ctx) => {
+          const s = p.roster.get(ctx.abueloId);
+          const temple = s.getStat('temple');
+          if (temple >= 7) {
+            return { effects: { moral: { target: 'abuelo', d: -4 }, boardConfidence: 3 },
+              resultText: 'No le hace gracia, pero {abuelo} se lo toma con deportividad: sabe que la decisión es vuestra. La junta valora el pulso firme.' };
+          }
+          return { effects: { moral: { target: 'abuelo', d: -16 } },
+            resultText: '{abuelo} se lo toma fatal. Sale del vestuario dando un portazo y el pueblo entero se entera de que aquí no se valora a nadie.' };
+        } },
+    ],
+  },
+  {
+    // discusion_jugadores: leverage RIVALRY_PAIRS (roces internos ya
+    // existentes en Roster.applyRivalryJealousy) para una decisión real de
+    // "toma partido": dar la razón a uno cuesta al otro moral, tanto más
+    // cuanto menos temple tenga, y si ya se llevaban bien en pista
+    // (chemistry) el roce se nota también ahí.
+    id: 'discusion_jugadores', weight: 2, pick: 'rivalry',
+    cond: (p) => !!presentRivalryPair(p),
+    title: 'SE LÍAN A DISCUTIR EN PLENO ENTRENO',
+    text: '{pairDesc} Hoy la discusión ha subido de tono en pleno entreno y los dos os piden que os pongáis de su lado.',
+    options: [
+      { label: 'DAR LA RAZÓN A {abuelo}', previewText: '{abuelo} sale ganando; a {abuelo2} le sienta peor cuanto menos temple tenga.',
+        resolve: (p, ctx) => resolveDiscussion(p, ctx, ctx.abueloId, ctx.abueloId2) },
+      { label: 'DAR LA RAZÓN A {abuelo2}', previewText: '{abuelo2} sale ganando; a {abuelo} le sienta peor cuanto menos temple tenga.',
+        resolve: (p, ctx) => resolveDiscussion(p, ctx, ctx.abueloId2, ctx.abueloId) },
+      { label: 'NO TOMAR PARTIDO', effects: { moral: { target: 'abuelo', d: -2 }, moral2: { target: 'abuelo2', d: -2 } },
+        resultText: 'No os mojáis. Ninguno de los dos queda contento, pero tampoco se rompe nada.' },
+    ],
+  },
 ];
+
+// el primer par de RIVALRY_PAIRS con ambos fichados a la vez en la
+// plantilla actual (o null si ninguno cuaja) — compartido entre `cond` y
+// la construcción de ctx (ver Game.js._buildDecisionCtx) para que nunca
+// puedan ir a destiempo el uno del otro
+export function presentRivalryPair(p) {
+  return RIVALRY_PAIRS.find((pair) => p.roster.has(pair.a) && p.roster.has(pair.b)) || null;
+}
+
+function clampChance(x, lo, hi) { return Math.max(lo, Math.min(hi, x)); }
+
+// resultado compartido de "dar la razón a X" (favorecido) sobre Y
+// (perjudicado): moral fija arriba para el favorecido, moral hacia abajo
+// para el otro escalada con SU temple — cuanto más flemático, mejor se lo
+// toma — y si ya llevaban partidos juntos en pista, el roce también
+// empaña un poco la compenetración ganada (ver Player.chemistry)
+function resolveDiscussion(p, ctx, winnerId, loserId) {
+  const loser = p.roster.get(loserId);
+  const temple = loser.getStat('temple');
+  const hit = -(4 + Math.round((10 - temple) * 1.4));
+  return {
+    effects: { moral: { target: winnerId, d: 10 }, moral2: { target: loserId, d: hit }, chemistryHit: { a: ctx.abueloId, b: ctx.abueloId2, d: 4 } },
+    resultText: temple >= 7
+      ? `Le sale caro, pero {abuelo${loserId === ctx.abueloId2 ? '2' : ''}} se lo toma con más deportividad de la esperada.`
+      : `{abuelo${loserId === ctx.abueloId2 ? '2' : ''}} se lo toma fatal y anda de morros con todo el mundo unos días.`,
+  };
+}
 
 export function decisionEventById(id) { return DECISION_EVENTS.find((e) => e.id === id); }
 
-// sustituye {abuelo} por el nombre real del hueco protagonista (o "la peña"
-// si el evento no tiene uno, p.ej. los que afectan a todos por igual)
+// sustituye {abuelo}/{abuelo2} por el nombre real de cada protagonista (o
+// "la peña" si el evento no tiene uno, p.ej. los que afectan a todos por
+// igual) — se usa tanto en textos como en labels de opción
 export function fillDecisionText(str, ctx, nameOf) {
-  if (ctx.abueloId === undefined || ctx.abueloId === null) return str.replace(/\{abuelo\}/g, 'la peña');
-  return str.replace(/\{abuelo\}/g, nameOf(ctx.abueloId));
+  let out = ctx.abueloId === undefined || ctx.abueloId === null ? str.replace(/\{abuelo\}/g, 'la peña') : str.replace(/\{abuelo\}/g, nameOf(ctx.abueloId));
+  if (ctx.abueloId2 !== undefined && ctx.abueloId2 !== null) out = out.replace(/\{abuelo2\}/g, nameOf(ctx.abueloId2));
+  if (ctx.pairDesc) out = out.replace(/\{pairDesc\}/g, ctx.pairDesc);
+  return out;
 }

@@ -42,6 +42,10 @@ export class AbueloState {
     this.genStats = data.genStats ?? null;
     this.career = data.career ?? { wins: 0, losses: 0, bestStreak: 0, closestWin: null };
     this.formStreak = data.formStreak ?? 0; // partidos de liga ganados seguidos (se corta al perder)
+    // jornadas de liga SEGUIDAS sin ser alineado (se corta a 0 en cuanto
+    // juega): dispara el evento de decisión "se harta del banquillo" (ver
+    // data/decisionEvents.js banquillo_queja) cuando llega a 3
+    this.benchStreak = data.benchStreak ?? 0;
     this.mentorOf = data.mentorOf ?? null; // id de otro abuelo al que hace de mentor
     this.age = data.age ?? Math.round(rnd(64, 78));
     // {name, nationality, portrait} si el hueco lo ocupa un fichaje —
@@ -101,7 +105,7 @@ export class AbueloState {
     return {
       st: this.st, mo: this.mo, bonus: this.bonus, item: this.item, gen: this.gen,
       torneos: this.torneos, genStats: this.genStats, career: this.career, mentorOf: this.mentorOf,
-      age: this.age, signed: this.signed, formStreak: this.formStreak, injuredUntil: this.injuredUntil,
+      age: this.age, signed: this.signed, formStreak: this.formStreak, benchStreak: this.benchStreak, injuredUntil: this.injuredUntil,
       legacy: this.legacy, xp: this.xp, level: this.level, points: this.points,
       potentialCap: this.potentialCap, inherited: this.inherited, debt: this.debt,
       agingFlavorSeen: this.agingFlavorSeen, seasonLog: this.seasonLog,
@@ -301,6 +305,7 @@ export class AbueloState {
     this.signed = null;
     this.career = { wins: 0, losses: 0, bestStreak: 0, closestWin: null };
     this.formStreak = 0;
+    this.benchStreak = 0;
 
     // herencia: un eco del abuelo saliente, elegido al azar entre una
     // afinidad climática suavizada (si era inmune a algo) o un empujón en

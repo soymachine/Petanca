@@ -374,8 +374,10 @@ export class AgendaScreen {
     event.options.forEach((opt, i) => {
       const sel = i === this.decisionCursor;
       const oy = optY0 + i * 4;
-      screen.text(x + 3, oy, `${sel ? '▶' : ' '} ${opt.label}`, sel ? '#fff' : '#c9c2a8');
-      const effectLines = wrapText(describeDecisionEffects(opt.effects), w - 10);
+      const label = fillDecisionText(opt.label, ctx, (id) => this.game.displayName(id));
+      screen.text(x + 3, oy, `${sel ? '▶' : ' '} ${label}`, sel ? '#fff' : '#c9c2a8');
+      const effectDesc = opt.resolve ? fillDecisionText(opt.previewText, ctx, (id) => this.game.displayName(id)) : describeDecisionEffects(opt.effects);
+      const effectLines = wrapText(effectDesc, w - 10);
       effectLines.forEach((l, k) => screen.text(x + 5, oy + 1 + k, l, sel ? '#a8e8c8' : '#6a8a7a'));
     });
 
