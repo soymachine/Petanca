@@ -46,6 +46,7 @@ import { MatchScreen } from '../screens/MatchScreen.js';
 import { ResultScreen } from '../screens/ResultScreen.js';
 import { SeasonEndScreen } from '../screens/SeasonEndScreen.js';
 import { GameOverScreen } from '../screens/GameOverScreen.js';
+import { EuropeanCupScreen } from '../screens/EuropeanCupScreen.js';
 
 const COLS = 140, ROWS = 46;
 const calendar = new Calendar();
@@ -111,6 +112,7 @@ export class Game {
       result: new ResultScreen(this),
       seasonEnd: new SeasonEndScreen(this),
       gameover: new GameOverScreen(this),
+      eurocup: new EuropeanCupScreen(this),
     };
   }
 

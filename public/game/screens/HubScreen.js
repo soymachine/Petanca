@@ -76,6 +76,7 @@ export class HubScreen {
       else if (input.hit('c') || input.hit('C')) this.game.transferOffer = null;
     }
     if (input.hit('d') || input.hit('D')) { player.debugMode = !player.debugMode; if (!player.debugMode) this.game.stopSimulating(); player.save(); }
+    if (player.euroCup && (input.hit('e') || input.hit('E'))) this.game.state = 'eurocup';
     if (!this.game.simulating && (input.hit('Enter') || input.hit(' '))) this.game.advanceDay();
   }
 
@@ -234,6 +235,7 @@ export class HubScreen {
       bits.push('EUROPA: ¡CAMPEONES!');
     }
     if (bits.length) screen.text(x + 2, y + 9, truncate(bits.join('  ·  '), w - 4), hadCup ? '#ffd75e' : '#88c8e8');
+    if (player.euroCup) screen.text(x + 2, y + 10, '[E] ver el cuadro completo de Europa', '#5a8aa8');
 
     screen.text(x + 2, y + h - 2, 'clic: ir a la Agenda', '#8a7f66');
     if (over && input.mouse.clicked) this.game.state = 'agenda';

@@ -8,7 +8,10 @@
 // (Cup.js), solo que con más entrantes y una ronda más. Se juega en una
 // fecha exclusiva del calendario, aparte de la Copa doméstica.
 const BRACKET_SIZE = 32;
-const ROUND_NAMES = ['DIECISEISAVOS DE FINAL', 'OCTAVOS DE FINAL', 'CUARTOS DE FINAL', 'SEMIFINAL', 'FINAL'];
+// exportado para que EuropeanCupScreen pueda pintar los nombres de TODAS
+// las rondas (incluidas las que aún no se han sorteado) sin duplicar esta
+// lista a mano en la pantalla
+export const ROUND_NAMES = ['DIECISEISAVOS DE FINAL', 'OCTAVOS DE FINAL', 'CUARTOS DE FINAL', 'SEMIFINAL', 'FINAL'];
 
 function snapshot(club, country) {
   return { id: club.id, name: club.name, skill: club.avgSkill ? club.avgSkill() : 5, country };

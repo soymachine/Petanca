@@ -242,6 +242,7 @@ export class AgendaScreen {
       const result = this.game.playFriendly();
       if (result) this.friendlyResult = { won: result.won, opponent: result.opponent.name, frame: 0 };
     }
+    if (player.euroCup && (input.hit('e') || input.hit('E'))) this.game.state = 'eurocup';
     if (this.friendlyResult) {
       this.friendlyResult.frame++;
       const txt = this.friendlyResult.won ? `AMISTOSO GANADO ante ${this.friendlyResult.opponent}` : `Amistoso perdido ante ${this.friendlyResult.opponent}`;
@@ -332,6 +333,7 @@ export class AgendaScreen {
       lines.push([`Rival: ${entry.opp ? entry.opp.name : '???'}${entry.opp && entry.opp.country ? countryTag(entry.opp.country, this.game.player.homeCountry) : ''}`, '#c9c2a8']);
       if (aiLevel) lines.push([`Nivel del rival: ${aiLevel}/10`, '#9a927a']);
       lines.push(['Partido único: quien gana, pasa de ronda.', '#9a927a']);
+      if (entry.european) lines.push(['[E] ver el cuadro completo de Europa', '#5a8aa8']);
     } else if (entry.kind === 'training') {
       lines.push(['Entreno agendado', '#88c8e8']);
       lines.push([`${entry.drill} — ${this.game.displayName(entry.abueloId)}`, '#c9c2a8']);

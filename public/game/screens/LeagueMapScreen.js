@@ -220,7 +220,7 @@ export class LeagueMapScreen {
 
     this._drawJornadaPanel(marker, league);
 
-    screen.textCenter(45, '[↑/↓] elegir liga  [←/→] navegar jornadas  [ENTER] entrar (solo la tuya)  [ESC] volver al hub', '#c9c2a8');
+    screen.textCenter(45, `[↑/↓] elegir liga  [←/→] navegar jornadas  [ENTER] entrar (solo la tuya)${player.euroCup ? '  [E] cuadro de Europa' : ''}  [ESC] volver al hub`, '#c9c2a8');
 
     // el tooltip se pinta el último de todo el frame (después de TabsBar,
     // la tabla y el texto de ayuda) para que quede siempre por encima del
@@ -244,6 +244,7 @@ export class LeagueMapScreen {
     if (input.hit('+') || input.hit('=')) this._setZoom(this.zoom + 1);
     if (input.hit('-') || input.hit('_')) this._setZoom(this.zoom - 1);
     if ((input.hit('Enter') || input.hit(' ')) && marker.country === player.homeCountry && marker.city.diff === player.currentLeagueLevel) this.game.state = 'hub';
+    if (player.euroCup && (input.hit('e') || input.hit('E'))) this.game.state = 'eurocup';
     if (input.hit('Escape')) this.game.state = 'hub';
   }
 
