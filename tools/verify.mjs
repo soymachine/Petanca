@@ -36,6 +36,11 @@ import { MetaProgress } from '../public/game/model/MetaProgress.js';
 import { ABUELO_DATA } from '../public/game/data/abuelos.js';
 import { FACES } from '../public/game/data/art/faces.js';
 import { abueloDataFor, facesFor } from '../public/game/data/abuelosByCountry.js';
+import { execFileSync } from 'node:child_process';
+import { readFileSync, writeFileSync, mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join, dirname } from 'node:path';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
 // entorno mínimo: Player.js usa localStorage para guardar/cargar partida
 globalThis.localStorage = { getItem: () => null, setItem: () => {}, removeItem: () => {} };
@@ -447,6 +452,64 @@ check('meta-progresión: ascender registra el techo de nivel para poder elegir e
     if (MetaProgress.maxSelectableLevel(p2.homeCountry) < p.currentLeagueLevel) throw new Error('el techo no sobrevive a fundar una peña nueva');
   } finally {
     globalThis.localStorage = realLocalStorage;
+  }
+});
+
+// --- split demo/full (ver core/edition.js, tools/build-editions.mjs) ---
+// EDITION es una const importada, así que no se puede "mockear" desde
+// aquí en el mismo proceso: se sobrescribe core/edition.js de verdad
+// (como hace build-editions.mjs) y se comprueba en un subproceso nuevo de
+// node, para que el import se resuelva contra el archivo ya cambiado. El
+// archivo original SIEMPRE se restaura, salga bien o mal la comprobación.
+check('edición demo: nunca desbloquea países ni genera Copa de Europa, aunque se gane/se llegue al top', () => {
+  const __dirname = dirname(fileURLToPath(import.meta.url));
+  const root = dirname(__dirname);
+  const editionFile = join(root, 'public/game/core/edition.js');
+  const original = readFileSync(editionFile, 'utf8');
+  const tmpDir = mkdtempSync(join(tmpdir(), 'petanka-verify-edition-'));
+  const scriptFile = join(tmpDir, 'check.mjs');
+  try {
+    writeFileSync(editionFile, "export const EDITION = 'demo';\n");
+    const u = (p) => pathToFileURL(join(root, p)).href;
+    const script = `
+      globalThis.localStorage = { getItem: () => null, setItem: () => {}, removeItem: () => {} };
+      const { MetaProgress } = await import('${u('public/game/model/MetaProgress.js')}');
+      const { Player } = await import('${u('public/game/model/Player.js')}');
+      const { Career } = await import('${u('public/game/model/Career.js')}');
+      const { WeeklyMatchContext } = await import('${u('public/game/domain/WeeklyMatchContext.js')}');
+      const { TARGET } = await import('${u('public/game/physics/constants.js')}');
+      const { CAMPAIGN_CHAPTERS } = await import('${u('public/game/data/campaign.js')}');
+
+      if (MetaProgress.unlockAllCountries() !== false) throw new Error('unlockAllCountries() debería ser un no-op (devolver false) en demo');
+      if (MetaProgress.isCountryUnlocked('FR')) throw new Error('Francia no debería desbloquearse nunca en demo');
+
+      if (CAMPAIGN_CHAPTERS.some((ch) => ch.id === 'gloria_europea' || ch.id === 'campanada')) {
+        throw new Error('CAMPAIGN_CHAPTERS no debería incluir capítulos de Copa de Europa en demo');
+      }
+
+      const p = new Player();
+      const career = new Career(p, (id) => \`abuelo\${id}\`);
+      for (let i = 0; i < 500 && p.currentLeagueLevel < 8; i++) {
+        const league = p.league;
+        const opp = league.clubs.find((c) => !c.isPlayer);
+        const ctx = new WeeklyMatchContext(league, opp, p.money, null, null);
+        career.finishWeeklyMatch(ctx, true, TARGET, 2);
+      }
+      if (p.currentLeagueLevel < 8) throw new Error(\`no llegó a nivel 8 en 500 semanas ganando siempre (se quedó en \${p.currentLeagueLevel}) — no se pudo comprobar el gate de verdad\`);
+      if (p.euroCup) throw new Error('p.euroCup nunca debería generarse en edición demo, ni llegando a nivel 8 en cabeza');
+      console.log('OK');
+    `;
+    writeFileSync(scriptFile, script);
+    let out;
+    try {
+      out = execFileSync('node', [scriptFile], { encoding: 'utf8' });
+    } catch (e) {
+      throw new Error(`el subproceso falló: ${(e.stderr || e.message || '').toString().split('\n').slice(0, 6).join('\n')}`);
+    }
+    if (!out.includes('OK')) throw new Error(`el subproceso no confirmó OK, salida: ${out}`);
+  } finally {
+    writeFileSync(editionFile, original);
+    rmSync(tmpDir, { recursive: true, force: true });
   }
 });
 

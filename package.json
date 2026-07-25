@@ -7,7 +7,10 @@
     "dev": "astro dev",
     "build": "astro build",
     "preview": "astro preview",
-    "verify": "node tools/verify.mjs"
+    "verify": "node tools/verify.mjs",
+    "build:demo": "node tools/build-editions.mjs demo",
+    "build:full": "node tools/build-editions.mjs full",
+    "build:editions": "node tools/build-editions.mjs"
   },
   "dependencies": {
     "astro": "^4.16.0"

@@ -1,6 +1,12 @@
+import { EDITION } from '../core/edition.js';
+
 // Capítulos de la campaña ("Historia de la peña"): objetivos que se
 // comprueban solos contra el estado del jugador y dan un premio único.
-export const CAMPAIGN_CHAPTERS = [
+// Los marcados `euroCupOnly` son inalcanzables en la edición 'demo' (ver
+// core/edition.js: Career.js nunca genera la Copa de Europa ahí), así que
+// se filtran del listado exportado para que nadie vea un objetivo
+// "Historia" imposible de cumplir en esa edición.
+const ALL_CHAPTERS = [
   { id: 'first_win', title: 'EL PRIMER TÍTULO', desc: 'Gana tu primer torneo.',
     check: (p) => p.wins >= 1, reward: { m: 100, x: 50 } },
   { id: 'refuerzos', title: 'REFUERZOS', desc: 'Ficha a 3 abuelos para la peña.',
@@ -18,11 +24,11 @@ export const CAMPAIGN_CHAPTERS = [
   { id: 'copa_espana', title: 'CAMPEONES DE ESPAÑA', desc: 'Gana la Copa de España.',
     check: (p) => p.cupTitles >= 1, reward: { m: 350, x: 220 } },
   { id: 'gloria_europea', title: 'GLORIA EUROPEA', desc: 'Gana la Copa de Europa.',
-    check: (p) => p.euroCupTitles >= 1, reward: { m: 600, x: 400 } },
+    check: (p) => p.euroCupTitles >= 1, reward: { m: 600, x: 400 }, euroCupOnly: true },
   { id: 'techo_madrid', title: 'EL TECHO DE MADRID', desc: 'Asciende a la máxima categoría de la liga federada.',
     check: (p) => p.reachedTopFlight, reward: { m: 300, x: 180 } },
   { id: 'campanada', title: 'CAMPANADA EUROPEA', desc: 'Gana a un club de un país con más nivel que el tuyo en la Copa de Europa.',
-    check: (p) => p.euroUpsets >= 1, reward: { m: 250, x: 150 } },
+    check: (p) => p.euroUpsets >= 1, reward: { m: 250, x: 150 }, euroCupOnly: true },
   { id: 'racha_oro', title: 'RACHA DE ORO', desc: 'Consigue que un abuelo encadene 5 victorias seguidas.',
     check: (p) => p.roster.some((id) => p.state[id].career.bestStreak >= 5), reward: { m: 200, x: 130 } },
   { id: 'renombre_leyenda', title: 'RENOMBRE DE LEYENDA', desc: 'Alcanza el renombre 10 como mánager.',
@@ -30,3 +36,5 @@ export const CAMPAIGN_CHAPTERS = [
   { id: 'cien_victorias', title: 'CIEN VICTORIAS', desc: 'Suma 100 victorias con la peña.',
     check: (p) => p.wins >= 100, reward: { m: 400, x: 250 } },
 ];
+
+export const CAMPAIGN_CHAPTERS = EDITION === 'demo' ? ALL_CHAPTERS.filter((ch) => !ch.euroCupOnly) : ALL_CHAPTERS;

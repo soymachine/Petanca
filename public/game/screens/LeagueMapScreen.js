@@ -6,6 +6,7 @@ import { Geography } from '../data/geography.js';
 import { hitRect, clamp } from '../core/utils.js';
 import { STAT_KEYS, STAT_LABEL } from '../data/abuelos.js';
 import { CrestGenerator } from '../portraits/CrestGenerator.js';
+import { EDITION } from '../core/edition.js';
 
 // Niveles de zoom del mapa: el índice 2 es el "normal" (extent=1, los 6
 // países ocupando toda la rejilla). Alejar (extent>1) encoge el
@@ -275,7 +276,7 @@ export class LeagueMapScreen {
       return;
     }
     this._drawStandingsPanel(league, style.color, `⚜ ${c.name} (${label.toUpperCase()}) — niv.${c.diff}`, c.feature.desc, false, false);
-    if (c.diff === 8) {
+    if (c.diff === 8 && EDITION !== 'demo') {
       screen.text(STAND_BOX.x + 2, STAND_BOX.y + STAND_BOX.h - 3, 'Los 4 primeros entran en la', style.color);
       screen.text(STAND_BOX.x + 2, STAND_BOX.y + STAND_BOX.h - 2, 'Copa de Europa contigo.', style.color);
     } else {

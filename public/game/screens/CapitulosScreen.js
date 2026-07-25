@@ -2,6 +2,7 @@ import { TabsBar } from './TabsBar.js';
 import { RIVALRY_PAIRS } from '../data/rivalries.js';
 import { STAT_LABEL } from '../data/abuelos.js';
 import { wrapText, truncate, drawTabRow, hitRect } from '../core/utils.js';
+import { EDITION } from '../core/edition.js';
 
 const SECTIONS = ['capitulos', 'palmares', 'rivalidades', 'historicos'];
 const SECTION_LABEL = { capitulos: 'CAPÍTULOS', palmares: 'SALÓN DE LA FAMA', rivalidades: 'RIVALIDADES', historicos: 'HISTÓRICOS' };
@@ -102,13 +103,17 @@ export class CapitulosScreen {
       '    █    ',
       '  █████  ',
     ];
+    // en edición 'demo' (ver core/edition.js) la Copa de Europa nunca se
+    // juega, así que su columna se quita en vez de enseñar un trofeo que
+    // nadie va a poder ganar nunca — el ancho de columna se recalcula sobre
+    // las que queden, no siempre "entre 3"
     const cols = [
       { label: 'COPAS DE LIGA', count: player.seasonTitles, color: '#ffd75e', art: TROPHY_LIGA },
       { label: 'COPAS DE ESPAÑA', count: player.cupTitles, color: '#c8a0e8', art: TROPHY_ESPANA },
-      { label: 'COPAS DE EUROPA', count: player.euroCupTitles, color: '#7ec8ea', art: TROPHY_EUROPA },
+      ...(EDITION === 'demo' ? [] : [{ label: 'COPAS DE EUROPA', count: player.euroCupTitles, color: '#7ec8ea', art: TROPHY_EUROPA }]),
     ];
     const gap = 3;
-    const colW = Math.floor((w - gap * 2) / 3);
+    const colW = Math.floor((w - gap * (cols.length - 1)) / cols.length);
     const artH = TROPHY_LIGA.length;
 
     cols.forEach((c, i) => {

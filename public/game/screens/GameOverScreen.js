@@ -1,4 +1,5 @@
 import { Player } from '../model/Player.js';
+import { EDITION } from '../core/edition.js';
 
 // Fin de la partida: se llega aquí desde Career.finishWeeklyMatch cuando
 // GAME_OVER_NEGATIVE_WEEKS jornadas seguidas cierran con dinero negativo
@@ -19,7 +20,7 @@ export class GameOverScreen {
 
     screen.textCenter(19, 'LO QUE QUEDA DE LA AVENTURA', '#ffb347');
     screen.textCenter(21, `Liga alcanzada: nivel ${player.currentLeagueLevel}/8   ·   ${player.wins}G ${player.losses}P`, '#c9c2a8');
-    screen.textCenter(22, `Títulos de liga: ${player.seasonTitles}   ·   Copas: ${player.cupTitles}   ·   Copas de Europa: ${player.euroCupTitles}`, '#c9c2a8');
+    screen.textCenter(22, `Títulos de liga: ${player.seasonTitles}   ·   Copas: ${player.cupTitles}${EDITION === 'demo' ? '' : `   ·   Copas de Europa: ${player.euroCupTitles}`}`, '#c9c2a8');
     screen.textCenter(23, `Ascensos: ${player.promotions}   ·   Descensos: ${player.relegations}`, '#c9c2a8');
 
     screen.textCenter(34, '[ENTER] empezar una partida nueva en este perfil', '#7CFC00');

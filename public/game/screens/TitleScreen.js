@@ -11,6 +11,7 @@ import { MetaProgress } from '../model/MetaProgress.js';
 import { citiesFor, awayCountriesFor, countryLabel, strengthFor } from '../data/countries.js';
 import { wrapText, hitRect } from '../core/utils.js';
 import { founderStatsForLevel } from '../data/abuelos.js';
+import { EDITION } from '../core/edition.js';
 
 const PICKABLE_COUNTRIES = ['ES', 'FR', 'IT', 'BE', 'CH', 'PT'];
 
@@ -156,10 +157,16 @@ export class TitleScreen {
   // partida (ver MetaProgress.unlockAllCountries, disparado desde
   // Game._finishEuroCupMatch) — ese desbloqueo es de por vida, para
   // cualquier partida futura, no solo la que estaba en marcha al ganarla.
+  // En edición 'demo' (ver core/edition.js) MetaProgress.unlockAllCountries
+  // es un no-op, así que estas casillas se quedan en BLOQUEADO para
+  // siempre sin tocar nada más aquí — el texto de abajo es lo único que
+  // cambia para no prometer un desbloqueo que esa edición no puede cumplir.
   _drawCountryPicker() {
     const { screen, input } = this.game;
     screen.textCenter(30, '¿DESDE QUÉ PAÍS EMPEZAMOS?', '#ffb347');
-    screen.textCenter(31, 'el resto se desbloquea al ganar la primera Copa de Europa', '#8a7f66');
+    screen.textCenter(31, EDITION === 'demo'
+      ? 'el resto de países están disponibles en la versión completa'
+      : 'el resto se desbloquea al ganar la primera Copa de Europa', '#8a7f66');
     const w = 20, gap = 2, total = PICKABLE_COUNTRIES.length * w + (PICKABLE_COUNTRIES.length - 1) * gap;
     const x0 = Math.floor((screen.cols - total) / 2);
     PICKABLE_COUNTRIES.forEach((code, i) => {

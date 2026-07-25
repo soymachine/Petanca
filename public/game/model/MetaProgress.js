@@ -5,6 +5,7 @@
 // activo, porque es "lo que ha desbloqueado esta persona jugando", no el
 // progreso de una partida en concreto.
 import { levelBoundsFor } from '../data/countries.js';
+import { EDITION } from '../core/edition.js';
 
 const META_KEY = 'petanka_meta_v1';
 const ALL_COUNTRIES = ['ES', 'FR', 'IT', 'BE', 'CH', 'PT'];
@@ -62,7 +63,16 @@ export class MetaProgress {
   // extranjeros de golpe para futuras partidas. Devuelve true solo la
   // primera vez (para poder disparar el aviso una sola vez), false si ya
   // estaban todos desbloqueados de antes.
+  //
+  // En la edición 'demo' (ver core/edition.js) esto es un no-op a
+  // propósito: España es el único país jugable, de por vida, sin
+  // excepción — es el gate real del split demo/full (ver
+  // tools/build-editions.mjs). Career.js tampoco llega a generar nunca la
+  // Copa de Europa en esa edición, así que unlockAllCountries() ni
+  // debería poder dispararse en la práctica; este no-op es el cinturón
+  // además de los tirantes.
   static unlockAllCountries() {
+    if (EDITION === 'demo') return false;
     const meta = MetaProgress.load();
     let changed = false;
     for (const code of ALL_COUNTRIES) {

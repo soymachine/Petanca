@@ -12,6 +12,7 @@ import { bondLabel, gamesFor, chemistryLevel } from '../domain/Chemistry.js';
 import { CrestGenerator } from '../portraits/CrestGenerator.js';
 import { TRAINING_DRILLS } from '../data/trainingDrills.js';
 import { archetypeForAbuelo } from '../data/abueloArchetypes.js';
+import { EDITION } from '../core/edition.js';
 
 const TABLE_X = 4, TABLE_Y0 = 10;
 const TABLE_W = 138;
@@ -1342,7 +1343,7 @@ export class PenyaScreen {
     const bmw = player.bestMarginWin;
     screen.text(recX + 2, recY + 2, `mayor paliza dada: ${bmw ? `${bmw.margin} puntos de diferencia vs ${bmw.rival} (${bmw.cityName})` : '—'}`, '#c9c2a8');
     screen.text(recX + 2, recY + 3, `racha histórica: ${rec.bestStreak || '—'}`, '#c9c2a8');
-    screen.text(recX + 2, recY + 4, `títulos de liga: ${player.seasonTitles}  ·  Copas de España: ${player.cupTitles}  ·  campanadas europeas: ${player.euroUpsets}`, '#c9c2a8');
+    screen.text(recX + 2, recY + 4, `títulos de liga: ${player.seasonTitles}  ·  Copas de España: ${player.cupTitles}${EDITION === 'demo' ? '' : `  ·  campanadas europeas: ${player.euroUpsets}`}`, '#c9c2a8');
     screen.text(recX + 2, recY + 5, `generaciones que han pasado por la peña: ${rec.totalGen || '—'}`, '#c9c2a8');
 
     if (input.hit('ArrowUp')) { const i = ids.indexOf(this.panteonCursor); this.panteonCursor = ids[(i + ids.length - 1) % ids.length]; }

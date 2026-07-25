@@ -18,6 +18,7 @@ import { Chronicle } from '../match/Chronicle.js';
 import { composeBiography } from '../data/biografias.js';
 import { boardPresidentFor, boardAdj } from '../data/boardPresident.js';
 import { resultLine, weeklyGoalMetLine, weeklyGoalMissedLine, nominaRojaLine, sponsorCumplidoLine, sponsorFallidoLine, levelUpLine } from '../data/journalistFlavor.js';
+import { EDITION } from '../core/edition.js';
 
 // jornadas SEGUIDAS cerrando la semana con dinero negativo antes de un
 // GAME OVER (ver finishWeeklyMatch más abajo y HubScreen, que avisa de la
@@ -367,7 +368,14 @@ export class Career {
       // los 4 primeros de esa liga y los 4 primeros de la liga de nivel 8
       // de cada uno de los 5 países extranjeros, totalmente al azar y sin
       // mirar país.
-      if (fromLevel === 8 && rank <= 4 && (!p.euroCup || p.euroCup.finished)) {
+      //
+      // En edición 'demo' (ver core/edition.js) esto nunca se dispara:
+      // p.euroCup se queda en null para siempre. Todo lo que depende de
+      // ella (SeasonClock.euroCupMatches, Game._finishEuroCupMatch,
+      // HubScreen/AgendaScreen) ya está escrito como "si p.euroCup existe y
+      // no ha terminado", así que con este único gate toda esa maquinaria
+      // queda inerte sin tener que tocarla en cada sitio.
+      if (EDITION !== 'demo' && fromLevel === 8 && rank <= 4 && (!p.euroCup || p.euroCup.finished)) {
         const groups = [{ country: p.homeCountry, clubs: table.slice(0, 4) }];
         for (const [code, world] of p.foreignLeagues) {
           const top = world.leagueOf(8);
