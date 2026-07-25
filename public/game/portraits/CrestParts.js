@@ -1,11 +1,14 @@
 // Piezas para escudos de club procedurales (ver CrestGenerator.js).
-// Cada "forma" es una silueta fija (13x13 en SHAPES, 8x11 en MINI_SHAPES):
-// 'X' = celda rellena, ' ' = fuera de la forma. El generador combina esa
-// silueta con un degradado de color y un emblema para dar variedad, igual
-// que PortraitParts.js hace con caras. SHAPES y MINI_SHAPES van en el
-// MISMO orden (mismo índice = misma silueta a las dos escalas), para que
-// un mismo club se vea "igual de familia" tanto en el escudo grande como
-// en el mini. Variedad a propósito más allá del escudo heráldico clásico:
+// Cada "forma" es una silueta fija: 'X' = celda rellena, ' ' = fuera de la
+// forma. El generador combina esa silueta con un degradado de color y un
+// emblema para dar variedad, igual que PortraitParts.js hace con caras.
+// SHAPES (13x13, grande) y MINI_SHAPES (5x5, pequeño) van en el MISMO
+// orden (mismo índice = misma silueta a las dos escalas), para que un
+// mismo club se vea "igual de familia" en las dos versiones. Los dos
+// tamaños son SIEMPRE cuadrados (ancho = alto): antes MINI_SHAPES era
+// 9x5, un rectángulo achatado que no se parecía a un escudo de verdad;
+// ahora cabe en el mismo lienzo cuadrado que el grande, solo que a menor
+// resolución. Variedad a propósito más allá del escudo heráldico clásico:
 // círculo, diamante, cuadrado, banderín, estrella, hexágono y cruz.
 
 export const SHAPES = [
@@ -131,66 +134,70 @@ export const SHAPES = [
   ],
 ];
 
-// versión compacta (5x9) de las mismas 8 formas, mismo orden, para sitios
-// sin espacio para el escudo grande (p.ej. la cabecera de Mi Peña: la fila
-// 8 ya la usa el texto de ayuda de cada sección — screen.textCenter(8,
-// ...) — así que el mini no puede pasar de 5 filas o se lo comería)
+// versión pequeña (5x5, CUADRADA — ver comentario de arriba) de las mismas
+// 8 formas, mismo orden: cabecera de Mi Peña (filas 3-7, antes del texto
+// de ayuda de la fila 8), la tarjeta de "próximo partido" del Hub, y los
+// escudos mini del cuadro de la Copa de Europa (ver EuropeanCupScreen).
+// A esta resolución algunas siluetas (círculo/hexágono/cuadrado) quedan
+// forzosamente parecidas entre sí — el color y el emblema son quienes
+// más distinguen un escudo de otro a este tamaño, la silueta es solo un
+// apoyo, igual que en un favicon de verdad.
 export const MINI_SHAPES = [
   [ // escudo
-    ' XXXXXXX ',
-    'XXXXXXXXX',
-    'XXXXXXXXX',
-    ' XXXXXXX ',
-    '    X    ',
+    ' XXX ',
+    'XXXXX',
+    'XXXXX',
+    ' XXX ',
+    '  X  ',
   ],
   [ // círculo
-    '  XXXXX  ',
-    'XXXXXXXXX',
-    'XXXXXXXXX',
-    'XXXXXXXXX',
-    '  XXXXX  ',
+    ' XXX ',
+    'XXXXX',
+    'XXXXX',
+    'XXXXX',
+    ' XXX ',
   ],
   [ // diamante
-    '    X    ',
-    '  XXXXX  ',
-    'XXXXXXXXX',
-    '  XXXXX  ',
-    '    X    ',
+    '  X  ',
+    ' XXX ',
+    'XXXXX',
+    ' XXX ',
+    '  X  ',
   ],
-  [ // cuadrado redondeado
-    ' XXXXXXX ',
-    'XXXXXXXXX',
-    'XXXXXXXXX',
-    'XXXXXXXXX',
-    ' XXXXXXX ',
+  [ // cuadrado
+    'XXXXX',
+    'XXXXX',
+    'XXXXX',
+    'XXXXX',
+    'XXXXX',
   ],
-  [ // banderín
-    'XXXXXXXXX',
-    'XXXXXXXXX',
-    'XXXX XXXX',
-    'XXX   XXX',
-    'XX     XX',
+  [ // banderín (con muesca de golondrina)
+    'XXXXX',
+    'XXXXX',
+    'XXXXX',
+    'XX XX',
+    'X   X',
   ],
-  [ // estrella
-    '    X    ',
-    '  XXXXX  ',
-    'X XXXXX X',
-    '  XXXXX  ',
-    '    X    ',
+  [ // estrella (puntas asomando por las esquinas)
+    'X   X',
+    ' XXX ',
+    'XXXXX',
+    ' XXX ',
+    'X   X',
   ],
   [ // hexágono
-    '   XXX   ',
-    'XXXXXXXXX',
-    'XXXXXXXXX',
-    'XXXXXXXXX',
-    '   XXX   ',
+    ' XXX ',
+    'XXXXX',
+    'XXXXX',
+    'XXXXX',
+    ' XXX ',
   ],
   [ // cruz
-    '    X    ',
-    'XXXXXXXXX',
-    'XXXXXXXXX',
-    'XXXXXXXXX',
-    '    X    ',
+    ' XXX ',
+    ' XXX ',
+    'XXXXX',
+    ' XXX ',
+    ' XXX ',
   ],
 ];
 
