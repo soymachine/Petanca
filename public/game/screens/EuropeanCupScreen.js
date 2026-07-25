@@ -1,25 +1,21 @@
 import { TabsBar } from './TabsBar.js';
 import { ROUND_NAMES } from '../domain/EuropeanCup.js';
 import { countryTag } from '../data/countries.js';
-import { truncate, drawTabRow, clamp } from '../core/utils.js';
+import { truncate, drawTabRow, clamp, hitRect } from '../core/utils.js';
+import { CrestGenerator } from '../portraits/CrestGenerator.js';
 
 const PAGE_X = 4, PAGE_Y = 4, PAGE_W = 132, PAGE_H = 39;
-const ROW_H = 3; // 2 líneas de contenido + 1 de aire, por cruce
+const CREST_H = 5; // CrestGenerator.generateMini es siempre 5x5 (cuadrado)
+const ROW_H = CREST_H * 2 + 1; // dos escudos apilados (uno por lado del cruce) + una fila de aire
 
 // El cuadro completo de la Copa de Europa en curso (o de la última jugada,
-// si ya se acabó): todas las rondas ya sorteadas, ronda a ronda, con quién
-// ganó cada cruce. Solo existen datos de las rondas por las que ya se ha
-// pasado — el motor nunca "juega solo" el resto del cuadro por adelantado
-// (ver EuropeanCup.advanceRound, solo se llama cuando el jugador gana su
-// propio cruce), así que las rondas futuras se muestran como pestañas
-// deshabilitadas, no como pairings inventados.
-//
-// Nota importante sobre "quién gana la Copa si no la ganáis vosotros": el
-// motor NUNCA resuelve el resto del cuadro tras vuestra eliminación (ver
-// Game._finishEuroCupMatch: `advanceRound()` solo se llama si `won`), así
-// que no existe un campeón "de verdad" cuando quedáis eliminados — esta
-// pantalla lo explica en vez de inventar un ganador que el juego nunca
-// llegó a decidir.
+// si ya se acabó): todas las rondas ya sorteadas, ronda a ronda, con el
+// escudo y el resultado de cada cruce. Solo existen datos de las rondas
+// por las que ya se ha pasado — las rondas futuras se muestran como
+// pestañas deshabilitadas, no como pairings inventados. La Copa de Europa
+// se sortea y se resuelve ENTERA todos los años, participes o no (ver
+// EuropeanCup.js/Career.js), así que siempre hay un campeón real que
+// enseñar en cuanto `finished` es true.
 export class EuropeanCupScreen {
   constructor(game) {
     this.game = game;
@@ -58,8 +54,14 @@ export class EuropeanCupScreen {
     let statusText, statusCol;
     if (cup.finished && cup.isChampion()) {
       statusText = `🏆 CAMPEONES DE EUROPA con ${player.clubName}`; statusCol = '#ffd75e';
+    } else if (cup.finished && cup.playerClubId !== null) {
+      const champ = cup.championClub;
+      const champTag = champ && champ.country ? countryTag(champ.country, player.homeCountry) : '';
+      statusText = `Eliminados — campeón: ${champ ? champ.name : '?'}${champTag}`; statusCol = '#ef9f9f';
     } else if (cup.finished) {
-      statusText = `Eliminados en ${cup.roundName.toLowerCase()} — el resto del cuadro no llegó a jugarse`; statusCol = '#ef9f9f';
+      const champ = cup.championClub;
+      const champTag = champ && champ.country ? countryTag(champ.country, player.homeCountry) : '';
+      statusText = `No participasteis esta vez — campeón: ${champ ? champ.name : '?'}${champTag}`; statusCol = '#8aa8c8';
     } else {
       const opp = cup.playerOpponent();
       statusText = `En curso: ${cup.roundName.toLowerCase()}${opp ? ` — rival: ${opp.name}${opp.country ? countryTag(opp.country, player.homeCountry) : ''}` : ''}`;
@@ -81,6 +83,7 @@ export class EuropeanCupScreen {
     const listH = PAGE_Y + PAGE_H - 3 - listY;
     const listX = PAGE_X + 3, listW = PAGE_W - 6;
     const pairs = cup.bracket[this.roundView];
+    this._hoverInfo = null; // se rellena dentro de _drawSide si el ratón cae encima de un lado del cruce
     const { offset } = screen.drawList(listX, listY, listW, listH, pairs, ROW_H, (pair, idx, x, y) => {
       this._drawPairing(pair, idx, x, y, listW, player, cup);
     }, this.scroll);
@@ -89,33 +92,70 @@ export class EuropeanCupScreen {
     if (input.hit('ArrowDown')) this.scroll = this.scroll + 1;
 
     screen.textCenter(PAGE_Y + PAGE_H - 1, '[←/→] ronda   [↑/↓] desplazar cruces   [ESC] volver', '#c9c2a8');
+    // el tooltip se pinta el último de todo el frame para quedar siempre
+    // por encima del resto (mismo patrón que LeagueMapScreen/AgendaScreen)
+    if (this._hoverInfo) this._drawHoverTooltip();
     if (input.hit('Escape')) this.game.state = 'hub';
   }
 
   _drawPairing(pair, idx, x, y, w, player, cup) {
     const { screen } = this.game;
-    screen.text(x, y, `${idx + 1}.`, '#5a5347');
+    screen.text(x, y + Math.floor(CREST_H / 2), `${idx + 1}.`, '#5a5347');
     const nameX = x + 4;
     if (!pair.b) {
-      this._drawSide(pair.a, true, nameX, y, w - 4, player, true);
-      screen.text(nameX, y + 1, 'pase directo (bye)', '#5a5347');
+      this._drawSide(pair.a, true, nameX, y, w - 4, player, true, pair);
+      screen.text(nameX + CREST_H + 2, y + CREST_H, 'pase directo a la siguiente ronda (bye)', '#5a5347');
       return;
     }
-    this._drawSide(pair.a, pair.winnerId === null ? null : pair.winnerId === pair.a.id, nameX, y, w - 4, player, false);
-    this._drawSide(pair.b, pair.winnerId === null ? null : pair.winnerId === pair.b.id, nameX, y + 1, w - 4, player, false);
+    const aWon = pair.winnerId === null ? null : pair.winnerId === pair.a.id;
+    const bWon = pair.winnerId === null ? null : pair.winnerId === pair.b.id;
+    this._drawSide(pair.a, aWon, nameX, y, w - 4, player, false, pair);
+    this._drawSide(pair.b, bWon, nameX, y + CREST_H, w - 4, player, false, pair);
   }
 
   // won: true (ganó), false (perdió), null (aún sin decidir — solo puede
-  // pasar en el cruce del propio jugador, en la ronda que está en curso)
-  _drawSide(side, won, x, y, w, player, isBye) {
-    const { screen } = this.game;
+  // pasar en el cruce del propio jugador, en la ronda que está en curso).
+  // `pair` hace falta para leer el marcador (scoreA/scoreB, ver
+  // EuropeanCup.resolveAiPairings/resolvePlayerPairing) al pasar el ratón.
+  _drawSide(side, won, x, y, w, player, isBye, pair) {
+    const { screen, input } = this.game;
     const isMine = side.id === player.club.id;
     const mark = isBye ? '·' : won === null ? '·' : won ? '✓' : '✗';
     const markCol = isBye || won === null ? '#8a8a7a' : won ? '#7ec850' : '#8a5a3a';
     const tag = side.country ? countryTag(side.country, player.homeCountry) : '';
-    const label = `${truncate(side.name, w - 16)}${tag}`;
+    const textX = x + CREST_H + 2;
+    const label = truncate(side.name, Math.max(10, w - (textX - x) - 4)) + tag;
     const nameCol = isMine ? '#7CFC00' : won === false ? '#6a6355' : '#c9c2a8';
-    screen.text(x, y, mark, markCol);
-    screen.text(x + 2, y, isMine ? `► ${label}` : label, nameCol);
+    const midY = y + Math.floor(CREST_H / 2);
+
+    screen.drawPortrait(CrestGenerator.generateMini(side.name), x, y);
+    screen.text(textX, midY, mark, markCol);
+    screen.text(textX + 2, midY, isMine ? `► ${label}` : label, nameCol);
+
+    if (hitRect(input.mouse.cx, input.mouse.cy, x, y, w, CREST_H)) {
+      let resultText;
+      if (isBye) resultText = 'Pase directo (bye): no jugó esta ronda.';
+      else if (won === null) resultText = 'Cruce pendiente de jugar.';
+      else if (pair.scoreA === undefined) resultText = won ? 'Ganó este cruce.' : 'Perdió este cruce.';
+      else {
+        const mine = side === pair.a ? pair.scoreA : pair.scoreB;
+        const opp = side === pair.a ? pair.scoreB : pair.scoreA;
+        resultText = `${won ? 'Ganó' : 'Perdió'} ${mine}-${opp}.`;
+      }
+      this._hoverInfo = { name: side.name, tag, resultText };
+    }
+  }
+
+  _drawHoverTooltip() {
+    const { screen, input } = this.game;
+    const info = this._hoverInfo;
+    const lines = [[`${info.name}${info.tag}`, '#ffe680'], [info.resultText, '#c9c2a8']];
+    const tw = Math.min(60, Math.max(...lines.map((l) => l[0].length)) + 4);
+    const th = lines.length + 2;
+    const tx = Math.min(input.mouse.cx + 2, screen.cols - tw - 1);
+    const ty = Math.min(input.mouse.cy + 1, screen.rows - th - 1);
+    for (let r = 0; r < th; r++) for (let c = 0; c < tw; c++) screen.put(tx + c, ty + r, '█', '#000');
+    screen.box(tx, ty, tw, th, '#ffe14d', 'double');
+    lines.forEach((l, i) => screen.text(tx + 2, ty + 1 + i, l[0], l[1]));
   }
 }

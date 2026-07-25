@@ -7,6 +7,8 @@
 // disparar cuando le toque. Mismo motor de bracket que la Copa de España
 // (Cup.js), solo que con más entrantes y una ronda más. Se juega en una
 // fecha exclusiva del calendario, aparte de la Copa doméstica.
+import { TARGET } from '../physics/constants.js';
+
 const BRACKET_SIZE = 32;
 // exportado para que EuropeanCupScreen pueda pintar los nombres de TODAS
 // las rondas (incluidas las que aún no se han sorteado) sin duplicar esta
@@ -143,20 +145,35 @@ export class EuropeanCup {
     for (const p of this.round) {
       if (p.winnerId !== null) continue;
       if ((p.a && p.a.id === this.playerClubId) || (p.b && p.b.id === this.playerClubId)) continue;
-      if (!p.b) { p.winnerId = p.a.id; continue; } // bye
+      if (!p.b) { p.winnerId = p.a.id; continue; } // bye, sin marcador
       const won = Math.random() < p.a.skill / (p.a.skill + p.b.skill);
       p.winnerId = won ? p.a.id : p.b.id;
+      // marcador de pega (mismo criterio que Career.fakeLeagueScore): solo
+      // para que el tooltip del cuadro (ver EuropeanCupScreen) pueda
+      // enseñar algo más que "ganó/perdió" también en los cruces que
+      // nunca se llegan a jugar de verdad
+      const loserScore = Math.floor(Math.random() * (TARGET - 1));
+      p.scoreA = won ? TARGET : loserScore;
+      p.scoreB = won ? loserScore : TARGET;
     }
   }
 
   // gana o pierde, el torneo sigue: si el jugador cae, el resto del
   // cuadro (donde él ya no aparece) se termina de resolver por IA aquí
   // mismo, hasta tener un campeón real — antes, perder aquí dejaba la
-  // Copa "acabada" sin que nadie llegara a coronarse de verdad.
-  resolvePlayerPairing(won) {
+  // Copa "acabada" sin que nadie llegara a coronarse de verdad. scoreFor/
+  // scoreAgainst es el marcador REAL del partido jugado (ver
+  // Game._finishEuroCupMatch), para que el tooltip del jugador enseñe el
+  // resultado de verdad y no uno de pega.
+  resolvePlayerPairing(won, scoreFor, scoreAgainst) {
     const p = this.playerPairing();
     if (!p) return;
-    p.winnerId = won ? this.playerClubId : (p.a.id === this.playerClubId ? p.b.id : p.a.id);
+    const playerIsA = p.a.id === this.playerClubId;
+    p.winnerId = won ? this.playerClubId : (playerIsA ? p.b.id : p.a.id);
+    if (scoreFor !== undefined) {
+      p.scoreA = playerIsA ? scoreFor : scoreAgainst;
+      p.scoreB = playerIsA ? scoreAgainst : scoreFor;
+    }
     if (this.roundComplete()) this._runToCompletion();
   }
 

@@ -107,6 +107,9 @@ function buildCrest(seed, shapes, bands) {
 export class CrestGenerator {
   // escudo "de héroe" (13x13): pantalla de resultado, tooltips con espacio de sobra
   static generate(seed) { return buildCrest(seed, SHAPES, 10); }
-  // escudo compacto (8x11): cabeceras y listas donde no cabe el grande
-  static generateMini(seed) { return buildCrest(seed, MINI_SHAPES, 6); }
+  // escudo pequeño (5x5, cuadrado — ver CrestParts.js): cabeceras y listas
+  // donde no cabe el grande, y los cruces del cuadro de la Copa de Europa.
+  // Menos bandas de degradado que el grande (4 en vez de 10): con solo 25
+  // celdas de lienzo, más bandas se ven ruidosas en vez de suaves.
+  static generateMini(seed) { return buildCrest(seed, MINI_SHAPES, 4); }
 }

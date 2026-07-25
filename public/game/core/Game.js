@@ -666,7 +666,7 @@ export class Game {
     const opponent = cup.playerOpponent();
     const rivalTag = countryTag(opponent.country, p.homeCountry);
     const roundName = cup.roundName;
-    cup.resolvePlayerPairing(won);
+    cup.resolvePlayerPairing(won, scoreP, scoreA);
     this._grantMatchXp(this.weeklyMatch, won, 15, 25);
     this.career.settleDebts(p, this.weeklyMatch.usados, opponent.id, won);
     this.career.trackChemistry(p, this.weeklyMatch.usados, won);
