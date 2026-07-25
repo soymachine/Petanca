@@ -696,6 +696,14 @@ export class Game {
         ? Chronicle.compose(chronicleFacts, { won, scoreP, scoreA, rivalName: `${opponent.name}${rivalTag}`, clubName: p.clubName, venueLabel: `${cup.roundName.toLowerCase()} de la Copa de Europa`, promiseBroken, publicImage: p.publicImage })
         : `COPA DE EUROPA: ${p.clubName} cae ante ${opponent.name}${rivalTag} en ${cup.roundName.toLowerCase()} (${scoreP}-${scoreA}). Se acaba la aventura europea por esta vez.`;
       p.news.push(resultNews);
+      // el resto del cuadro ya se ha resuelto solo hasta el final (ver
+      // EuropeanCup.resolvePlayerPairing): se puede anunciar el campeón de
+      // verdad en el mismo titular, no solo que "se acaba la aventura"
+      const champ = cup.championClub;
+      if (champ) {
+        const champTag = countryTag(champ.country, p.homeCountry);
+        p.news.push(`El resto del cuadro se decide sin vosotros: campeón de la Copa de Europa, ${champ.name}${champTag}.`);
+      }
       p.addReward(80, 60);
     } else if (cup.roundComplete()) {
       cup.advanceRound();

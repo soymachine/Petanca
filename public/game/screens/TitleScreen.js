@@ -5,6 +5,7 @@ import { CITIES } from '../data/cities.js';
 import { LeagueWorld } from '../domain/LeagueWorld.js';
 import { ForeignLeagueWorld } from '../domain/ForeignLeagueWorld.js';
 import { Cup } from '../domain/Cup.js';
+import { EuropeanCup } from '../domain/EuropeanCup.js';
 import { Club } from '../domain/Club.js';
 import { setHomeCountry } from '../data/activeRoster.js';
 import { MetaProgress } from '../model/MetaProgress.js';
@@ -253,6 +254,9 @@ export class TitleScreen {
       // ver founderStatsForLevel
       player.roster.get(0).genStats = founderStatsForLevel(level * strengthFor(country));
       player.cup = Cup.generate(player.leagueWorld, player.club, player.club.avgSkill(player.roster));
+      // igual que player.cup: el euroCup que traía el constructor era el
+      // del España/Albacete por defecto, ya inválido para este país/nivel
+      if (EDITION !== 'demo') player.euroCup = EuropeanCup.generate(EuropeanCup.groupsFor(player), player.club, player.club.avgSkill(player.roster));
       // el constructor de Player ya había agendado un cruce de Copa por
       // defecto (España/Albacete, antes de saber qué ciudad se iba a elegir
       // de verdad) — sin limpiarlo primero, firstFreeDayFrom lo ve ocupado

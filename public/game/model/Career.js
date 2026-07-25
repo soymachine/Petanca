@@ -57,6 +57,15 @@ export class Career {
     const p = this.player;
     const league = ctx.league;
     const opponent = ctx.opponentClub;
+    // instantánea de los 4 primeros de nivel 8 de cada país para la Copa de
+    // Europa (ver más abajo), tomada ANTES de que la simulación en
+    // paralelo de esta misma semana pueda resetear alguna liga que
+    // justo termine su temporada ahora mismo (ver
+    // _simulateLeagueMatchday/League.startNewSeason, y movePlayer): leer
+    // en caliente el ranking DESPUÉS de esa simulación a veces pillaría a
+    // todo el mundo a 0 puntos recién reiniciados, en vez del ranking real
+    // de la temporada que se acaba de cerrar.
+    const euroSnapshot = EDITION !== 'demo' ? EuropeanCup.groupsFor(p) : null;
     const base = { xp: 60 + league.level * 25, money: 30 + league.level * 20 };
     let xp = won ? base.xp : Math.round(base.xp * 0.2);
     let money = won ? Math.round(base.money * p.facilities.matchMoneyMultiplier()) : 0;
@@ -363,11 +372,14 @@ export class Career {
         p.news.push(`¡ARRANCA ${cupLabel}! ${p.clubName} debuta en ${p.cup.roundName.toLowerCase()} contra ${p.cup.playerOpponent().name}.`);
       }
 
-      // Copa de Europa: solo si acabas de cerrar una temporada en el nivel
-      // más alto (Madrid, 8) quedando entre los 4 primeros — se sortea con
-      // los 4 primeros de esa liga y los 4 primeros de la liga de nivel 8
-      // de cada uno de los 5 países extranjeros, totalmente al azar y sin
-      // mirar país.
+      // Copa de Europa: se sortea y se juega CADA fin de temporada, no solo
+      // cuando el jugador llega — con los 4 primeros de la liga de nivel 8
+      // de cada uno de los 6 países (ver EuropeanCup.groupsFor, que mira la
+      // liga de nivel 8 de tu país de casa sea o no la que estás jugando
+      // ahora mismo). Si tu club no va entre esos 4, o directamente juegas
+      // en otro nivel, la Copa se decide entera por IA en el momento
+      // (EuropeanCup.generate ya la resuelve sola cuando el jugador no
+      // aparece) — así hay un campeón real todos los años, participes o no.
       //
       // En edición 'demo' (ver core/edition.js) esto nunca se dispara:
       // p.euroCup se queda en null para siempre. Todo lo que depende de
@@ -375,18 +387,27 @@ export class Career {
       // HubScreen/AgendaScreen) ya está escrito como "si p.euroCup existe y
       // no ha terminado", así que con este único gate toda esa maquinaria
       // queda inerte sin tener que tocarla en cada sitio.
-      if (EDITION !== 'demo' && fromLevel === 8 && rank <= 4 && (!p.euroCup || p.euroCup.finished)) {
-        const groups = [{ country: p.homeCountry, clubs: table.slice(0, 4) }];
-        for (const [code, world] of p.foreignLeagues) {
-          const top = world.leagueOf(8);
-          if (top) groups.push({ country: code, clubs: top.standings().slice(0, 4) });
-        }
+      if (EDITION !== 'demo' && (!p.euroCup || p.euroCup.finished)) {
+        // si la temporada que se acaba de cerrar era de nivel 8, `table`
+        // (capturado más arriba, antes de cualquier ascenso/descenso/
+        // reinicio) es más fresco que la instantánea de principio de
+        // semana — se usa esa en vez de la del país de casa en euroSnapshot
+        const groups = fromLevel === 8
+          ? euroSnapshot.map((g) => (g.country === p.homeCountry ? { country: g.country, clubs: table.slice(0, 4) } : g))
+          : euroSnapshot;
         p.euroCup = EuropeanCup.generate(groups, p.club, p.club.avgSkill(p.roster));
-        const day = p.seasonClock.firstFreeDayFrom(6, p.league);
-        p.seasonClock.scheduleEuroCup(day);
-        const firstOpp = p.euroCup.playerOpponent();
-        const oppTag = firstOpp ? countryTag(firstOpp.country, p.homeCountry) : '';
-        p.news.push(`¡OS CLASIFICÁIS PARA LA COPA DE EUROPA! ${p.clubName} debuta en ${p.euroCup.roundName.toLowerCase()} contra ${firstOpp ? firstOpp.name : '?'}${oppTag}.`);
+        const pairing = p.euroCup.playerPairing();
+        if (pairing) {
+          const day = p.seasonClock.firstFreeDayFrom(6, p.league);
+          p.seasonClock.scheduleEuroCup(day);
+          const firstOpp = p.euroCup.playerOpponent();
+          const oppTag = firstOpp ? countryTag(firstOpp.country, p.homeCountry) : '';
+          p.news.push(`¡OS CLASIFICÁIS PARA LA COPA DE EUROPA! ${p.clubName} debuta en ${p.euroCup.roundName.toLowerCase()} contra ${firstOpp ? firstOpp.name : '?'}${oppTag}.`);
+        } else {
+          const champ = p.euroCup.championClub;
+          const champTag = champ && champ.country ? countryTag(champ.country, p.homeCountry) : '';
+          p.news.push(`LA COPA DE EUROPA SE JUEGA SIN VOSOTROS: no llegasteis entre los 4 primeros de la máxima categoría. Campeón esta vez: ${champ ? champ.name : '?'}${champTag}.`);
+        }
       }
       p.boardGoal = boardGoalFor(p.seasonsPlayed, p.currentLeagueLevel);
       const awards = this._seasonAwards(p);
