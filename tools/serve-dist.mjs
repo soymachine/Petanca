@@ -74,6 +74,11 @@ server.on('error', (err) => {
   process.exit(1);
 });
 
-server.listen(port, () => {
+// escucha solo en localhost (no en todas las interfaces): sin esto, si
+// hay OTRO proceso (p.ej. un astro dev/preview olvidado en otra pestaña)
+// enlazado específicamente a "localhost:<puerto>", el sistema operativo
+// prioriza esa dirección más específica sobre la genérica de este
+// servidor, y las peticiones del navegador acaban en el proceso ajeno
+server.listen(port, '127.0.0.1', () => {
   console.log(`✔ Sirviendo ${dir} en http://localhost:${port}`);
 });
