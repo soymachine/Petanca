@@ -35,6 +35,12 @@ const MIME = {
   '.txt': 'text/plain; charset=utf-8',
 };
 
+// no-store en toda respuesta: sin esto, un navegador (o un Service
+// Worker de otra prueba anterior en ese mismo origen localhost:<puerto>)
+// puede quedarse con una respuesta vieja cacheada y no volver a pedirla
+// nunca más, aunque el servidor real ya sirva otra cosa distinta
+const NO_CACHE = { 'Cache-Control': 'no-store, no-cache, must-revalidate', Pragma: 'no-cache' };
+
 const server = createServer(async (req, res) => {
   try {
     const urlPath = decodeURIComponent(req.url.split('?')[0]);
@@ -45,17 +51,27 @@ const server = createServer(async (req, res) => {
       st = await stat(filePath).catch(() => null);
     }
     if (!st) {
-      res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' });
+      res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8', ...NO_CACHE });
       res.end('404 - no encontrado');
       return;
     }
     const body = await readFile(filePath);
-    res.writeHead(200, { 'Content-Type': MIME[extname(filePath)] || 'application/octet-stream' });
+    res.writeHead(200, { 'Content-Type': MIME[extname(filePath)] || 'application/octet-stream', ...NO_CACHE });
     res.end(body);
   } catch (e) {
-    res.writeHead(500, { 'Content-Type': 'text/plain; charset=utf-8' });
+    res.writeHead(500, { 'Content-Type': 'text/plain; charset=utf-8', ...NO_CACHE });
     res.end('500 - error interno: ' + e.message);
   }
+});
+
+server.on('error', (err) => {
+  if (err.code === 'EADDRINUSE') {
+    console.error(`\n✘ El puerto ${port} ya está en uso por otro proceso.`);
+    console.error(`  Cierra lo que esté escuchando en ese puerto (por ejemplo, otra pestaña con "npm run dev") e inténtalo de nuevo.`);
+  } else {
+    console.error(`\n✘ Error de servidor: ${err.message}`);
+  }
+  process.exit(1);
 });
 
 server.listen(port, () => {
