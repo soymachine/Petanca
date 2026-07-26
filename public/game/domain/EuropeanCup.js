@@ -5,8 +5,22 @@
 // rellena hasta 32 con 8 "byes" (pase directo sin jugar); el club del
 // jugador nunca puede tocarle un bye, para que siempre haya partido que
 // disparar cuando le toque. Mismo motor de bracket que la Copa de España
-// (Cup.js), solo que con más entrantes y una ronda más. Se juega en una
-// fecha exclusiva del calendario, aparte de la Copa doméstica.
+// (Cup.js), solo que con más entrantes y una ronda más.
+//
+// A diferencia de la Copa de España (que siempre lleva al jugador), esta
+// Copa se sortea CADA temporada aunque el jugador no clasifique o ya haya
+// caído eliminado (ver Career.js/groupsFor) — así que su resolución no
+// puede depender de que el jugador juegue. Las 5 rondas se reparten en 5
+// fechas del calendario calculadas de una vez al sortear la Copa
+// (`roundDates`, ver Career.js), como si fuera el fixture real de una
+// competición: cada ronda se resuelve el día que le toca, ni antes ni
+// después, tanto si el cruce es tuyo (partido real) como si es entre dos
+// clubes de la IA (una tirada ponderada por nivel medio, ver
+// resolveAiPairings). Nada se adelanta ni se resuelve de golpe: el sorteo
+// (generate) solo arma la ronda 0, sin decidir NINGÚN cruce real (los
+// "bye" son la excepción — no hay partido que jugar, así que no hay nada
+// que esconder). Quien orquesta "hoy toca resolver esta ronda" es
+// Game.js, cuando el calendario llega a cada fecha de roundDates.
 import { TARGET } from '../physics/constants.js';
 
 const BRACKET_SIZE = 32;
@@ -29,12 +43,16 @@ function shuffle(arr) {
 }
 
 export class EuropeanCup {
-  constructor(bracket, roundIdx, playerClubId, finished, championId) {
+  constructor(bracket, roundIdx, playerClubId, finished, championId, roundDates = []) {
     this.bracket = bracket; // bracket[round] = [{a, b, winnerId}]
     this.roundIdx = roundIdx;
     this.playerClubId = playerClubId;
     this.finished = finished;
     this.championId = championId;
+    // roundDates[i] = día de calendario (SeasonClock.day) en que se
+    // resuelve la ronda i — las 5 se calculan y agendan de una vez al
+    // sortear la Copa (ver Career.js), no ronda a ronda según se avanza
+    this.roundDates = roundDates;
   }
 
   // groups: [{ country, clubs }], cada `clubs` ya recortado a los primeros
@@ -47,12 +65,12 @@ export class EuropeanCup {
   //
   // playerClub es OPCIONAL: si no viene, o si no aparece entre `groups`
   // (el club del jugador no llegó a top 4 de la máxima categoría esta
-  // temporada, o directamente juega en otro nivel), la Copa se sortea y se
-  // resuelve ENTERA por IA en el momento — de esta forma la Copa de Europa
-  // se juega y se decide todos los años, aunque el jugador no la dispute
-  // esa vez (ver Career.js, que ahora la sortea cada fin de temporada, y
-  // Player.js, que ya arranca con una recién resuelta desde el primer día).
-  static generate(groups, playerClub, playerSkill) {
+  // temporada, o directamente juega en otro nivel), el sorteo se hace
+  // igual y la Copa se juega entera por IA — pero SOLO se decide cada
+  // cruce el día que le toca según `roundDates` (ver Career.js), nunca
+  // aquí: esta función solo arma la ronda 0 (el sorteo), sin resolver
+  // ningún cruce real (los "bye" son la excepción, no esconden nada).
+  static generate(groups, playerClub, playerSkill, roundDates = []) {
     const clubs = [];
     for (const { country, clubs: top4 } of groups) {
       for (const c of top4) {
@@ -68,7 +86,7 @@ export class EuropeanCup {
       const shuffled = shuffle(clubs);
       const byeCount = Math.max(0, BRACKET_SIZE - clubs.length);
       round0 = [];
-      for (let i = 0; i < byeCount; i++) round0.push({ a: shuffled[i], b: null, winnerId: null });
+      for (let i = 0; i < byeCount; i++) round0.push({ a: shuffled[i], b: null, winnerId: shuffled[i].id });
       for (let i = byeCount; i < shuffled.length; i += 2) round0.push({ a: shuffled[i], b: shuffled[i + 1] || null, winnerId: null });
     } else {
       // el jugador nunca puede caer en el grupo con bye: se saca de la
@@ -79,20 +97,14 @@ export class EuropeanCup {
       const byeClubs = rest.slice(0, byeCount);
       const noByeClubs = shuffle([player, ...rest.slice(byeCount)]);
       round0 = [];
-      for (const c of byeClubs) round0.push({ a: c, b: null, winnerId: null });
+      for (const c of byeClubs) round0.push({ a: c, b: null, winnerId: c.id });
       for (let i = 0; i < noByeClubs.length; i += 2) round0.push({ a: noByeClubs[i], b: noByeClubs[i + 1] || null, winnerId: null });
     }
     // se vuelve a barajar el orden de los cruces para que los byes no
     // queden todos agrupados al principio del bracket
     const round0Shuffled = shuffle(round0);
 
-    const cup = new EuropeanCup([round0Shuffled], 0, playerIdx === -1 ? null : playerClub.id, false, null);
-    cup.resolveAiPairings();
-    // si el jugador no está en el cuadro, resolveAiPairings ya ha resuelto
-    // TODOS los cruces de la ronda 0 (nada que esperar): se completa el
-    // resto del torneo entero aquí mismo, de una sentada
-    if (cup.roundComplete()) cup._runToCompletion();
-    return cup;
+    return new EuropeanCup([round0Shuffled], 0, playerIdx === -1 ? null : playerClub.id, false, null, roundDates);
   }
 
   // arma `groups` (ver generate más arriba) a partir de un Player: los 4
@@ -158,10 +170,11 @@ export class EuropeanCup {
     }
   }
 
-  // gana o pierde, el torneo sigue: si el jugador cae, el resto del
-  // cuadro (donde él ya no aparece) se termina de resolver por IA aquí
-  // mismo, hasta tener un campeón real — antes, perder aquí dejaba la
-  // Copa "acabada" sin que nadie llegara a coronarse de verdad. scoreFor/
+  // registra el resultado de TU cruce (ganado o perdido) para la ronda
+  // actual — no avanza nada por sí sola: quien orquesta "¿está completa
+  // la ronda? ¿toca dibujar la siguiente, o ya hay campeón?" es Game.js,
+  // que llama a resolveAiPairings()/advanceDraw() el día que le toca a
+  // esta ronda (roundDates), gane o pierda el jugador. scoreFor/
   // scoreAgainst es el marcador REAL del partido jugado (ver
   // Game._finishEuroCupMatch), para que el tooltip del jugador enseñe el
   // resultado de verdad y no uno de pega.
@@ -174,34 +187,33 @@ export class EuropeanCup {
       p.scoreA = playerIsA ? scoreFor : scoreAgainst;
       p.scoreB = playerIsA ? scoreAgainst : scoreFor;
     }
-    if (this.roundComplete()) this._runToCompletion();
   }
 
   roundComplete() { return this.round.every((p) => p.winnerId !== null); }
 
-  advanceRound() {
+  // dibuja la ronda SIGUIENTE (quién juega contra quién) a partir de los
+  // ganadores de la actual, YA COMPLETA — pero no resuelve ni un solo
+  // cruce de esa ronda nueva: eso espera a que le toque su propio día en
+  // roundDates (resolveAiPairings/resolvePlayerPairing, llamado desde
+  // Game.js). Si ya no queda más que un club, el torneo se da por acabado
+  // con campeón real en el momento — no hay ronda siguiente que esperar.
+  advanceDraw() {
     const winners = this.round.map((p) => (p.winnerId === (p.a && p.a.id) ? p.a : p.b));
     if (winners.length <= 1) { this.finished = true; this.championId = winners[0] ? winners[0].id : null; return; }
     const next = [];
     for (let i = 0; i < winners.length; i += 2) next.push({ a: winners[i], b: winners[i + 1] || null, winnerId: null });
     this.bracket.push(next);
     this.roundIdx++;
-    this.resolveAiPairings();
   }
 
-  // avanza rondas mientras la actual esté completa y aún no haya campeón
-  // — se para sola en cuanto le toca esperar un partido real del jugador
-  // (esa ronda se queda incompleta hasta que se juegue) o al coronarse un
-  // campeón. El tope de iteraciones es solo un cinturón de seguridad
-  // (totalRounds nunca debería hacer falta más de una vuelta de más).
-  _runToCompletion() {
-    let guard = 0;
-    while (!this.finished && this.roundComplete() && guard++ < this.totalRounds + 2) this.advanceRound();
+  toJSON() {
+    return {
+      bracket: this.bracket, roundIdx: this.roundIdx, playerClubId: this.playerClubId,
+      finished: this.finished, championId: this.championId, roundDates: this.roundDates,
+    };
   }
-
-  toJSON() { return { bracket: this.bracket, roundIdx: this.roundIdx, playerClubId: this.playerClubId, finished: this.finished, championId: this.championId }; }
   static fromJSON(json) {
     if (!json) return null;
-    return new EuropeanCup(json.bracket, json.roundIdx, json.playerClubId, json.finished, json.championId);
+    return new EuropeanCup(json.bracket, json.roundIdx, json.playerClubId, json.finished, json.championId, json.roundDates || []);
   }
 }

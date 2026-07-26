@@ -18,7 +18,6 @@ import { boardObjectiveFor, rollWeeklyGoal, weeklyGoalToJSON, weeklyGoalFromJSON
 import { hashStr, clamp } from '../core/utils.js';
 import { founderStatsForLevel } from '../data/abuelos.js';
 import { strengthFor } from '../data/countries.js';
-import { EDITION } from '../core/edition.js';
 
 const SAVE_KEY = 'petanka_save_v4';
 const LEGACY_KEYS = ['petanka_save_v3', 'petanka_save_v2', 'petanka_save_v1'];
@@ -184,15 +183,11 @@ export class Player {
     // de Europa
     this.foreignLeagues = new Map();
     for (const { code, cities } of awayCountriesFor(this.homeCountry)) this.foreignLeagues.set(code, ForeignLeagueWorld.generate(code, cities));
-    // se sortea y resuelve desde el primer día (no solo al llegar el
-    // jugador a la máxima categoría): al arrancar, el club del jugador
-    // nunca está entre los 4 primeros de nivel 8, así que esta primera
-    // edición se decide entera por IA (ver EuropeanCup.generate) — el
-    // cuadro completo (Career.js la vuelve a sortear cada fin de
-    // temporada, la juegue o no el jugador) queda visible desde ya en vez
-    // de aparecer null hasta la primera clasificación real. En edición
-    // 'demo' (ver core/edition.js) esto se queda en null para siempre.
-    this.euroCup = EDITION === 'demo' ? null : EuropeanCup.generate(EuropeanCup.groupsFor(this), this.club, this.club.avgSkill(this.roster));
+    // sin temporada anterior todavía (día 1, ninguna jornada de liga
+    // jugada), un "top 4 de nivel 8" no significaría nada — la Copa de
+    // Europa no se sortea hasta el fin de la primera temporada (ver
+    // Career.js), así que se juega de verdad a partir de la segunda.
+    this.euroCup = null;
   }
 
   get league() { return this.leagueWorld.leagueOf(this.currentLeagueLevel); }
@@ -509,14 +504,11 @@ export class Player {
         p.foreignLeagues.set(code, ForeignLeagueWorld.fromJSON(code, json.foreignLeagues[code]));
       }
     }
-    // guardado de antes de que la Copa de Europa se sorteara siempre (ver
-    // constructor): en vez de dejarla en null hasta la próxima
-    // clasificación real, se genera una de una vez con el leagueWorld/
-    // foreignLeagues YA cargados arriba (los del constructor eran los del
-    // España/Albacete por defecto, no los de este guardado)
-    p.euroCup = json.euroCup
-      ? EuropeanCup.fromJSON(json.euroCup)
-      : (EDITION === 'demo' ? null : EuropeanCup.generate(EuropeanCup.groupsFor(p), p.club, p.club.avgSkill(p.roster)));
+    // guardado de antes de que existiera la Copa de Europa, o de una
+    // partida aún en su primera temporada: se deja en null, igual que una
+    // partida nueva — se sortea sola en el próximo fin de temporada (ver
+    // Career.js), no hace falta forzarla aquí
+    p.euroCup = json.euroCup ? EuropeanCup.fromJSON(json.euroCup) : null;
     // guardado de antes de la pestaña Economía: se arranca sin histórico
     // (no hay forma de reconstruir semanas pasadas), no revienta la carga
     p.totalEarned = json.totalEarned || 0;

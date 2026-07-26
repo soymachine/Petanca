@@ -9,7 +9,7 @@ import { DIFFICULTIES } from '../data/difficulty.js';
 import { Cup } from '../domain/Cup.js';
 import { TransferPool } from '../domain/TransferPool.js';
 import { advanceScoutingWeek, currentMarketSeedKeys } from '../domain/Scouting.js';
-import { EuropeanCup } from '../domain/EuropeanCup.js';
+import { EuropeanCup, ROUND_NAMES as EURO_ROUND_NAMES } from '../domain/EuropeanCup.js';
 import { rivalPersonalityLine } from '../data/rivalPersonality.js';
 import { countryTag, countryLabel, citiesFor, levelBoundsFor } from '../data/countries.js';
 import { MetaProgress } from './MetaProgress.js';
@@ -26,6 +26,12 @@ import { EDITION } from '../core/edition.js';
 // generoso (mes y medio largo) para dar tiempo real a reaccionar: vender
 // un fichaje, bajar de categoría, recortar plantilla...
 export const GAME_OVER_NEGATIVE_WEEKS = 6;
+
+// toda liga tiene siempre 10 clubes a doble vuelta (ver League.js), así
+// que toda temporada dura siempre 18 jornadas/semanas — se usa para
+// repartir las 5 fechas de la Copa de Europa a partes iguales en la
+// temporada que empieza (ver finishWeeklyMatch más abajo)
+const SEASON_WEEKS = 18;
 
 function maybeDropItem(roster, candidates) {
   const eligible = candidates.filter((i) => !roster.get(i).item);
@@ -372,14 +378,25 @@ export class Career {
         p.news.push(`¡ARRANCA ${cupLabel}! ${p.clubName} debuta en ${p.cup.roundName.toLowerCase()} contra ${p.cup.playerOpponent().name}.`);
       }
 
-      // Copa de Europa: se sortea y se juega CADA fin de temporada, no solo
-      // cuando el jugador llega — con los 4 primeros de la liga de nivel 8
-      // de cada uno de los 6 países (ver EuropeanCup.groupsFor, que mira la
-      // liga de nivel 8 de tu país de casa sea o no la que estás jugando
-      // ahora mismo). Si tu club no va entre esos 4, o directamente juegas
-      // en otro nivel, la Copa se decide entera por IA en el momento
-      // (EuropeanCup.generate ya la resuelve sola cuando el jugador no
-      // aparece) — así hay un campeón real todos los años, participes o no.
+      // Copa de Europa: se sortea CADA fin de temporada, no solo cuando el
+      // jugador llega — con los 4 primeros de la liga de nivel 8 de cada
+      // uno de los 6 países (ver EuropeanCup.groupsFor, que mira la liga de
+      // nivel 8 de tu país de casa sea o no la que estás jugando ahora
+      // mismo). Se juega DURANTE la temporada que empieza ahora, como la
+      // Copa de España: aquí solo se calculan y agendan de una vez las 5
+      // fechas (una por ronda, repartidas en las ~18 semanas de la
+      // temporada) — nada se resuelve todavía, ni siquiera si tu club no
+      // va entre esos 4 o juegas en otro nivel (entonces la Copa la
+      // disputan solo clubes de la IA, pero igual ronda a ronda en su
+      // fecha, no de golpe). Ver Game.js, que resuelve cada ronda cuando
+      // el calendario llega a su día.
+      //
+      // Como no hay temporada anterior en la primera partida (day 1, sin
+      // ninguna jornada de liga jugada, "top 4" no significaría nada), esta
+      // Copa nunca se sortea hasta el fin de la temporada 1 — Player.js ya
+      // no la genera de arranque, así que p.euroCup se queda en null hasta
+      // que se llega aquí por primera vez, jugándose de verdad a partir de
+      // la temporada 2.
       //
       // En edición 'demo' (ver core/edition.js) esto nunca se dispara:
       // p.euroCup se queda en null para siempre. Todo lo que depende de
@@ -395,18 +412,26 @@ export class Career {
         const groups = fromLevel === 8
           ? euroSnapshot.map((g) => (g.country === p.homeCountry ? { country: g.country, clubs: table.slice(0, 4) } : g))
           : euroSnapshot;
-        p.euroCup = EuropeanCup.generate(groups, p.club, p.club.avgSkill(p.roster));
+        // 5 fechas repartidas a partes iguales en las 18 semanas de la
+        // temporada que empieza (seasonWeekOffset ya se recalibró arriba,
+        // en markSeasonStart) — se agendan en orden para que
+        // firstFreeDayFrom no elija dos veces el mismo día
+        const roundDates = [];
+        for (let i = 0; i < EURO_ROUND_NAMES.length; i++) {
+          const targetWeek = Math.round((i + 1) * SEASON_WEEKS / (EURO_ROUND_NAMES.length + 1));
+          const targetDay = (p.seasonClock.seasonWeekOffset + targetWeek) * 7 + 2; // martes de esa semana
+          const day = p.seasonClock.firstFreeDayFrom(targetDay - p.seasonClock.day, p.league);
+          p.seasonClock.scheduleEuroCup(day);
+          roundDates.push(day);
+        }
+        p.euroCup = EuropeanCup.generate(groups, p.club, p.club.avgSkill(p.roster), roundDates);
         const pairing = p.euroCup.playerPairing();
         if (pairing) {
-          const day = p.seasonClock.firstFreeDayFrom(6, p.league);
-          p.seasonClock.scheduleEuroCup(day);
           const firstOpp = p.euroCup.playerOpponent();
           const oppTag = firstOpp ? countryTag(firstOpp.country, p.homeCountry) : '';
-          p.news.push(`¡OS CLASIFICÁIS PARA LA COPA DE EUROPA! ${p.clubName} debuta en ${p.euroCup.roundName.toLowerCase()} contra ${firstOpp ? firstOpp.name : '?'}${oppTag}.`);
+          p.news.push(`¡OS CLASIFICÁIS PARA LA COPA DE EUROPA! ${p.clubName} debuta en ${p.euroCup.roundName.toLowerCase()} contra ${firstOpp ? firstOpp.name : '?'}${oppTag}, esta temporada.`);
         } else {
-          const champ = p.euroCup.championClub;
-          const champTag = champ && champ.country ? countryTag(champ.country, p.homeCountry) : '';
-          p.news.push(`LA COPA DE EUROPA SE JUEGA SIN VOSOTROS: no llegasteis entre los 4 primeros de la máxima categoría. Campeón esta vez: ${champ ? champ.name : '?'}${champTag}.`);
+          p.news.push('LA COPA DE EUROPA SE JUEGA SIN VOSOTROS ESTA TEMPORADA: no llegasteis entre los 4 primeros de la máxima categoría.');
         }
       }
       p.boardGoal = boardGoalFor(p.seasonsPlayed, p.currentLeagueLevel);

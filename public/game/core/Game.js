@@ -639,11 +639,20 @@ export class Game {
   }
 
   // --- Copa de Europa: cruce agendado en el calendario, sede en cualquier
-  // ciudad conocida (española o francesa) ---
+  // ciudad conocida (española o francesa) --- las 5 fechas (una por ronda)
+  // se calculan y agendan de una vez al sortearla (ver Career.js): esta
+  // ronda puede tocarte a ti (partido real) o resolverse sola por IA (no
+  // clasificaste esta vez, o ya caíste eliminado en una ronda anterior)
   _startEuroCupMatch() {
     const cup = this.player.euroCup;
-    const opponentEntry = cup && cup.playerOpponent();
-    if (!cup || cup.finished || !opponentEntry) { this.state = 'hub'; return; }
+    if (!cup || cup.finished) { this.state = 'hub'; return; }
+    cup.resolveAiPairings();
+    const opponentEntry = cup.playerOpponent();
+    if (!opponentEntry) {
+      this._settleEuroCupRoundInBackground(cup);
+      this.state = 'hub';
+      return;
+    }
 
     this.weeklyMatch = new CupMatchContext(cup, opponentEntry, null, [...CITIES, ...allForeignCities()]);
     this.weeklyMatch.isEuropean = true;
@@ -658,6 +667,21 @@ export class Game {
     };
     this.screens.press.cursor = 0;
     this.state = 'press';
+  }
+
+  // la ronda de hoy de la Copa de Europa no incluye un partido real tuyo:
+  // ya está resuelta entera por IA (resolveAiPairings, llamado justo antes
+  // en _startEuroCupMatch) — se dibuja la siguiente ronda (su fecha ya
+  // estaba agendada de antemano, ver Career.js) o se corona campeón si
+  // esta era la final
+  _settleEuroCupRoundInBackground(cup) {
+    if (!cup.roundComplete()) return; // salvaguarda: no debería pasar
+    cup.advanceDraw();
+    if (cup.finished) {
+      const champ = cup.championClub;
+      const champTag = champ && champ.country ? countryTag(champ.country, this.player.homeCountry) : '';
+      this.player.news.push(`Se decide la Copa de Europa sin vosotros: campeón, ${champ ? champ.name : '?'}${champTag}.`);
+    }
   }
 
   _finishEuroCupMatch(won, scoreP, scoreA, chronicleFacts = null) {
@@ -696,35 +720,41 @@ export class Game {
         ? Chronicle.compose(chronicleFacts, { won, scoreP, scoreA, rivalName: `${opponent.name}${rivalTag}`, clubName: p.clubName, venueLabel: `${cup.roundName.toLowerCase()} de la Copa de Europa`, promiseBroken, publicImage: p.publicImage })
         : `COPA DE EUROPA: ${p.clubName} cae ante ${opponent.name}${rivalTag} en ${cup.roundName.toLowerCase()} (${scoreP}-${scoreA}). Se acaba la aventura europea por esta vez.`;
       p.news.push(resultNews);
-      // el resto del cuadro ya se ha resuelto solo hasta el final (ver
-      // EuropeanCup.resolvePlayerPairing): se puede anunciar el campeón de
-      // verdad en el mismo titular, no solo que "se acaba la aventura"
-      const champ = cup.championClub;
-      if (champ) {
-        const champTag = countryTag(champ.country, p.homeCountry);
-        p.news.push(`El resto del cuadro se decide sin vosotros: campeón de la Copa de Europa, ${champ.name}${champTag}.`);
-      }
       p.addReward(80, 60);
-    } else if (cup.roundComplete()) {
-      cup.advanceRound();
-      if (cup.finished && cup.isChampion()) {
-        p.euroCupTitles++;
-        p.boardConfidence = Math.min(100, p.boardConfidence + 25);
-        p.addReward(900, 1800);
-        p.news.push(`¡¡¡CAMPEONES DE LA COPA DE EUROPA!!! ${p.clubName} se corona tras ganar a ${opponent.name}${rivalTag} en la final (${scoreP}-${scoreA}). ¡La peña entera lo va a recordar toda la vida!`);
-        p.addAnnal(`CAMPEONES DE LA COPA DE EUROPA: ${p.clubName} gana la final a ${opponent.name}${rivalTag} (${scoreP}-${scoreA}).`);
-        // primera Copa de Europa ganada NUNCA (con cualquier perfil): abre
-        // los 5 países extranjeros como país de casa para partidas futuras
-        // — unlockAllCountries() devuelve true solo la primera vez, así
-        // que el aviso no vuelve a salir en futuras Copas de Europa
-        if (MetaProgress.unlockAllCountries()) this.countryUnlockEvent = true;
-      } else {
+    }
+
+    // ganes o pierdas, si con tu resultado la ronda queda completa (ya
+    // estaba resuelta por IA el resto, ver _startEuroCupMatch), toca
+    // dibujar la ronda siguiente o coronar campeón si esta era la final.
+    // Si el torneo sigue sin ti (perdiste y no era la final), el resto del
+    // cuadro se resolverá solo en sus propias fechas, ya agendadas de
+    // antemano (ver Career.js) — nada que anunciar todavía.
+    if (cup.roundComplete()) {
+      cup.advanceDraw();
+      if (cup.finished) {
+        if (cup.isChampion()) {
+          p.euroCupTitles++;
+          p.boardConfidence = Math.min(100, p.boardConfidence + 25);
+          p.addReward(900, 1800);
+          p.news.push(`¡¡¡CAMPEONES DE LA COPA DE EUROPA!!! ${p.clubName} se corona tras ganar a ${opponent.name}${rivalTag} en la final (${scoreP}-${scoreA}). ¡La peña entera lo va a recordar toda la vida!`);
+          p.addAnnal(`CAMPEONES DE LA COPA DE EUROPA: ${p.clubName} gana la final a ${opponent.name}${rivalTag} (${scoreP}-${scoreA}).`);
+          // primera Copa de Europa ganada NUNCA (con cualquier perfil): abre
+          // los 5 países extranjeros como país de casa para partidas futuras
+          // — unlockAllCountries() devuelve true solo la primera vez, así
+          // que el aviso no vuelve a salir en futuras Copas de Europa
+          if (MetaProgress.unlockAllCountries()) this.countryUnlockEvent = true;
+        } else {
+          // perdisteis justo la final: el campeón real ya se conoce en el
+          // acto, no hace falta esperar a ninguna otra fecha
+          const champ = cup.championClub;
+          const champTag = champ && champ.country ? countryTag(champ.country, p.homeCountry) : '';
+          p.news.push(`Campeón de la Copa de Europa: ${champ ? champ.name : '?'}${champTag}.`);
+        }
+      } else if (won) {
         p.addReward(180, 260);
         const nextOpp = cup.playerOpponent();
         const nextTag = nextOpp ? countryTag(nextOpp.country, p.homeCountry) : '';
         p.news.push(`COPA DE EUROPA: ${p.clubName} pasa a ${cup.roundName.toLowerCase()} tras ganar a ${opponent.name}${rivalTag} (${scoreP}-${scoreA}). Próximo rival: ${nextOpp ? nextOpp.name : '?'}${nextTag}.`);
-        const day = p.seasonClock.firstFreeDayFrom(6, p.league);
-        p.seasonClock.scheduleEuroCup(day);
       }
     }
     p.save();
@@ -888,11 +918,16 @@ export class Game {
     } else if (result.type === 'eurocup') {
       clock.clearEuroCup(result.day);
       const cup = p.euroCup;
-      const opp = cup && !cup.finished ? cup.playerOpponent() : null;
-      if (opp) {
-        this.weeklyMatch = { usados: p.roster.ids };
-        const { won, scoreP, scoreA } = this._debugRollOutcome(opp.skill);
-        this._finishEuroCupMatch(won, scoreP, scoreA);
+      if (cup && !cup.finished) {
+        cup.resolveAiPairings();
+        const opp = cup.playerOpponent();
+        if (opp) {
+          this.weeklyMatch = { usados: p.roster.ids };
+          const { won, scoreP, scoreA } = this._debugRollOutcome(opp.skill);
+          this._finishEuroCupMatch(won, scoreP, scoreA);
+        } else {
+          this._settleEuroCupRoundInBackground(cup);
+        }
       }
     } else if (result.type === 'training') {
       clock.clearTraining(result.day);

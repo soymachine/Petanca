@@ -224,15 +224,21 @@ check('economía: sin fichar a nadie ni repartir puntos, el dinero no se dispara
       }
     } else if (result.type === 'eurocup') {
       clock.clearEuroCup(result.day);
-      const cup = p.euroCup, opp = cup && !cup.finished ? cup.playerOpponent() : null;
-      if (opp) {
-        const won = Math.random() < p.club.avgSkill(p.roster) / (p.club.avgSkill(p.roster) + opp.skill);
-        cup.resolvePlayerPairing(won);
-        if (!won) p.addReward(80, 60);
-        else if (cup.roundComplete()) {
-          cup.advanceRound();
-          if (cup.finished && cup.isChampion()) { p.euroCupTitles++; p.addReward(900, 1800); }
-          else p.addReward(180, 260);
+      const cup = p.euroCup;
+      if (cup && !cup.finished) {
+        cup.resolveAiPairings();
+        const opp = cup.playerOpponent();
+        if (opp) {
+          const won = Math.random() < p.club.avgSkill(p.roster) / (p.club.avgSkill(p.roster) + opp.skill);
+          cup.resolvePlayerPairing(won);
+          if (!won) p.addReward(80, 60);
+          if (cup.roundComplete()) {
+            cup.advanceDraw();
+            if (cup.finished && cup.isChampion()) { p.euroCupTitles++; p.addReward(900, 1800); }
+            else if (!cup.finished && won) p.addReward(180, 260);
+          }
+        } else if (cup.roundComplete()) {
+          cup.advanceDraw();
         }
       }
     } else if (result.type === 'training') {
@@ -338,7 +344,8 @@ check('Copa de Europa: 24 entrantes (top 4 × 6 países), el jugador nunca recib
     let rounds = 0;
     while (!cup.finished && rounds < 10) {
       if (cup.playerPairing()) cup.resolvePlayerPairing(true);
-      if (cup.roundComplete()) cup.advanceRound();
+      cup.resolveAiPairings();
+      if (cup.roundComplete()) cup.advanceDraw();
       rounds++;
     }
     if (!cup.finished) throw new Error('el bracket no terminó en un número razonable de rondas (posible bucle infinito)');
