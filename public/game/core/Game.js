@@ -134,6 +134,11 @@ export class Game {
     // ?scene=<id>[&freeze=1]: arrancar directamente en una pantalla o
     // momento de partido (capturas del rediseño, ver core/DebugScenes.js)
     this.frozen = false;
+    // vista del partido: arcade en perspectiva (Fase 3 del rediseño) o la
+    // clásica cenital. ?nuevo=1 / ?nuevo=0 la fuerza; si no, el ajuste
+    // guardado. F7 alterna en pleno partido.
+    const q = typeof location !== 'undefined' ? new URLSearchParams(location.search) : null;
+    this.arcadeMatch = q && q.has('nuevo') ? q.get('nuevo') !== '0' : Settings.get('matchView') === 'arcade';
     applySceneFromUrl(this);
   }
 
@@ -1026,6 +1031,7 @@ export class Game {
   loop = (now) => {
     const dtReal = (now - this.lastT) / 1000;
     const dt = Math.min(0.05, dtReal);
+    this.lastDt = dt;
     this.lastT = now;
     this.frame++;
 

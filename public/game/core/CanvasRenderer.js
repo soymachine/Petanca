@@ -132,7 +132,7 @@ export class CanvasRenderer {
     const step = Math.max(2, Math.round(this.ch / 5));
     c.width = 8; c.height = step * 2;
     const g = c.getContext('2d');
-    g.fillStyle = 'rgba(0,0,0,0.16)';
+    g.fillStyle = 'rgba(0,0,0,0.09)';
     g.fillRect(0, 0, 8, Math.max(1, Math.round(step * 0.6)));
     return this.ctx.createPattern(c, 'repeat');
   }

@@ -6,7 +6,7 @@
 // y comparar antes/después.
 //
 // Uso:
-//   node tools/shots.mjs [--out=DIR] [--scenes=hub,match-aim] [--sizes=1280x720,1920x1080] [--no-build]
+//   node tools/shots.mjs [--out=DIR] [--scenes=hub,match-aim] [--sizes=1280x720,1920x1080] [--no-build] [--query=nuevo=1] [--bench]
 // Por defecto: todas las escenas, 4 resoluciones, salida en
 // <tmp>/petanka-shots (no se sube al repo salvo que se pida con --out).
 
@@ -27,6 +27,7 @@ const scenes = args.scenes ? String(args.scenes).split(',') : SCENE_IDS;
 const sizes = (args.sizes ? String(args.sizes) : '1280x720,1920x1080,2560x1440,1024x768').split(',');
 const outDir = resolve(args.out ? String(args.out) : join(tmpdir(), 'petanka-shots'));
 const PORT = 4399;
+const extraQuery = args.query ? `&${args.query}` : '';
 
 function findChrome() {
   const base = '/opt/pw-browsers';
@@ -60,7 +61,7 @@ try {
         const [w, h] = size.split('x');
         const dom = execFileSync(chrome, [
           '--headless=new', '--no-sandbox', `--window-size=${w},${h}`, '--virtual-time-budget=4000', '--dump-dom',
-          `http://127.0.0.1:${PORT}/?scene=${scene}&freeze=1&bench=1`,
+          `http://127.0.0.1:${PORT}/?scene=${scene}&freeze=1&bench=1${extraQuery}`,
         ], { encoding: 'utf8', timeout: 90000, stdio: ['ignore', 'pipe', 'ignore'] });
         const m = dom.match(/<title>bench:([^<]+)<\/title>/);
         row.push(`${size}: ${m ? m[1] : '?'}`);
@@ -78,14 +79,14 @@ try {
         '--headless=new', '--no-sandbox', '--disable-gpu', '--hide-scrollbars',
         `--window-size=${w},${h}`, '--virtual-time-budget=2500',
         `--screenshot=${file}`,
-        `http://127.0.0.1:${PORT}/?scene=${scene}&freeze=1`,
+        `http://127.0.0.1:${PORT}/?scene=${scene}&freeze=1${extraQuery}`,
       ], { stdio: 'ignore', timeout: 60000 });
       // errores de JS: en modo escena la página los deja en document.title
       // (ver core/DebugScenes.js); se comprueba una vez por escena
       if (size === sizes[0]) {
         const dom = spawnSync(chrome, [
           '--headless=new', '--no-sandbox', '--disable-gpu', `--window-size=${w},${h}`, '--virtual-time-budget=2500', '--dump-dom',
-          `http://127.0.0.1:${PORT}/?scene=${scene}`,
+          `http://127.0.0.1:${PORT}/?scene=${scene}${extraQuery}`,
         ], { encoding: 'utf8', timeout: 60000 }).stdout || '';
         const m = dom.match(/<title>JSERROR: ([^<]*)<\/title>/);
         if (m) jsErrors.push(`${scene}: ${m[1]}`);

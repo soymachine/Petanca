@@ -6,15 +6,22 @@ import { drillFor } from '../data/trainingDrills.js';
 import { CONSUMABLES, CONSUMABLE_IDS, MAX_CONSUMABLES_PER_MATCH } from '../data/consumables.js';
 import { clamp, dist2d } from '../core/utils.js';
 import { Sfx } from '../core/Sfx.js';
+import { ArcadeView } from '../match/view/ArcadeView.js';
 
 export class MatchScreen {
-  constructor(game) { this.game = game; }
+  constructor(game) {
+    this.game = game;
+    // vista arcade en perspectiva (docs/REDISENO.md, Fase 3); la clásica
+    // cenital sigue aquí mismo y se alterna con F7 (ver Game.arcadeMatch)
+    this.arcade = new ArcadeView(game);
+  }
 
   update(dt) {
     const { match, input, player } = this.game;
     const prevPhase = this._prevMatchPhase;
+    if (input.hit('F7')) this.game.arcadeMatch = !this.game.arcadeMatch;
     match.tickFrame(this.game.frame);
-    match.update(dt, input);
+    match.update(dt, this.game.arcadeMatch ? this.arcade.input(dt) : input);
     if (prevPhase !== match.phase) {
       if ((prevPhase === 'power' || prevPhase === 'aiTurn') && match.phase === 'sim') {
         Sfx.throwSound();
@@ -38,6 +45,7 @@ export class MatchScreen {
   }
 
   draw() {
+    if (this.game.arcadeMatch) { this.arcade.draw(this.game.lastDt || 1 / 60); return; }
     const { screen, frame, faces, rivalFaces } = this.game;
     const M = this.game.match;
     screen.clear();

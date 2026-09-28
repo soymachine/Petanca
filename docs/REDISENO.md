@@ -10,9 +10,10 @@
   desde `main` en `46bc963`). `main` queda estable mientras dura el
   rediseño; se fusiona cuando el usuario lo pida.
 - **Fase en curso:** Fase 3 — partido arcade.
-- **SIGUIENTE PASO CONCRETO:** `match/view/Camera.js` (proyección
-  pseudo-3D) + `match/view/PerspectiveCourt.js`, dibujados en la capa
-  `screen.layer('under', …)` de MatchScreen detrás de `?nuevo=1`.
+- **SIGUIENTE PASO CONCRETO:** "juice" del partido arcade: cámara lenta
+  y sacudida en el impacto, detección de carreau/biberón/boliche fuera con
+  rótulo, abuelo lanzador visible (silueta ASCII) y marcador animado;
+  después hacer la vista arcade la de por defecto (ajuste `matchView`).
 - **Último commit relevante:** (se rellena en cada commit)
 
 ## Visión
@@ -183,12 +184,40 @@ dinámico sin perder profundidad**.
       Demostrado idéntico al motor anterior con `tools/replay-match.mjs`
       (partida determinista: semilla + `Date.now` fijo — ojo, RivalPlayer/
       FreeAgent siembran con la hora) en varias semillas.
-- [ ] `match/view/Camera.js` (proyección pseudo-3D, planos por fase).
-- [ ] `match/view/PerspectiveCourt.js` (perspectiva tipográfica, bolas
-      sombreadas, polvo, estela, pistas con personalidad, clima).
-- [ ] Mini-mapa cenital (reutiliza `_drawCourt/_drawBalls` de MatchScreen).
-- [ ] Gesto tirachinas + selector de tipo de tiro (ARRIMAR / MEDIA VOLEA /
-      BOMBEO / TIRO) + efecto; retículo con jitter; sweet spot visible.
+- [x] `match/view/Camera.js`: cámara estenopeica mirando a +X con
+      "lens shift" (horizonte `hz`), mundo real X=x, L=(y−CH/2)·2, Z=z.
+      `project/projectWorld/unproject` (píxel → punto del suelo, para
+      apuntar señalando). `direct(M)` = director de planos: `aim` (de
+      hombro: desplazada a la izquierda para que el arco se vea como
+      parábola), `jack`, `jackfollow`, `follow` (persigue la bola en vuelo
+      y al rodar), `settle`, `closeup` (a ras de suelo junto al boliche en
+      medición/fin de mano). Transiciones suaves (`update`, exponencial).
+- [x] `match/view/PerspectiveCourt.js`: cielo por clima + silueta de pueblo
+      en 2 capas con ventanas y parallax + sol; suelo por franjas con el
+      color del terreno y niebla de distancia; grava tipográfica (1100
+      glifos · , . : ° • proyectados, tamaño con tope); líneas, marcas de
+      distancia cada 10, círculo de tiro; desgaste, charcos (ondas),
+      pendiente, árbol (copa de ♣♠❀ en 3D ordenada por profundidad);
+      bolas esféricas con degradado, estrías y sombra proyectada; estela
+      del arco; diana/marcas de entrenos. `PerspectiveCourt.predict(M,
+      power)` = vuelo parabólico previsto (sin viento).
+- [x] `match/view/ArcadeView.js` (activa con `?nuevo=1` o F7 en partido;
+      `game.arcadeMatch`): HUD superior (abuelo, bolas, chips de stats,
+      stamina; rival; marcador GRANDE en píxeles), vista 3D filas 4-37,
+      minimapa cenital (arriba a la dcha., con anillo dorado en la bola que
+      manda y la dirección de tiro), veleta, chips de clima y "qué cambia",
+      narración, cubierta inferior (fichas de TIPO DE TIRO clicables +
+      TAB, slider de EFECTO, barra de POTENCIA con tramo dorado del punto
+      dulce, consumibles, ayuda de controles por fase).
+- [x] Controles: SEÑALAR en la pista fija el ángulo (unproject), MANTENER
+      pulsado empieza la potencia (la barra oscila como siempre: Temple y
+      cansancio), SOLTAR lanza (= ENTER sintético → `Match.release`).
+      Teclado: ↑↓ apuntar, ←→/rueda efecto, TAB tipo de tiro, ENTER
+      potencia, ENTER soltar, ESC volver a apuntar. Boliche igual. Clic =
+      ENTER en las pausas. `ArcadeView.input(dt)` devuelve la entrada
+      (filtrada/sintética) que recibe `Match.update`: ninguna regla cambia.
+      Tipos de tiro (theme `SHOT` + BLOQUEAR): fijan `loft` y `role`.
+      Probado en `npm run verify` (check "partido arcade").
 - [ ] Juice: carreau, biberón, boliche fuera, remontada, cámara lenta,
       repetición, marcador animado.
 - [ ] Nueva vista por defecto (clásica disponible en Ajustes).
@@ -213,7 +242,8 @@ dinámico sin perder profundidad**.
 | 2026-09-28 | 4336869 | Fase 2: theme.js, widgets.js, hoja de estilo |
 | 2026-09-28 | 0613c06 | Fase 2: box() con relleno de panel |
 | 2026-09-28 | 0cbfee0 | Fase 2: nueva barra de navegación |
-| 2026-09-28 | (este) | Fase 3: Match.release/beginPower + tools/replay-match.mjs |
+| 2026-09-28 | 08fb1d5 | Fase 3: Match.release/beginPower + tools/replay-match.mjs |
+| 2026-09-28 | (este) | Fase 3: vista arcade en perspectiva + controles de gesto (tras ?nuevo=1 / F7) |
 
 ## Problemas conocidos / notas
 
@@ -228,6 +258,11 @@ dinámico sin perder profundidad**.
 - El scratchpad de sesiones anteriores se pierde al recrearse el
   contenedor: los tests útiles deben vivir en `tools/` (verify, shots).
 - Headless Chromium va SIN GPU: las cifras de `--bench` son el peor caso;
-  en un navegador normal el canvas va acelerado.
+  en un navegador normal el canvas va acelerado. La escena 3D cuesta ~20
+  ms/frame sin GPU (1920×1080): candidatos a optimizar si hiciera falta —
+  cachear suelo+grava en un canvas mientras la cámara no se mueva, menos
+  piedras lejanas.
+- `tools/shots.mjs --query=nuevo=1` captura las escenas de partido con la
+  vista arcade.
 - Detalle heredado visto en `result`: "+-5€" cuando el premio es negativo
   (cosmético, ResultScreen) — arreglar en Fase 4.

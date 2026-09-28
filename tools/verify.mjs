@@ -28,6 +28,8 @@ import { RivalPlayer } from '../public/game/domain/RivalPlayer.js';
 import { WeeklyMatchContext } from '../public/game/domain/WeeklyMatchContext.js';
 import { DIFFICULTIES } from '../public/game/data/difficulty.js';
 import { LeagueWorld } from '../public/game/domain/LeagueWorld.js';
+import { Match } from '../public/game/match/Match.js';
+import * as arcadeMod from '../public/game/match/view/ArcadeView.js';
 import { TARGET } from '../public/game/physics/constants.js';
 import { ForeignLeagueWorld } from '../public/game/domain/ForeignLeagueWorld.js';
 import { awayCountriesFor, levelBoundsFor } from '../public/game/data/countries.js';
@@ -518,6 +520,73 @@ check('edición demo: nunca desbloquea países ni genera Copa de Europa, aunque 
     writeFileSync(editionFile, original);
     rmSync(tmpDir, { recursive: true, force: true });
   }
+});
+
+// --- partido arcade (docs/REDISENO.md, Fase 3): la vista nueva traduce
+// ratón/teclado a las MISMAS acciones de Match — pulsar-mantener-soltar y
+// ENTER-ENTER lanzan, TAB cambia el tipo de tiro, y el boliche también
+// se lanza con el gesto. Sin renderer (headless) no se apunta señalando,
+// pero todo lo demás es igual que en el navegador.
+check('partido arcade: gesto (mantener y soltar) y teclado lanzan; TAB cambia el tipo de tiro', () => {
+  const { ArcadeView } = arcadeMod;
+  const mkGame = () => {
+    const p = new Player();
+    const league = p.league;
+    const opp = league.clubs.find((c) => !c.isPlayer);
+    const M = new Match({ tournament: new WeeklyMatchContext(league, opp, p.money, null, null), roster: p.roster, team: [0] });
+    M.setNameProvider((id) => `a${id}`);
+    const keys = new Set();
+    const mouse = { cx: 70, cy: 20, fx: 70.5, fy: 20.5, inside: true, down: false, clicked: false };
+    const input = { hit: (k) => keys.has(k), held: () => false, mouse, wheel: 0 };
+    return { game: { match: M, input, renderer: null }, M, keys, mouse };
+  };
+  const step = (g, view) => { g.game.match.update(1 / 60, view.input(1 / 60)); g.keys.clear(); g.mouse.clicked = false; };
+  const toPhase = (g, view, ph, max = 900) => {
+    for (let i = 0; i < max && g.M.phase !== ph; i++) {
+      if (g.M.phase === 'roundStart') g.keys.add('Enter');
+      if (g.M.phase === 'jackAim') g.keys.add('Enter');
+      if (g.M.phase === 'jackPower' && g.M.power > 0.5) g.keys.add('Enter');
+      step(g, view);
+    }
+    if (g.M.phase !== ph) throw new Error(`no se llegó a la fase ${ph} (se quedó en ${g.M.phase})`);
+  };
+
+  // 1) gesto: pulsar en la vista → potencia; soltar → la bola sale
+  let g = mkGame(); let view = new ArcadeView(g.game);
+  toPhase(g, view, 'aim');
+  g.mouse.down = true; step(g, view);
+  if (g.M.phase !== 'power') throw new Error(`pulsar en la vista debería empezar la potencia, fase: ${g.M.phase}`);
+  for (let i = 0; i < 20; i++) step(g, view);
+  const before = g.M.balls.length;
+  g.mouse.down = false; step(g, view);
+  if (!(g.M.phase === 'sim' || g.M.phase === 'throwDone') || g.M.balls.length !== before + 1) throw new Error(`soltar debería lanzar la bola (fase ${g.M.phase}, bolas ${g.M.balls.length})`);
+
+  // 2) teclado: ENTER → potencia, ENTER → lanza (sin pasar por efecto/elevación)
+  g = mkGame(); view = new ArcadeView(g.game);
+  toPhase(g, view, 'aim');
+  g.keys.add('Enter'); step(g, view);
+  if (g.M.phase !== 'power') throw new Error(`ENTER al apuntar debería empezar la potencia, fase: ${g.M.phase}`);
+  g.keys.add('Enter'); step(g, view);
+  if (g.M.phase !== 'sim' && g.M.phase !== 'throwDone') throw new Error(`ENTER en potencia debería lanzar, fase: ${g.M.phase}`);
+
+  // 3) TAB cambia tipo de tiro → cambia elevación y rol
+  g = mkGame(); view = new ArcadeView(g.game);
+  toPhase(g, view, 'aim');
+  const loft0 = g.M.loft;
+  g.keys.add('Tab'); step(g, view);
+  if (g.M.loft === loft0) throw new Error('TAB debería cambiar la elevación (tipo de tiro)');
+  g.keys.add('Tab'); step(g, view);
+  if (g.M.role !== 'tirar') throw new Error(`dos TAB desde MEDIA VOLEA deberían dejar TIRAR, rol: ${g.M.role}`);
+
+  // 4) boliche con el gesto: pulsar → potencia del boliche, soltar → rueda
+  g = mkGame(); view = new ArcadeView(g.game);
+  for (let i = 0; i < 200 && g.M.phase !== 'jackAim'; i++) { if (g.M.phase === 'roundStart') g.keys.add('Enter'); step(g, view); }
+  if (g.M.phase !== 'jackAim') throw new Error(`no se llegó a apuntar el boliche (${g.M.phase})`);
+  g.mouse.down = true; step(g, view);
+  if (g.M.phase !== 'jackPower') throw new Error(`pulsar debería empezar la potencia del boliche, fase: ${g.M.phase}`);
+  for (let i = 0; i < 25; i++) step(g, view);
+  g.mouse.down = false; step(g, view);
+  if (g.M.phase !== 'jackSim') throw new Error(`soltar debería lanzar el boliche, fase: ${g.M.phase}`);
 });
 
 // --- runner ---
