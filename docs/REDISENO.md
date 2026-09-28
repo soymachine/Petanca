@@ -9,9 +9,9 @@
 - **Rama de trabajo:** `claude/petanca-rules-comparison-jb587u` (reiniciada
   desde `main` en `46bc963`). `main` queda estable mientras dura el
   rediseño; se fusiona cuando el usuario lo pida.
-- **Fase en curso:** Fase 0 — documento + harness de capturas.
-- **SIGUIENTE PASO CONCRETO:** hook `?scene=<id>&freeze=<seg>` en
-  `public/game/core/Game.js` + `tools/shots.mjs` (ver Fase 0).
+- **Fase en curso:** Fase 1 — motor de render Neo-ASCII.
+- **SIGUIENTE PASO CONCRETO:** `core/Screen.js` → `<canvas>` con la misma
+  API (ver Fase 1, primera casilla).
 - **Último commit relevante:** (se rellena en cada commit)
 
 ## Visión
@@ -83,15 +83,23 @@ dinámico sin perder profundidad**.
 ### Fase 0 — Documento + harness de capturas
 - [x] `docs/REDISENO.md` (este documento) + `CLAUDE.md` + enlaces desde
       `instructions.md` y `next-steps.md`.
-- [ ] Hook por URL en `core/Game.js`: `?scene=<id>` arranca en un estado
-      preparado (title, hub, agenda, penya, club, leaguemap, eurocup, bar,
-      capitulos, hemeroteca, ayuda, lineup, match-aim, match-power,
-      match-flight, match-measure...) y `&freeze=<seg>` congela la
-      simulación en ese instante.
-- [ ] `tools/shots.mjs` sin dependencias: build full → `serve-dist` →
-      Chromium headless `--screenshot` por escena y resolución (1280×720,
-      1920×1080, 2560×1440, 1024×768) → `docs/capturas/<carpeta>/`.
-- [ ] Capturas "antes" en `docs/capturas/antes/` (commit).
+- [x] Hook por URL: `core/DebugScenes.js` (`applySceneFromUrl`, llamado al
+      final del constructor de `Game`). `?scene=<id>` arranca en un estado
+      preparado; `&freeze=1` pone `game.frozen` (el loop deja de llamar a
+      `update` del partido, el dibujo sigue). En modo escena nunca se
+      guarda (`player.save` = no-op). Ids en `SCENE_IDS`: title, hub,
+      agenda, penya, club, leaguemap, bar, capitulos, hemeroteca, ayuda,
+      eurocup (cuadro de muestra), lineup, result, match-aim, match-power,
+      match-flight, match-settled, match-measure, train-arrime. Los de
+      partido se alcanzan con `autoplay()` (ENTER automático + potencia
+      ~0.55) sobre `Match.update` con una entrada falsa.
+- [x] `tools/shots.mjs`: `node tools/shots.mjs [--out=DIR] [--scenes=a,b]
+      [--sizes=WxH,...] [--no-build]` → build full, `serve-dist` en el
+      puerto 4399, Chromium headless `--screenshot` (virtual-time-budget
+      2.5 s). Salida por defecto `<tmp>/petanka-shots`; ~4 s por escena.
+      Para revisar: `Read` de las PNG.
+- [x] Capturas "antes" en `docs/capturas/antes/` (19 escenas × 1920×1080 y
+      1280×720).
 
 ### Fase 1 — Motor de render Neo-ASCII
 - [ ] `core/Screen.js` → `<canvas>` con la MISMA API (las 19 pantallas
@@ -142,8 +150,18 @@ dinámico sin perder profundidad**.
 
 | Fecha | Commit | Qué |
 |---|---|---|
-| 2026-09-28 | (este) | Fase 0: documento vivo + CLAUDE.md |
+| 2026-09-28 | b72c332 | Fase 0: documento vivo + CLAUDE.md |
+| 2026-09-28 | (este) | Fase 0: escenas `?scene=`, `tools/shots.mjs`, capturas "antes" |
 
 ## Problemas conocidos / notas
 
-- (vacío)
+- **Diagnóstico de las capturas "antes":** a 1920×1080 el juego ocupa ~55%
+  del ancho con texto de 13 px y márgenes negros enormes; a 1280×720 se
+  corta por abajo (46 filas × 15 px no caben). En el partido la bola es un
+  solo carácter y el vuelo apenas se percibe; la pista es un tapiz de ░
+  sin profundidad.
+- `match-measure` casi nunca alcanza la fase `measuring` (es rara: solo
+  con bolas casi empatadas); de momento la escena acaba donde acabe el
+  autoplay. Si hace falta, forzar un empate colocando bolas a mano.
+- Detalle heredado visto en `result`: "+-5€" cuando el premio es negativo
+  (cosmético, ResultScreen) — arreglar en Fase 4.

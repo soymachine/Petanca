@@ -29,6 +29,7 @@ import { DECISION_EVENTS, decisionEventById, fillDecisionText, presentRivalryPai
 import { levelUpLine } from '../data/journalistFlavor.js';
 import { AGING_FLAVOR } from '../data/agingFlavor.js';
 import { clamp } from './utils.js';
+import { applySceneFromUrl } from './DebugScenes.js';
 
 import { TitleScreen } from '../screens/TitleScreen.js';
 import { AgendaScreen } from '../screens/AgendaScreen.js';
@@ -114,6 +115,11 @@ export class Game {
       gameover: new GameOverScreen(this),
       eurocup: new EuropeanCupScreen(this),
     };
+
+    // ?scene=<id>[&freeze=1]: arrancar directamente en una pantalla o
+    // momento de partido (capturas del rediseño, ver core/DebugScenes.js)
+    this.frozen = false;
+    applySceneFromUrl(this);
   }
 
   // --- identidad de un hueco de plantilla (curado o fichado) ---
@@ -1024,7 +1030,7 @@ export class Game {
     if (this.simulating && this.state !== 'match' && this.frame % 4 === 0) this.debugAdvanceOneDay();
 
     const screen = this.screens[this.state];
-    if (this.state === 'match') screen.update(dt);
+    if (this.state === 'match' && !this.frozen) screen.update(dt);
     screen.draw();
 
     if (this.showFps) {
