@@ -4,6 +4,8 @@
 // navegador; en los tests headless no hay ninguno y render() no hace nada).
 import { clamp } from './utils.js';
 
+const BOX_FILL = '#10151f'; // = UI.panel de ui/theme.js
+
 export class Screen {
   constructor(el, cols, rows) {
     this.el = el;
@@ -71,7 +73,10 @@ export class Screen {
     }
   }
 
-  box(x, y, w, h, color, style) {
+  // marco con relleno de panel (fill = null para solo el marco): así todas
+  // las pantallas ganan aspecto de tarjeta sin tocarlas una a una
+  box(x, y, w, h, color, style, fill = BOX_FILL) {
+    if (fill) this.fill(x, y, w, h, fill);
     const S = style === 'double'
       ? { tl: '╔', tr: '╗', bl: '╚', br: '╝', h: '═', v: '║' }
       : { tl: '┌', tr: '┐', bl: '└', br: '┘', h: '─', v: '│' };
