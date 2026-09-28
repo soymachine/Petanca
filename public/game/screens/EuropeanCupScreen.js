@@ -242,7 +242,7 @@ export class EuropeanCupScreen {
     const th = crestW + 2;
     const tx = Math.min(input.mouse.cx + 2, screen.cols - tw - 1);
     const ty = Math.min(input.mouse.cy + 1, screen.rows - th - 1);
-    for (let r = 0; r < th; r++) for (let c = 0; c < tw; c++) screen.put(tx + c, ty + r, '█', '#000');
+    screen.opaque(tx, ty, tw, th); // tapa lo de debajo (ver Screen.opaque)
     screen.box(tx, ty, tw, th, '#ffe14d', 'double');
     screen.drawPortrait(info.crest, tx + 2, ty + 1);
     textLines.forEach((l, i) => screen.text(tx + 2 + crestW + gap, ty + 1 + i, l[0], l[1]));

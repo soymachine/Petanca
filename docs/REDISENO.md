@@ -11,11 +11,11 @@
   rediseño; se fusiona cuando el usuario lo pida.
 - **Fase en curso:** Fase 4 — pantallas de gestión (la 3 está hecha salvo
   la repetición a cámara lenta, que queda como mejora opcional).
-- **SIGUIENTE PASO CONCRETO:** Mi Peña (`screens/PenyaScreen.js`, ~1000
-  líneas, escena `?scene=penya`): plantilla como tarjetas con retrato,
-  chips de stats (theme.STAT) y barras de nivel/XP, reparto de puntos con
-  botones +, ficha grande del abuelo elegido. Leer entero antes de tocar:
-  tiene muchos submodos (fichajes, objetos, química...).
+- **SIGUIENTE PASO CONCRETO:** Ligas / Copa de Europa
+  (`screens/LeagueMapScreen.js`, `screens/EuropeanCupScreen.js`, escenas
+  `leaguemap` y `eurocup`): `titleBand` en la cabecera, clasificación con
+  zonas de color y filas con fondo, cuadro de Europa con cruces como
+  tarjetas. Después El Club, El Bar y Capítulos/Hemeroteca/Ayuda/Portada.
 - **Último commit relevante:** (se rellena en cada commit)
 
 ## Visión
@@ -290,7 +290,25 @@ dinámico sin perder profundidad**.
 - [x] Motor: `screen.opaque()` / `panel({opaque:true})` — modales y
       tooltips tapan de verdad lo de debajo (texto, resplandor y las capas
       de píxeles pedidas antes; el renderer las recorta).
-      [ ] Mi Peña · [ ] Ligas / Copa de Europa · [ ] El Club · [ ] El Bar ·
+- [x] Mi Peña (`screens/PenyaScreen.js`, reskin por capas: la lógica de
+      sus 4 pestañas y 6 modales no cambia): banda de título, cabeceras
+      de stats con su glifo/color, valores de cada stat en su color, nivel
+      y stamina en segmentos, fila del cursor con fondo; FICHA del abuelo
+      seleccionado bajo la tabla (si cabe) con retrato escalado, medidores
+      de las 5 stats, stamina, moral y nivel, situación (edad, nómina,
+      arquetipo, clima ✚/▼, entreno, mentor, objeto) y botones ENTRENAR /
+      REPARTIR PUNTOS / MENTOR / FICHA COMPLETA / RETIRAR; la ficha completa
+      (detalle) con medidores de color, techo de potencial marcado ┃ en la
+      barra y acciones como botones. Pista [Q] ya no pisa la pestaña
+      PANTEÓN. Escenas `penya-detail`, `penya-mercado`, `penya-ojeadores`,
+      `penya-panteon`.
+- [x] Transversal: `drawTabRow` (core/utils.js) dibuja las pestañas de
+      sección como chips con fondo en TODAS las pantallas; widget
+      `titleBand()` para la cabecera de las pantallas de gestión; los
+      rellenos negros de modales/tooltips heredados (`'█' #000`) pasan a
+      `screen.opaque()` (Club, Europa, Bar, Ligas, Mi Peña); los
+      "resaltados con espacios" (invisibles en canvas) pasan a fondos reales.
+- [ ] Ligas / Copa de Europa · [ ] El Club · [ ] El Bar ·
       [ ] Capítulos / Hemeroteca / Ayuda / Portada
 
 ### Fase 5 — Pulido
@@ -314,7 +332,8 @@ dinámico sin perder profundidad**.
 | 2026-09-28 | 724e5c1 | Fase 4: Inicio rediseñado |
 | 2026-09-28 | 0e182a2 | Fase 4: Alineación + Prensa rediseñadas, escena `press` |
 | 2026-09-28 | 631b121 | Fase 4: Resultado rediseñado |
-| 2026-09-28 | (este) | Fase 4: Agenda como tablero + paneles opacos |
+| 2026-09-28 | 356a906 | Fase 4: Agenda como tablero + paneles opacos |
+| 2026-09-28 | (este) | Fase 4: Mi Peña reskin + pestañas/títulos/modales transversales |
 
 ## Problemas conocidos / notas
 

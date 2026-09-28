@@ -119,3 +119,24 @@ export function tooltip(screen, x, y, lines, { tone = UI.accent, title = null, m
   rows.forEach(([t, c], i) => screen.text(bx + 2, by + 1 + i, t, c));
   return { x: bx, y: by, w, h };
 }
+
+// banda de título de una pantalla de gestión (debajo de la barra de
+// pestañas): título grande en píxeles a la izquierda y, opcional, un texto
+// a la derecha. Ocupa las filas y..y+2
+export function titleBand(screen, title, { y = 3, right = null, color = UI.accent, rightColor = UI.accentHi, x = 4 } = {}) {
+  screen.fill(0, y, screen.cols, 3, '#0f1520');
+  screen.layer('over', (c, R) => {
+    c.textBaseline = 'middle'; c.textAlign = 'left';
+    c.font = `bold ${R.ch * 1.5}px "Menlo", "Consolas", "DejaVu Sans Mono", monospace`;
+    c.fillStyle = color; c.shadowColor = color; c.shadowBlur = R.ch * 0.5;
+    c.fillText(title, R.cx(x), R.cy(y + 1.5));
+    if (right) {
+      c.font = `bold ${R.ch}px "Menlo", "Consolas", "DejaVu Sans Mono", monospace`;
+      c.textAlign = 'right'; c.fillStyle = rightColor; c.shadowColor = rightColor;
+      c.fillText(right, R.cx(screen.cols - x), R.cy(y + 1.5));
+    }
+    c.shadowBlur = 0;
+  });
+  // ancho aproximado que ocupa el título, para colocar cosas a su derecha
+  return Math.ceil(title.length * 1.5 / 0.56 * 0.6) + x;
+}

@@ -94,7 +94,11 @@ export function drawTabRow(screen, input, x, y, labels, activeIndex, opts = {}) 
       : active ? (opts.activeColor || '#ffe680')
       : over ? (opts.hoverColor || '#fff')
       : (opts.color || '#8a7f66');
+    // pestaña como "chip" con fondo (Fase 4 del rediseño): la activa en
+    // ámbar, la de debajo del ratón algo más clara, el resto hundidas
+    if (screen.fill) screen.fill(cx, y, text.length, 1, isDisabled ? '#0e1117' : active ? '#3a2a10' : over ? '#1e2636' : '#141a24');
     screen.text(cx, y, text, col);
+    if (active && screen.glow) screen.glow(cx + 2, y, labels[i].length, 1);
     if (!isDisabled && over && input.mouse.clicked) clicked = i;
     cx += text.length + gap;
   }

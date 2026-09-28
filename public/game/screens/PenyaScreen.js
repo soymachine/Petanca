@@ -13,6 +13,8 @@ import { CrestGenerator } from '../portraits/CrestGenerator.js';
 import { TRAINING_DRILLS } from '../data/trainingDrills.js';
 import { archetypeForAbuelo } from '../data/abueloArchetypes.js';
 import { EDITION } from '../core/edition.js';
+import { UI, TONE, STAT, tint } from '../ui/theme.js';
+import { panel, button, meter, segments, titleBand } from '../ui/widgets.js';
 
 const TABLE_X = 4, TABLE_Y0 = 10;
 const TABLE_W = 138;
@@ -160,7 +162,7 @@ export class PenyaScreen {
       else if (this.detailAbuelo !== null) { this.detailAbuelo = null; input.pressed.Escape = false; }
     }
     TabsBar.draw(this.game, 'penya');
-    screen.textCenter(4, '═══ MI PEÑA ═══', '#ffb347');
+    titleBand(screen, 'MI PEÑA');
 
     // escudo + nombre del club, en la esquina libre de la cabecera: la fila
     // 8 la usa el texto de ayuda de cada sección y la 9 ya es la caja de la
@@ -169,7 +171,7 @@ export class PenyaScreen {
     const crestX = screen.cols - 11, crestY = 3;
     screen.drawPortrait(CrestGenerator.generateMini(this.game.player.clubName), crestX, crestY);
     const clubLabel = truncate(this.game.player.clubName, 30);
-    screen.text(crestX - 1 - clubLabel.length, crestY + 2, clubLabel, '#ffb347');
+    screen.text(crestX - 1 - clubLabel.length, crestY + 1, clubLabel, '#ffb347');
 
     // Mercado y Ojeadores se desbloquean solos las primeras semanas (ver
     // Player.systemsRevealed / Career._maybeRevealSystems) — Plantilla y
@@ -184,7 +186,10 @@ export class PenyaScreen {
       'PANTEÓN',
     ];
     const clicked = drawTabRow(screen, input, TABLE_X, 6, labels, sections.indexOf(this.section), { disabled: locked });
-    screen.text(TABLE_X + 66, 6, '[Q] cambiar de pestaña', '#8a7f66');
+    // la pista de [Q] justo después de la última pestaña (antes iba en una
+    // columna fija y pisaba PANTEÓN)
+    const tabsW = labels.reduce((n, l) => n + l.length + 4, 0) + 4 * (labels.length - 1);
+    screen.text(TABLE_X + tabsW + 3, 6, '[Q] cambiar de pestaña', UI.textFaint);
 
     if (this.section === 'mercado' && revealed.mercado) this._drawMercado();
     else if (this.section === 'ojeadores' && revealed.ojeadores) this._drawOjeadores();
@@ -219,7 +224,12 @@ export class PenyaScreen {
     for (const col of COLUMNS) {
       const overHeader = input.mouse.cy === 10 && input.mouse.cx >= col.x - 1 && input.mouse.cx < col.x + col.w;
       if (overHeader && STAT_INFO[col.key]) headerHover = col.key;
-      screen.text(col.x, 10, col.label, overHeader ? '#ffe680' : '#c9a35d');
+      // las 5 stats llevan su glifo y color de siempre (ui/theme.js STAT)
+      const st = STAT[col.key];
+      if (st) {
+        screen.put(col.x - 1, 10, st.glyph, st.color);
+        screen.text(col.x, 10, col.label, overHeader ? '#ffe680' : st.color);
+      } else screen.text(col.x, 10, col.label, overHeader ? '#ffe680' : '#c9a35d');
     }
     for (let i = 0; i < COLUMNS.length - 1; i++) screen.put(COLUMNS[i + 1].x - 1, 9, '┬', '#8a7f66');
     screen.text(TABLE_X - 1, 11, '─'.repeat(TABLE_W - 3), '#5a5347');
@@ -248,7 +258,7 @@ export class PenyaScreen {
       const overNivel = input.mouse.cy === rowY && input.mouse.cx >= nivelCol.x - 1 && input.mouse.cx < nivelCol.x + nivelCol.w;
       if (overNivel && input.mouse.clicked) nivelClicked = id;
       const isCursor = id === this.cursor;
-      if (overRow) screen.text(TABLE_X - 1, rowY, ' '.repeat(TABLE_W - 4), '#3a4a3a');
+      if (overRow || isCursor) screen.fill(TABLE_X - 1, rowY, TABLE_W - 4, 1, overRow ? '#1e2838' : '#182030');
       this._drawRow(id, rowY, s, isCursor, overRow);
     });
     if (maxOffset > 0) {
@@ -259,6 +269,13 @@ export class PenyaScreen {
       const thumbY = Math.round((this.scroll / maxOffset) * (trackH - 1));
       for (let i = 0; i < trackH; i++) screen.put(trackX, trackY + 1 + i, i === thumbY ? '█' : '┊', i === thumbY ? '#cde0cd' : '#3a4a3a');
       this._scrollbarInteract(trackX, trackY, visibleRows, maxOffset, () => this.scroll, (v) => { this.scroll = v; }, '_rDrag');
+    }
+
+    // ficha del seleccionado en el hueco de debajo de la tabla (si cabe:
+    // con plantillas largas la tabla ocupa la pantalla y no se dibuja)
+    const fichaY = plantillaBoxBottom + 1;
+    if (!this.mentorMode && this.allocating === null && this.detailAbuelo === null && !this.trainDrillPick && screen.rows - 1 - fichaY >= 13) {
+      this._drawFicha(this.cursor, fichaY, Math.min(17, screen.rows - 1 - fichaY));
     }
 
     if (activeHover !== null) this._drawTooltip(activeHover, input.mouse.cx, input.mouse.cy);
@@ -321,6 +338,102 @@ export class PenyaScreen {
     }
   }
 
+  // ficha rápida del abuelo seleccionado: retrato, las 5 stats con su
+  // glifo/color, stamina, moral, nivel, lo más útil de su situación y las
+  // acciones como botones (mismas que las teclas T/P/M/G)
+  _drawFicha(id, y, h) {
+    const { screen, player } = this.game;
+    const s = player.roster.get(id);
+    const f = this.game.faces[id];
+    const x = TABLE_X - 2, w = TABLE_W;
+    panel(screen, x, y, w, h, { title: `FICHA · ${this.game.displayName(id).toUpperCase()}`, tone: UI.edge, titleColor: UI.accentHi });
+
+    // retrato escalado a la altura de la ficha
+    const art = s.signed ? s.signed.portrait : f && f.photo;
+    let pw = 0;
+    if (art && !art.layers && art.rows) {
+      const sc = Math.min(1, (h - 2) / art.rows);
+      screen.drawPhotoArtScaled(art, x + 2, y + 1, sc);
+      pw = Math.round(art.cols * sc);
+    } else if (art && art.layers) {
+      const aw = Math.max(...art.layers.map(([, lines]) => Math.max(...lines.map((l) => l.length))));
+      const ah = Math.max(...art.layers.map(([, lines]) => lines.length));
+      if (ah <= h - 2) { screen.drawAnyPortrait(art, x + 2, y + 1); pw = aw; }
+    }
+
+    // columna de medidores
+    const ix = x + 4 + pw;
+    let ry = y + 2;
+    for (const k of STAT_KEYS) {
+      const st = STAT[k];
+      const val = s.getStatDisplay(k);
+      screen.put(ix, ry, st.glyph, st.color);
+      screen.text(ix + 2, ry, st.label, UI.text);
+      meter(screen, ix + 11, ry, 20, val, 100, { color: st.color });
+      screen.text(ix + 32, ry, String(val).padStart(3), st.color);
+      if ((s.bonus[k] || 0) > 0) screen.put(ix + 35, ry, '▲', '#a8e8a8');
+      ry++;
+    }
+    ry++;
+    const stCol = s.st > 60 ? TONE.good : s.st > 30 ? TONE.warn : TONE.bad;
+    screen.text(ix + 2, ry, 'Stamina', UI.textDim);
+    meter(screen, ix + 11, ry, 20, s.st, 100, { color: stCol });
+    screen.text(ix + 32, ry++, String(Math.round(s.st)).padStart(3), stCol);
+    const moCol = s.mo >= 0 ? TONE.good : TONE.bad;
+    screen.text(ix + 2, ry, 'Moral', UI.textDim);
+    meter(screen, ix + 11, ry, 20, s.mo + 100, 200, { color: moCol });
+    screen.text(ix + 32, ry++, `${s.mo >= 0 ? '+' : ''}${s.mo}`.padStart(3), moCol);
+    ry++;
+    screen.text(ix + 2, ry, `Nivel ${s.level}`, TONE.info);
+    meter(screen, ix + 11, ry, 20, s.isMaxLevel() ? 1 : s.xp, s.isMaxLevel() ? 1 : s.xpToNextLevel(), { color: TONE.info });
+    screen.text(ix + 32, ry, s.isMaxLevel() ? 'MÁX' : `${s.xp}/${s.xpToNextLevel()} XP`, UI.textDim);
+
+    // columna de situación
+    const jx = ix + 48;
+    let jy = y + 2;
+    const line = (t, c) => { if (jy < y + h - 1) screen.text(jx, jy++, truncate(t, 42), c); };
+    line(`${s.age} años · ${s.career.wins}G ${s.career.losses}P · ${s.torneos}/${RETIRE_AT} partidas`, UI.text);
+    line(`nómina ${upkeepFor(id, player.roster)}€/semana`, '#c98080');
+    const archetype = archetypeForAbuelo(s);
+    if (archetype) line(`arquetipo: ${archetype.label}`, TONE.xp);
+    if (s.formStreak >= 2) line(`racha de ${s.formStreak} victorias`, UI.accent);
+    jy++;
+    if (ABUELO_DATA[id]) {
+      let cx = jx;
+      screen.text(cx, jy, 'clima', UI.textDim); cx += 6;
+      for (const [k, v] of Object.entries(ABUELO_DATA[id].clima)) {
+        if (!v) continue;
+        const cl = CLIMAS[k];
+        const t = `${cl.icon}${v === 1 ? '✚' : '▼'}`;
+        screen.text(cx, jy, t, v === 1 ? TONE.good : TONE.bad); cx += t.length + 2;
+      }
+      if (cx === jx + 6) screen.text(cx, jy, 'sin manías', UI.textFaint);
+      jy++;
+    }
+    const day = player.seasonClock.day;
+    const already = this.game.trainingScheduledFor(id);
+    if (s.isInjured(day)) line(`de baja: vuelve en ${s.injuredUntil - day} días`, '#ff8c5b');
+    else if (already) line(`entreno: ${already.drill} (${already.dayLabel})`, '#88c8e8');
+    const mentorId = this._mentorOf(id);
+    line(mentorId !== null ? `mentor: ${this.game.displayName(mentorId)}` : 'sin mentor', '#c8a0e8');
+    if (s.item) line(`objeto: ${ITEMS[s.item.id].name}`, '#ffd9a0');
+
+    // acciones
+    const bx = x + w - 30, bw = 27;
+    let by = y + 2;
+    const cost = player.facilities.trainingCost();
+    const canTrain = s.st >= cost && !already && !s.isInjured(day);
+    if (button(this.game, bx, by, `[T] ENTRENAR (−${cost} STA)`, { w: bw, disabled: !canTrain, tone: '#88c8e8' })) this.trainDrillPick = { abueloId: id, cursor: 0 };
+    by += 2;
+    if (button(this.game, bx, by, s.points > 0 ? `[P] REPARTIR ${s.points} PUNTOS` : '[P] REPARTIR PUNTOS', { w: bw, tone: s.points > 0 ? TONE.gold : UI.accent, selected: s.points > 0 })) { this.allocating = id; this.allocCursor = 0; }
+    by += 2;
+    if (button(this.game, bx, by, '[M] HACERLE MENTOR', { w: bw, tone: '#c8a0e8', disabled: player.roster.ids.length < 2 })) { this.mentorMode = true; this._pendingMentor = id; }
+    by += 2;
+    if (button(this.game, bx, by, 'FICHA COMPLETA', { w: bw })) { this.detailAbuelo = id; this.detailScroll = 0; }
+    by += 2;
+    if (s.torneos >= RETIRE_AT && button(this.game, bx, by, '[G] RETIRAR CON HONORES', { w: bw, tone: TONE.bad })) this.game.career.retireWithHonors(id);
+  }
+
   _levelInfo(s) {
     const stats = {};
     for (const k of STAT_KEYS) stats[k] = s.getStatDisplay(k);
@@ -345,20 +458,22 @@ export class PenyaScreen {
     const bar = Math.round(pct * 5);
     const hasPoints = s.points > 0;
     const nivelCol = hasPoints ? (frame % 20 < 12 ? '#ffe14d' : '#a08838') : '#88c8e8';
-    const nivelTxt = `Nv${s.level} ${'▓'.repeat(bar)}${'░'.repeat(5 - bar)}${hasPoints ? ` +${s.points}` : ''}`;
-    screen.text(COLUMNS[1].x, rowY, nivelTxt, nivelCol);
+    screen.text(COLUMNS[1].x, rowY, `Nv${s.level}`, nivelCol);
+    segments(screen, COLUMNS[1].x + 5, rowY, 5, bar, { color: TONE.info });
+    if (hasPoints) screen.text(COLUMNS[1].x + 11, rowY, `+${s.points}`, nivelCol);
 
     for (const k of STAT_KEYS) {
       const colDef = COLUMNS.find((c) => c.key === k);
       const trained = (s.bonus[k] || 0) > 0;
-      screen.text(colDef.x, rowY, `${stats[k]}${trained ? '▲' : ''}`.padEnd(colDef.w - 1), trained ? '#a8e8a8' : col);
+      screen.text(colDef.x, rowY, `${stats[k]}`.padEnd(colDef.w - 1), isCursor || overRow ? '#ffffff' : STAT[k].color);
+      if (trained) screen.put(colDef.x + String(stats[k]).length, rowY, '▲', '#a8e8a8');
     }
 
     screen.text(COLUMNS[7].x, rowY, `${s.age}`, col);
 
     const stCol = s.st > 60 ? '#7ec850' : s.st > 30 ? '#ffe14d' : '#ff5c5c';
     const stBar = Math.round(s.st / 10);
-    screen.text(COLUMNS[8].x, rowY, `${'▮'.repeat(stBar)}${'▯'.repeat(10 - stBar)}`, stCol);
+    segments(screen, COLUMNS[8].x, rowY, 10, stBar, { color: stCol });
     const day = this.game.player.seasonClock.day;
     if (s.isInjured(day)) {
       screen.text(COLUMNS[9].x, rowY, `LESIONADO (${s.injuredUntil - day}d)`, '#ff8c5b');
@@ -386,7 +501,7 @@ export class PenyaScreen {
 
   _fillBlack(x, y, w, h) {
     const { screen } = this.game;
-    for (let r = 0; r < h; r++) for (let c = 0; c < w; c++) screen.put(x + c, y + r, '█', '#000');
+    screen.opaque(x, y, w, h); // tapa lo de debajo (ver Screen.opaque)
   }
 
   // retrato a tamaño original, pegado al tooltip: a la derecha si cabe,
@@ -427,7 +542,7 @@ export class PenyaScreen {
       const val = s.getStatDisplay(k);
       const bar = Math.round(val / 5); // barra de 20 segmentos (100/5)
       const overRow = input.mouse.cy === ry && input.mouse.cx >= x + 2 && input.mouse.cx < x + w - 2;
-      if (sel || overRow) screen.text(x + 2, ry, ' '.repeat(w - 4), '#3a2a10');
+      if (sel || overRow) screen.fill(x + 2, ry, w - 4, 1, '#3a2a10');
       const label = `${STAT_LABEL[k].padEnd(8)} ${'▮'.repeat(bar)}${'▯'.repeat(20 - bar)} ${val}`;
       screen.text(x + 2, ry, label, sel || overRow ? '#fff' : '#c9c2a8');
       // mantener el botón pulsado sobre la fila reparte 1 punto al momento
@@ -477,7 +592,7 @@ export class PenyaScreen {
     TRAINING_DRILLS.forEach((d, i) => {
       const sel = i === this.trainDrillPick.cursor;
       const overRow = input.mouse.cy === ry && input.mouse.cx >= x + 2 && input.mouse.cx < x + w - 2;
-      if (sel || overRow) screen.text(x + 2, ry, ' '.repeat(w - 4), '#3a2a10');
+      if (sel || overRow) screen.fill(x + 2, ry, w - 4, 1, '#3a2a10');
       const label = `${d.label.padEnd(10)} +1 ${STAT_LABEL[d.stat].toUpperCase().padEnd(8)} ${d.desc}`;
       screen.text(x + 2, ry, label.slice(0, w - 4), sel || overRow ? '#fff' : '#c9c2a8');
       if (overRow && input.mouse.clicked) this.trainDrillPick.cursor = i;
@@ -669,24 +784,31 @@ export class PenyaScreen {
     let ry = y + 2;
     screen.text(ix, ry, 'STATS', '#ffb347'); ry++;
     for (const k of STAT_KEYS) {
+      const st = STAT[k];
       const val = s.getStatDisplay(k);
-      const bar = Math.round(val / 5);
       const trained = (s.bonus[k] || 0) > 0;
       const cap = s.potentialCap ? s.potentialCap[k] * 10 : null;
       const decline = s.ageDeclineFor(k);
       let extra = '';
       if (cap && cap < 100) extra += ` techo ${cap}`;
       if (decline > 0) extra += ` -${decline} edad`;
-      screen.text(ix, ry, `${STAT_LABEL[k].padEnd(8)} ${'▮'.repeat(bar)}${'▯'.repeat(20 - bar)} ${val}${trained ? '▲' : ''}`, trained ? '#a8e8a8' : '#c9c2a8');
-      if (extra) screen.text(ix + 33, ry, extra.trim(), '#ff8c5b');
+      screen.put(ix, ry, st.glyph, st.color);
+      screen.text(ix + 2, ry, st.label, UI.text);
+      meter(screen, ix + 11, ry, 20, val, 100, { color: st.color });
+      screen.text(ix + 32, ry, `${val}${trained ? '▲' : ''}`, trained ? '#a8e8a8' : st.color);
+      // el techo de potencial, marcado sobre la propia barra
+      if (cap && cap < 100) screen.put(ix + 11 + Math.min(19, Math.floor(cap / 5)), ry, '┃', '#ff8c5b');
+      if (extra) screen.text(ix + 38, ry, extra.trim(), '#ff8c5b');
       ry++;
     }
     ry++;
-    const stBar = Math.round(s.st / 5);
-    screen.text(ix, ry, `STAMINA  ${'▮'.repeat(stBar)}${'▯'.repeat(20 - stBar)} ${s.st}`, s.st > 60 ? '#7ec850' : s.st > 30 ? '#ffe14d' : '#ff5c5c'); ry++;
-    const moPct = clamp((s.mo + 100) / 200, 0, 1);
-    const moBar = Math.round(moPct * 20);
-    screen.text(ix, ry, `ESTADO   ${'▮'.repeat(moBar)}${'▯'.repeat(20 - moBar)} ${s.mo >= 0 ? '+' : ''}${s.mo}`, s.mo >= 0 ? '#88e088' : '#ef9f9f'); ry += 2;
+    const stCol = s.st > 60 ? TONE.good : s.st > 30 ? TONE.warn : TONE.bad;
+    screen.text(ix + 2, ry, 'Stamina', UI.textDim);
+    meter(screen, ix + 11, ry, 20, s.st, 100, { color: stCol });
+    screen.text(ix + 32, ry++, `${Math.round(s.st)}`, stCol);
+    screen.text(ix + 2, ry, 'Moral', UI.textDim);
+    meter(screen, ix + 11, ry, 20, clamp(s.mo + 100, 0, 200), 200, { color: s.mo >= 0 ? TONE.good : TONE.bad });
+    screen.text(ix + 32, ry, `${s.mo >= 0 ? '+' : ''}${s.mo}`, s.mo >= 0 ? TONE.good : TONE.bad); ry += 2;
 
     screen.text(ix, ry, 'CARRERA (esta generación)', '#ffb347'); ry++;
     screen.text(ix, ry, `${s.career.wins}G ${s.career.losses}P  ·  racha máxima ${s.career.bestStreak}  ·  ${s.torneos} partidas / ${RETIRE_AT}`, '#c9c2a8'); ry++;
@@ -754,12 +876,25 @@ export class PenyaScreen {
     const canTrain = s.st >= player.facilities.trainingCost() && !already && !s.isInjured(player.seasonClock.day);
     const soloEnPlantilla = player.roster.ids.length <= 1;
     const canRetire = s.torneos >= RETIRE_AT && !soloEnPlantilla;
-    const hints = [];
-    hints.push(canTrain ? '[T] agendar entrenamiento' : already ? `entreno agendado: ${already.drill} (${already.dayLabel})` : 'sin stamina para entrenar');
-    hints.push('[N] buscar mentor');
-    if (s.torneos >= RETIRE_AT) hints.push(canRetire ? '[G] retirar' : 'no se puede retirar: es tu único jugador');
-    hints.push('[ESC] cerrar');
-    screen.text(x + 2, y + h - 2, truncate(hints.join('   ·   '), w - 4), '#c9c2a8');
+    // acciones como botones (las teclas T/N/G/ESC siguen valiendo igual)
+    let bx = x + 2;
+    const by = y + h - 2;
+    let act = null;
+    if (button(this.game, bx, by, canTrain ? '[T] AGENDAR ENTRENO' : already ? `entreno: ${already.drill} (${already.dayLabel})` : 'sin stamina para entrenar', { w: 34, disabled: !canTrain, tone: '#88c8e8' })) act = 'train';
+    bx += 36;
+    if (button(this.game, bx, by, '[N] BUSCAR MENTOR', { w: 24, tone: '#c8a0e8' })) act = 'mentor';
+    bx += 26;
+    if (s.torneos >= RETIRE_AT) {
+      if (button(this.game, bx, by, canRetire ? '[G] RETIRAR' : 'único jugador: no se retira', { w: 30, disabled: !canRetire, tone: TONE.bad })) act = 'retire';
+      bx += 32;
+    }
+    if (button(this.game, x + w - 18, by, '[ESC] CERRAR', { w: 16, tone: UI.textDim })) act = 'close';
+    if (!this.trainDrillPick && !this.mentorPickFor) {
+      if (act === 'train') this.trainDrillPick = { abueloId: id, cursor: 0 };
+      else if (act === 'mentor') this.mentorPickFor = { pupilId: id, cursor: 0 };
+      else if (act === 'retire') { if (this.game.career.retireWithHonors(id)) this.detailAbuelo = null; }
+      else if (act === 'close') this.detailAbuelo = null;
+    }
 
     // los modales anidados (agendar entreno / buscar mentor) se dibujan
     // encima de este detalle en vez de sustituirlo, igual que el resto de
@@ -859,7 +994,7 @@ export class PenyaScreen {
       const overRow = input.mouse.cy === rowY && input.mouse.cx >= MX - 1 && input.mouse.cx < MX + MTABLE_W - 4;
       if (overRow) activeHover = idx;
       const isCursor = idx === this.mCursor;
-      if (overRow) screen.text(MX - 1, rowY, ' '.repeat(MTABLE_W - 4), '#3a4a3a');
+      if (overRow) screen.fill(MX - 1, rowY, MTABLE_W - 4, 1, '#3a4a3a');
       this._drawMarketRow(e, rowY, isCursor, overRow);
     });
     if (maxOffset > 0) {
@@ -1111,7 +1246,7 @@ export class PenyaScreen {
       const sel = i === this.oCursor;
       const overRow = hitRect(input.mouse.cx, input.mouse.cy, 6, rowY, 126, 1);
       if (overRow) hoverT = t;
-      if (overRow) screen.text(6, rowY, ' '.repeat(126), '#3a4a3a');
+      if (overRow) screen.fill(6, rowY, 126, 1, '#3a4a3a');
       if (sel) screen.text(4, rowY, '▶', '#7CFC00');
       const col = sel ? '#fff' : overRow ? '#ffe680' : locked ? '#5a5347' : owned ? '#7ec850' : '#88c8e8';
 
@@ -1194,7 +1329,7 @@ export class PenyaScreen {
       const tpl = SCOUT_TEMPLATES.find((t) => t.id === h.templateId);
       const sel = i === this.oCursor;
       const overRow = hitRect(input.mouse.cx, input.mouse.cy, 6, yy, 126, 1);
-      if (sel || overRow) screen.text(6, yy, ' '.repeat(126), '#3a4a3a');
+      if (sel || overRow) screen.fill(6, yy, 126, 1, '#3a4a3a');
       const col = sel ? '#fff' : overRow ? '#ffe680' : '#c9c2a8';
       screen.text(7, yy, `${sel ? '▶' : ' '} ${'★'.repeat(tpl.level)} ${tpl.name}`, col);
 

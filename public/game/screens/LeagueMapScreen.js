@@ -440,6 +440,6 @@ export class LeagueMapScreen {
 
   _fillBlack(x, y, w, h) {
     const { screen } = this.game;
-    for (let r = 0; r < h; r++) for (let c = 0; c < w; c++) screen.put(x + c, y + r, '█', '#000');
+    screen.opaque(x, y, w, h); // tapa lo de debajo (ver Screen.opaque)
   }
 }

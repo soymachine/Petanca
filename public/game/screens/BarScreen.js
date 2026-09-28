@@ -183,7 +183,7 @@ export class BarScreen {
     const { screen, input, player } = this.game;
     const w = 62, h = 20;
     const x = Math.floor((screen.cols - w) / 2), y = Math.floor((screen.rows - h) / 2);
-    for (let r = 0; r < h; r++) for (let c = 0; c < w; c++) screen.put(x + c, y + r, '█', '#000');
+    screen.opaque(x, y, w, h); // tapa lo de debajo (ver Screen.opaque)
     screen.box(x, y, w, h, '#ffe14d', 'double');
     const it = ITEMS[this.buying.itemId];
 

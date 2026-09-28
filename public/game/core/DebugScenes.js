@@ -14,7 +14,7 @@ const PLAIN = ['title', 'hub', 'agenda', 'penya', 'club', 'leaguemap', 'bar', 'c
 
 // ids de escena disponibles (tools/shots.mjs los recorre todos)
 export const SCENE_IDS = [
-  ...PLAIN, 'agenda-decision', 'agenda-train', 'eurocup', 'lineup', 'press', 'result',
+  ...PLAIN, 'agenda-decision', 'agenda-train', 'penya-detail', 'penya-mercado', 'penya-ojeadores', 'penya-panteon', 'eurocup', 'lineup', 'press', 'result',
   'match-aim', 'match-power', 'match-flight', 'match-settled', 'match-measure',
   'train-arrime', 'fx-demo',
 ];
@@ -91,6 +91,13 @@ export function applySceneFromUrl(game) {
     const clock = game.player.seasonClock;
     game.screens.agenda.schedule = { day: clock.day + 1, step: 'drill', abueloId: game.player.roster.ids[0], cursor: 0 };
     game.state = 'agenda';
+  } else if (id.startsWith('penya-')) {
+    const pen = game.screens.penya;
+    game.player.systemsRevealed.mercado = true;
+    game.player.systemsRevealed.ojeadores = true;
+    if (id === 'penya-detail') pen.detailAbuelo = game.player.roster.ids[0];
+    else pen.section = id.slice(6);
+    game.state = 'penya';
   } else if (id === 'eurocup') {
     if (!game.player.euroCup) game.player.euroCup = demoEuroCup(game.player);
     game.state = 'eurocup';

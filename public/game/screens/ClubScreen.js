@@ -98,7 +98,7 @@ export class ClubScreen {
       const over = hitRect(input.mouse.cx, input.mouse.cy, rx, ry, rw, rh);
       if (over) hover = i;
       if (sel || over) {
-        for (let r = 1; r < rh - 1; r++) screen.text(rx + 1, ry + r, ' '.repeat(rw - 2), '#3a4a3a');
+        for (let r = 1; r < rh - 1; r++) screen.fill(rx + 1, ry + r, rw - 2, 1, '#3a4a3a');
       }
       if (sel) screen.box(rx, ry, rw, rh, '#7CFC00');
       else if (over) screen.box(rx, ry, rw, rh, '#ffe680');
@@ -355,7 +355,7 @@ export class ClubScreen {
     const th = lines.length + 2;
     const tx = Math.min(mx + 2, screen.cols - tw - 1);
     const ty = Math.min(my + 1, screen.rows - th - 1);
-    for (let r = 0; r < th; r++) for (let c = 0; c < tw; c++) screen.put(tx + c, ty + r, '█', '#000');
+    screen.opaque(tx, ty, tw, th); // tapa lo de debajo (ver Screen.opaque)
     screen.box(tx, ty, tw, th, '#ffe14d', 'double');
     lines.forEach((l, i) => screen.text(tx + 2, ty + 1 + i, l[0], l[1]));
   }
@@ -376,7 +376,7 @@ export class ClubScreen {
     const th = lines.length + 2;
     const tx = Math.min(mx + 2, screen.cols - tw - 1);
     const ty = Math.min(my + 1, screen.rows - th - 1);
-    for (let r = 0; r < th; r++) for (let c = 0; c < tw; c++) screen.put(tx + c, ty + r, '█', '#000');
+    screen.opaque(tx, ty, tw, th); // tapa lo de debajo (ver Screen.opaque)
     screen.box(tx, ty, tw, th, '#ffe14d', 'double');
     lines.forEach((l, i) => screen.text(tx + 2, ty + 1 + i, l[0], l[1]));
   }
