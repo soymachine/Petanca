@@ -12,6 +12,11 @@ import { citiesFor, awayCountriesFor, countryLabel, strengthFor } from '../data/
 import { wrapText, hitRect } from '../core/utils.js';
 import { founderStatsForLevel } from '../data/abuelos.js';
 import { EDITION } from '../core/edition.js';
+import { Settings } from '../core/Settings.js';
+import { TitleScene } from '../ui/TitleScene.js';
+import { CrestGenerator } from '../portraits/CrestGenerator.js';
+import { UI, TONE, tint } from '../ui/theme.js';
+import { panel, bigButton, button } from '../ui/widgets.js';
 
 const PICKABLE_COUNTRIES = ['ES', 'FR', 'IT', 'BE', 'CH', 'PT'];
 
@@ -29,16 +34,34 @@ export class TitleScreen {
     this.selectedCountry = 'ES';
     this.cityChosen = false;
     this.cityCursor = 0;
+    this.scene = new TitleScene();
+    this.t = 0;
+  }
+
+  // tarjeta elegible de los selectores (país/ciudad/dificultad/perfil):
+  // devuelve true si se ha hecho clic en ella
+  _card(x, y, w, h, sel, locked) {
+    const { screen, input } = this.game;
+    const over = !locked && hitRect(input.mouse.cx, input.mouse.cy, x, y, w, h);
+    const tone = locked ? '#3a372f' : sel ? TONE.good : over ? UI.accentHi : UI.edge;
+    panel(screen, x, y, w, h, { tone, style: sel && !locked ? 'double' : 'single', fill: locked ? '#0d1016' : sel ? tint(TONE.good, 0.14) : over ? UI.panelHi : 'rgba(16,21,31,0.92)' });
+    return over && input.mouse.clicked;
   }
 
   draw() {
     const { screen, input, player, frame, photoBanner } = this.game;
     screen.clear();
-    screen.block(Math.floor((screen.cols - 60) / 2), 2, TITLE_ART, '#ffb347');
-    screen.textCenter(9, '~ el noble arte de la petanca española ~', '#c9b98a');
-    const bx = Math.floor((screen.cols - photoBanner.cols) / 2);
-    screen.box(bx - 2, 11, photoBanner.cols + 4, photoBanner.rows + 2, '#8a7f66', 'double');
-    screen.drawPhotoArt(photoBanner, bx, 12);
+    this.t += this.game.lastDt || 1 / 60;
+    // escena animada de fondo (ui/TitleScene.js) entre el logo y el menú
+    const still = Settings.get('reduceMotion') || this.game.frozen;
+    const t = still ? 2.2 : this.t;
+    screen.layer('under', (c, R) => this.scene.draw(c, R, 8.5, 31, t, still));
+    // el logo, con su resplandor y un leve balanceo
+    const lx = Math.floor((screen.cols - 60) / 2), ly = 1;
+    screen.block(lx, ly, TITLE_ART, '#ffb347');
+    screen.glow(lx, ly, 60, TITLE_ART.length);
+    screen.textCenter(ly + TITLE_ART.length + 1, '~ el noble arte de la petanca española ~', '#e8c890');
+    void photoBanner;
 
     if (this.pickingSlot) { this._drawSlotPicker(); return; }
     // un perfil que ya llegó a GAME OVER (ver Career.finishWeeklyMatch)
@@ -56,15 +79,26 @@ export class TitleScreen {
       return;
     }
 
-    const startLabel = '▶ [ ENTER ]  EMPEZAR A JUGAR ◀';
-    const startRect = { x: Math.floor((screen.cols - startLabel.length) / 2), y: 34, w: startLabel.length, h: 1 };
-    const startHover = hitRect(input.mouse.cx, input.mouse.cy, startRect.x, startRect.y, startRect.w, startRect.h);
-    if (frame % 40 < 26 || startHover) screen.textCenter(34, startLabel, startHover ? '#ffe680' : '#7CFC00');
-    screen.textCenter(37, `${player.clubName}   ·   Liga de ${player.league.cityName} (nivel ${player.currentLeagueLevel}/8)   ·   ${player.money}€   G:${player.wins} P:${player.losses}`, '#e8e0c8');
-    screen.textCenter(39, `Perfil ${Player.activeSlot()} de ${Player.SLOT_COUNT}   ·   [P] cambiar de perfil${player.wins + player.losses > 0 ? '   ·   [B] borrar partida guardada' : ''}`, '#8a7f66');
-    screen.textCenter(43, 'foto: Wikimedia Commons · filtro ASCII casero · hecho con cariño y albero', '#556');
+    // tarjeta del club + botón grande de empezar
+    const cw = 70, cx0 = Math.floor((screen.cols - cw) / 2);
+    panel(screen, cx0, 32, cw, 5, { tone: UI.edge, fill: 'rgba(16,21,31,0.92)' });
+    screen.drawPortrait(CrestGenerator.generateMini(player.clubName), cx0 + 2, 32);
+    screen.text(cx0 + 12, 33, player.clubName, UI.accentHi);
+    screen.text(cx0 + 12, 34, `Liga de ${player.league.cityName} · nivel ${player.currentLeagueLevel}/8`, UI.text);
+    screen.text(cx0 + 12, 35, `${player.money}€   ·   ${player.wins}G ${player.losses}P   ·   perfil ${Player.activeSlot()}/${Player.SLOT_COUNT}`, UI.textDim);
+    const start = bigButton(this.game, Math.floor((screen.cols - 50) / 2), 38, 50, '▶  EMPEZAR A JUGAR  [ENTER]', { tone: TONE.good, selected: frame % 40 < 26 });
+    const canErase = player.wins + player.losses > 0;
+    const bx = Math.floor((screen.cols - (canErase ? 46 : 20)) / 2);
+    const goSlots = button(this.game, bx, 42, '[P] PERFILES', { w: 20 });
+    const erase = canErase && button(this.game, bx + 22, 42, '[B] BORRAR PARTIDA', { w: 24, tone: TONE.bad });
+    screen.text(Math.floor((screen.cols - 54) / 2), 45, 'F11 pantalla completa · F8 efectos CRT · F7 vista del partido', UI.textFaint);
 
-    if (input.hit('Enter') || input.hit(' ') || (input.mouse.clicked && startHover)) this.game.state = 'hub';
+    if (start || input.hit('Enter') || input.hit(' ')) this.game.state = 'hub';
+    if (erase) {
+      this.game.player = Player.resetSave();
+      this.diffCursor = 1;
+    }
+    if (goSlots) { this.pickingSlot = true; this.slotCursor = Player.activeSlot() - 1; }
     if (input.hit('b') || input.hit('B')) {
       this.game.player = Player.resetSave();
       this.diffCursor = 1;
@@ -74,15 +108,16 @@ export class TitleScreen {
 
   _drawSlotPicker() {
     const { screen, input } = this.game;
-    screen.textCenter(33, 'PERFILES DE PARTIDA', '#ffb347');
+    screen.textCenter(33, 'PERFILES DE PARTIDA', UI.accentHi);
     const w = 34, gap = 3, n = Player.SLOT_COUNT, total = n * w + (n - 1) * gap;
     const x0 = Math.floor((screen.cols - total) / 2);
+    let pick = false;
     for (let i = 0; i < n; i++) {
       const slot = i + 1;
       const x = x0 + i * (w + gap);
       const sel = i === this.slotCursor;
       const active = slot === Player.activeSlot();
-      screen.box(x, 35, w, 7, sel ? '#7CFC00' : '#8a7f66', sel ? 'double' : undefined);
+      if (this._card(x, 35, w, 7, sel, false)) { this.slotCursor = i; pick = true; }
       screen.text(x + 2, 36, `PERFIL ${slot}${active ? ' (activo)' : ''}`, active ? '#ffe14d' : sel ? '#fff' : '#c9c2a8');
       const summary = Player.slotSummary(slot);
       if (summary) {
@@ -100,7 +135,7 @@ export class TitleScreen {
     if (input.hit('Escape')) { this.pickingSlot = false; input.pressed.Escape = false; }
     if (input.hit('e') || input.hit('E')) this._exportSlot(this.slotCursor + 1);
     if (input.hit('i') || input.hit('I')) this._importSlot(this.slotCursor + 1);
-    if (input.hit('Enter') || input.hit(' ')) {
+    if (pick || input.hit('Enter') || input.hit(' ')) {
       const slot = this.slotCursor + 1;
       if (slot !== Player.activeSlot()) {
         Player.switchSlot(slot);
@@ -163,18 +198,18 @@ export class TitleScreen {
   // cambia para no prometer un desbloqueo que esa edición no puede cumplir.
   _drawCountryPicker() {
     const { screen, input } = this.game;
-    screen.textCenter(30, '¿DESDE QUÉ PAÍS EMPEZAMOS?', '#ffb347');
-    screen.textCenter(31, EDITION === 'demo'
+    screen.textCenter(31, '¿DESDE QUÉ PAÍS EMPEZAMOS?', UI.accentHi);
+    screen.textCenter(32, EDITION === 'demo'
       ? 'el resto de países están disponibles en la versión completa'
-      : 'el resto se desbloquea al ganar la primera Copa de Europa', '#8a7f66');
+      : 'el resto se desbloquea al ganar la primera Copa de Europa', UI.textDim);
     const w = 20, gap = 2, total = PICKABLE_COUNTRIES.length * w + (PICKABLE_COUNTRIES.length - 1) * gap;
     const x0 = Math.floor((screen.cols - total) / 2);
+    let pick = false;
     PICKABLE_COUNTRIES.forEach((code, i) => {
       const x = x0 + i * (w + gap);
       const sel = i === this.countryCursor;
       const unlocked = MetaProgress.isCountryUnlocked(code);
-      const boxCol = !unlocked ? '#4a453a' : sel ? '#7CFC00' : '#8a7f66';
-      screen.box(x, 34, w, 7, boxCol, sel && unlocked ? 'double' : undefined);
+      if (this._card(x, 34, w, 7, sel, !unlocked)) { this.countryCursor = i; pick = true; }
       const label = countryLabel(code);
       screen.text(x + Math.max(0, Math.floor((w - label.length) / 2)), 36, label, !unlocked ? '#6a6355' : sel ? '#ffe680' : '#c9c2a8');
       if (!unlocked) screen.text(x + Math.floor((w - 9) / 2), 38, 'BLOQUEADO', '#8a5a3a');
@@ -183,7 +218,7 @@ export class TitleScreen {
 
     if (input.hit('ArrowLeft')) this.countryCursor = (this.countryCursor + PICKABLE_COUNTRIES.length - 1) % PICKABLE_COUNTRIES.length;
     if (input.hit('ArrowRight')) this.countryCursor = (this.countryCursor + 1) % PICKABLE_COUNTRIES.length;
-    if (input.hit('Enter') || input.hit(' ')) {
+    if (pick || input.hit('Enter') || input.hit(' ')) {
       const code = PICKABLE_COUNTRIES[this.countryCursor];
       if (MetaProgress.isCountryUnlocked(code)) {
         this.selectedCountry = code;
@@ -204,16 +239,16 @@ export class TitleScreen {
     const country = this.selectedCountry;
     const cities = citiesFor(country);
     const maxSel = MetaProgress.maxSelectableLevel(country);
-    screen.textCenter(30, `¿EN QUÉ CIUDAD DE ${countryLabel(country).toUpperCase()} EMPEZAMOS?`, '#ffb347');
-    screen.textCenter(31, 'las demás se desbloquean subiendo de categoría en otras partidas', '#8a7f66');
+    screen.textCenter(31, `¿EN QUÉ CIUDAD DE ${countryLabel(country).toUpperCase()} EMPEZAMOS?`, UI.accentHi);
+    screen.textCenter(32, 'las demás se desbloquean subiendo de categoría en otras partidas', UI.textDim);
     const w = 15, gap = 1, total = cities.length * w + (cities.length - 1) * gap;
     const x0 = Math.floor((screen.cols - total) / 2);
+    let pick = false;
     cities.forEach((c, i) => {
       const x = x0 + i * (w + gap);
       const sel = i === this.cityCursor;
       const unlocked = c.diff <= maxSel;
-      const boxCol = !unlocked ? '#4a453a' : sel ? '#7CFC00' : '#8a7f66';
-      screen.box(x, 35, w, 7, boxCol, sel && unlocked ? 'double' : undefined);
+      if (this._card(x, 35, w, 7, sel, !unlocked)) { this.cityCursor = i; pick = true; }
       screen.text(x + Math.floor((w - String(c.diff).length) / 2), 36, `${c.diff}`, !unlocked ? '#6a6355' : sel ? '#ffe680' : '#c9c2a8');
       wrapText(c.name, w - 2).slice(0, 2).forEach((l, k) => screen.text(x + 1, 38 + k, l, !unlocked ? '#5a5347' : sel ? '#fff' : '#9a927a'));
       if (!unlocked) screen.text(x + Math.floor((w - 9) / 2), 40, 'BLOQUEADA', '#8a5a3a');
@@ -223,7 +258,7 @@ export class TitleScreen {
     if (input.hit('ArrowLeft')) this.cityCursor = (this.cityCursor + cities.length - 1) % cities.length;
     if (input.hit('ArrowRight')) this.cityCursor = (this.cityCursor + 1) % cities.length;
     if (input.hit('Escape')) { this.countryChosen = false; input.pressed.Escape = false; }
-    if (input.hit('Enter') || input.hit(' ')) {
+    if (pick || input.hit('Enter') || input.hit(' ')) {
       const city = cities[this.cityCursor];
       if (city.diff <= maxSel) {
         this._confirmCountryAndCity(country, city.diff);
@@ -270,13 +305,14 @@ export class TitleScreen {
 
   _drawDifficultyPicker() {
     const { screen, input, player } = this.game;
-    screen.textCenter(33, '¿CON QUÉ DIFICULTAD EMPEZAMOS?', '#ffb347');
+    screen.textCenter(33, '¿CON QUÉ DIFICULTAD EMPEZAMOS?', UI.accentHi);
     const w = 36, gap = 2, total = DIFFICULTIES.length * w + (DIFFICULTIES.length - 1) * gap;
     const x0 = Math.floor((screen.cols - total) / 2);
+    let pick = false;
     DIFFICULTIES.forEach((d, i) => {
       const x = x0 + i * (w + gap);
       const sel = i === this.diffCursor;
-      screen.box(x, 35, w, 8, sel ? '#7CFC00' : '#8a7f66', sel ? 'double' : undefined);
+      if (this._card(x, 35, w, 8, sel, false)) { this.diffCursor = i; pick = true; }
       screen.text(x + Math.floor((w - d.name.length) / 2), 36, d.name, sel ? '#ffe680' : '#c9c2a8');
       wrapText(d.desc, w - 4).forEach((l, k) => screen.text(x + 2, 38 + k, l, '#9a927a'));
     });
@@ -287,7 +323,7 @@ export class TitleScreen {
     if (input.hit('ArrowLeft')) this.diffCursor = (this.diffCursor + DIFFICULTIES.length - 1) % DIFFICULTIES.length;
     if (input.hit('ArrowRight')) this.diffCursor = (this.diffCursor + 1) % DIFFICULTIES.length;
     if (input.hit('d') || input.hit('D')) { player.debugMode = !player.debugMode; player.save(); }
-    if (input.hit('Enter') || input.hit(' ')) {
+    if (pick || input.hit('Enter') || input.hit(' ')) {
       const d = DIFFICULTIES[this.diffCursor];
       player.difficulty = d.id;
       player.money = Math.round(player.money * d.moneyMult);

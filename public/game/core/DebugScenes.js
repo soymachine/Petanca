@@ -14,7 +14,7 @@ const PLAIN = ['title', 'hub', 'agenda', 'penya', 'club', 'leaguemap', 'bar', 'c
 
 // ids de escena disponibles (tools/shots.mjs los recorre todos)
 export const SCENE_IDS = [
-  ...PLAIN, 'agenda-decision', 'agenda-train', 'penya-detail', 'penya-mercado', 'penya-ojeadores', 'penya-panteon', 'club-facilities', 'club-sponsor', 'club-junta', 'bar-amuletos', 'bar-consumibles', 'eurocup', 'lineup', 'press', 'result',
+  ...PLAIN, 'title-menu', 'ayuda-codigo', 'agenda-decision', 'agenda-train', 'penya-detail', 'penya-mercado', 'penya-ojeadores', 'penya-panteon', 'club-facilities', 'club-sponsor', 'club-junta', 'bar-amuletos', 'bar-consumibles', 'eurocup', 'lineup', 'press', 'result',
   'match-aim', 'match-power', 'match-flight', 'match-settled', 'match-measure',
   'train-arrime', 'fx-demo',
 ];
@@ -84,6 +84,13 @@ export function applySceneFromUrl(game) {
 
   if (PLAIN.includes(id)) {
     game.state = id;
+  } else if (id === 'title-menu') {
+    // portada de una partida ya empezada (sin selectores de partida nueva)
+    game.player.difficultyChosen = true;
+    game.state = 'title';
+  } else if (id === 'ayuda-codigo') {
+    game.screens.ayuda.page = 1;
+    game.state = 'ayuda';
   } else if (id === 'agenda-decision') {
     game.decisionEvent = { event: DECISION_EVENTS[0], ctx: { abueloId: game.player.roster.ids[0] } };
     game.state = 'agenda';

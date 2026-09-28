@@ -9,13 +9,14 @@
 - **Rama de trabajo:** `claude/petanca-rules-comparison-jb587u` (reiniciada
   desde `main` en `46bc963`). `main` queda estable mientras dura el
   rediseño; se fusiona cuando el usuario lo pida.
-- **Fase en curso:** Fase 4 — pantallas de gestión (la 3 está hecha salvo
-  la repetición a cámara lenta, que queda como mejora opcional).
-- **SIGUIENTE PASO CONCRETO:** Capítulos / Hemeroteca / Ayuda / Portada
-  (`screens/CapitulosScreen.js`, `HemerotecaScreen.js`, `AyudaScreen.js`,
-  `TitleScreen.js`): `titleBand`, tarjetas y fondos de fila; Ayuda con el
-  código visual (stats, clima, tiros) de theme.js. Luego cerrar Fase 4 y
-  pasar a Fase 5 (tutorial de controles nuevos, ajustes en pantalla, audio).
+- **Fase en curso:** Fase 5 — pulido (Fases 0-4 hechas; en la 3 queda
+  como mejora opcional la repetición a cámara lenta).
+- **SIGUIENTE PASO CONCRETO:** Fase 5 — pantalla de AJUSTES dentro del
+  juego (bloom, scanlines, sacudidas, transiciones, reducir movimiento,
+  vista del partido; hoy solo hay teclas F7/F8), accesible desde la
+  Portada y desde Ayuda. Después: tutorial del primer partido con los
+  controles nuevos (onboarding de HubScreen), audio, rendimiento y
+  revisión de builds demo/full.
 - **Último commit relevante:** (se rellena en cada commit)
 
 ## Visión
@@ -323,8 +324,24 @@ dinámico sin perder profundidad**.
       derecha; bolas/amuletos/consumibles con la tarjeta elegida en doble
       marco verde y fondo teñido. Escenas `club-facilities`,
       `club-sponsor`, `club-junta`, `bar-amuletos`, `bar-consumibles`.
-- [ ]
-      [ ] Capítulos / Hemeroteca / Ayuda / Portada
+- [x] Portada (`screens/TitleScreen.js` + `ui/TitleScene.js`): escena
+      arcade animada a todo lo ancho (atardecer con sol retro a rayas,
+      silueta del pueblo con campanario y ventanas encendidas, pista de
+      albero en perspectiva con grava tipográfica, bola que se lanza en
+      bucle con estela, sombra, polvo y rodadura hasta el boliche; foto
+      fija si está congelado o con reducir movimiento). Sustituye a la
+      foto ASCII. Logo con resplandor; tarjeta del club + botón grande
+      EMPEZAR; PERFILES / BORRAR como botones; selectores de país, ciudad,
+      dificultad y perfil como tarjetas clicables. Escena `title-menu`.
+- [x] Ayuda (`screens/AyudaScreen.js`): índice de temas clicable a la
+      izquierda y el tema a la derecha; dos páginas nuevas dibujadas:
+      EL PARTIDO: CONTROLES (ratón/dedo, teclado, tipos de tiro con su
+      glifo y color, teclas globales) y EL CÓDIGO DE COLORES (5 stats con
+      glifo/color/medidor/qué hacen, climas con sus efectos, símbolos,
+      colores). Escena `ayuda-codigo`.
+- [x] Capítulos (`screens/CapitulosScreen.js`): títulos de sección en
+      píxeles (`pixelTitle`). Hemeroteca se queda como está: ya tiene su
+      propia cabecera de periódico en bloques.
 
 ### Fase 5 — Pulido
 - [ ] Tutorial del primer partido con controles nuevos · [ ] Audio ·
@@ -350,7 +367,8 @@ dinámico sin perder profundidad**.
 | 2026-09-28 | 356a906 | Fase 4: Agenda como tablero + paneles opacos |
 | 2026-09-28 | 098cffd | Fase 4: Mi Peña reskin + pestañas/títulos/modales transversales |
 | 2026-09-28 | 9c69e85 | Fase 4: Ligas y Copa de Europa |
-| 2026-09-28 | (este) | Fase 4: El Club y El Bar |
+| 2026-09-28 | e2fda22 | Fase 4: El Club y El Bar |
+| 2026-09-28 | (este) | Fase 4: Portada animada, Ayuda con código visual, Capítulos |
 
 ## Problemas conocidos / notas
 

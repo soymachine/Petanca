@@ -1,4 +1,5 @@
 import { TabsBar } from './TabsBar.js';
+import { pixelTitle } from '../ui/widgets.js';
 import { RIVALRY_PAIRS } from '../data/rivalries.js';
 import { STAT_LABEL } from '../data/abuelos.js';
 import { wrapText, truncate, drawTabRow, hitRect } from '../core/utils.js';
@@ -33,7 +34,7 @@ export class CapitulosScreen {
 
   _drawCapitulos() {
     const { screen, input, player } = this.game;
-    screen.textCenter(6, '═══ CAPÍTULOS DE LA CAMPAÑA ═══', '#ffb347');
+    pixelTitle(screen, 6, 'CAPÍTULOS DE LA CAMPAÑA');
     const chapters = player.campaign.list();
     const done = chapters.filter((c) => c.done).length;
     screen.textCenter(7, `${done} / ${chapters.length} completados`, '#9a927a');
@@ -131,7 +132,7 @@ export class CapitulosScreen {
 
   _drawSalonDeLaFama() {
     const { screen, player } = this.game;
-    screen.textCenter(6, '═══ SALÓN DE LA FAMA ═══', '#ffb347');
+    pixelTitle(screen, 6, 'SALÓN DE LA FAMA');
 
     const CONTENT_X = 6, CONTENT_W = 128;
     screen.text(CONTENT_X, 8, 'PALMARÉS DEL CLUB', '#ffb347');
@@ -202,7 +203,7 @@ export class CapitulosScreen {
   // de toda la carrera), aquí se ve temporada a temporada qué pasó
   _drawHistoricos() {
     const { screen, input, player } = this.game;
-    screen.textCenter(6, '═══ HISTÓRICOS — TEMPORADAS ANTERIORES ═══', '#ffb347');
+    pixelTitle(screen, 6, 'HISTÓRICOS — TEMPORADAS ANTERIORES');
 
     const boxX = 10, boxY = 9, boxW = 120, boxH = 33;
     screen.box(boxX, boxY, boxW, boxH, '#8a7f66');
@@ -248,7 +249,7 @@ export class CapitulosScreen {
   // vestuario (celos entre dos abuelos concretos si ambos están fichados)
   _drawRivalidades() {
     const { screen, player } = this.game;
-    screen.textCenter(6, '═══ RIVALIDADES ═══', '#ffb347');
+    pixelTitle(screen, 6, 'RIVALIDADES');
 
     screen.box(6, 9, 60, 18, '#8a7f66');
     screen.text(9, 10, 'EL DERBI', '#ffb347');

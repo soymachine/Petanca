@@ -140,3 +140,14 @@ export function titleBand(screen, title, { y = 3, right = null, color = UI.accen
   // ancho aproximado que ocupa el título, para colocar cosas a su derecha
   return Math.ceil(title.length * 1.5 / 0.56 * 0.6) + x;
 }
+
+// título centrado en píxeles (más grande que una fila de texto) en la fila y
+export function pixelTitle(screen, y, text, color = UI.accent, scale = 1.3) {
+  screen.layer('over', (c, R) => {
+    c.textAlign = 'center'; c.textBaseline = 'middle';
+    c.font = `bold ${R.ch * scale}px "Menlo", "Consolas", "DejaVu Sans Mono", monospace`;
+    c.fillStyle = color; c.shadowColor = color; c.shadowBlur = R.ch * 0.5;
+    c.fillText(text, R.W / 2, R.cy(y + 0.5));
+    c.shadowBlur = 0;
+  });
+}
