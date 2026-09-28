@@ -13,8 +13,8 @@ export const UI = {
   edge: '#8a7f66',        // borde de panel por defecto
   edgeDim: '#4a4538',
   text: '#e8e0c8',
-  textDim: '#8a8474',
-  textFaint: '#5a5448',
+  textDim: '#9a9484',     // ~6:1 sobre el fondo (antes #8a8474)
+  textFaint: '#7a7466',   // ~4:1: pistas y ayudas siguen legibles (antes #5a5448, ~2.5:1)
   accent: '#ffb347',      // ámbar: lo interactivo / seleccionado
   accentHi: '#ffe680',
   focusBg: '#3a2a10',     // fondo de lo seleccionado

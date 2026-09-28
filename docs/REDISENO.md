@@ -9,14 +9,16 @@
 - **Rama de trabajo:** `claude/petanca-rules-comparison-jb587u` (reiniciada
   desde `main` en `46bc963`). `main` queda estable mientras dura el
   rediseño; se fusiona cuando el usuario lo pida.
-- **Fase en curso:** Fase 5 — pulido (Fases 0-4 hechas; en la 3 queda
-  como mejora opcional la repetición a cámara lenta).
-- **SIGUIENTE PASO CONCRETO:** Fase 5 — revisar las builds demo y full
-  (`node tools/build-editions.mjs demo|full` y abrir `dist/demo` con
-  `tools/serve-dist.mjs`): que la Portada, Ajustes, Ayuda y el partido
-  arcade funcionen en demo (sin Europa ni países); y accesibilidad
-  (contraste de textos tenues `UI.textFaint`, tamaño mínimo de letra a
-  1280×720, todo usable solo con teclado).
+- **Fase en curso:** plan completo (Fases 0-5 hechas). Quedan mejoras
+  opcionales listadas en el siguiente paso.
+- **SIGUIENTE PASO CONCRETO:** el plan de 5 fases está completo. Opcional,
+  por orden de impacto: (1) repetición a cámara lenta de la mano decisiva
+  (Fase 3, `M.trail`/`M.decisive` ya existen); (2) llevar el sonido y el
+  "juice" también a la vista clásica cenital (`screens/MatchScreen.js`);
+  (3) pasar Hemeroteca y Temporada/Game Over (`SeasonEndScreen`,
+  `GameOverScreen`) a los widgets. Pedir al usuario que lo pruebe en su
+  máquina (run-full.command) y recoger sus impresiones antes de fusionar
+  con main.
 - **Último commit relevante:** (se rellena en cada commit)
 
 ## Visión
@@ -366,7 +368,16 @@ dinámico sin perder profundidad**.
       Bench headless sin GPU a 1920×1080 (sin bloom): match-aim 23.5 → 7 ms,
       match-flight 24 → 1.5 ms (congelado). El tutorial se colocó entre la
       columna del clima y el minimapa, con el texto partido en dos líneas.
-- [ ] Accesibilidad · [ ] Builds demo/full revisadas
+- [x] Accesibilidad: textos tenues con más contraste sobre el fondo
+      (`UI.textFaint` 2.6:1 → 4.2:1, `UI.textDim` 5.2:1 → 6.4:1); todo lo
+      nuevo se usa también solo con teclado; "reducir movimiento" corta
+      sacudidas, transiciones, destellos, flashes de la prensa, la
+      animación de la Portada y las del Resultado.
+- [x] Builds demo/full revisadas: `tools/shots.mjs --edition=demo` captura
+      la build demo (36 escenas sin errores de JS; la Portada dice "en la
+      versión completa"). `shots.mjs` usa ahora un puerto al azar: un
+      servidor viejo colgado en el puerto fijo hacía que se capturase otra
+      edición sin avisar.
 - [x] Pantalla de AJUSTES (`screens/AjustesScreen.js`, estado `ajustes`,
       escena `?scene=ajustes`): vista del partido ARCADE/CLÁSICA,
       resplandor, líneas CRT, sacudidas, transiciones, reducir movimiento,
@@ -401,7 +412,8 @@ dinámico sin perder profundidad**.
 | 2026-09-28 | cf0fe9f | Fase 5: pantalla de Ajustes (F9) |
 | 2026-09-28 | 8d60317 | Fase 5: tutorial de controles del partido arcade |
 | 2026-09-28 | 9063187 | Fase 5: audio sintetizado |
-| 2026-09-28 | (este) | Fase 5: fondo 3D cacheado con la cámara quieta |
+| 2026-09-28 | f1b7134 | Fase 5: fondo 3D cacheado con la cámara quieta |
+| 2026-09-28 | (este) | Fase 5: contraste, build demo revisada, shots con puerto al azar |
 
 ## Problemas conocidos / notas
 

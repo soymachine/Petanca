@@ -26,7 +26,9 @@ const { SCENE_IDS } = await import(pathToFileURL(join(ROOT, 'public/game/core/De
 const scenes = args.scenes ? String(args.scenes).split(',') : SCENE_IDS;
 const sizes = (args.sizes ? String(args.sizes) : '1280x720,1920x1080,2560x1440,1024x768').split(',');
 const outDir = resolve(args.out ? String(args.out) : join(tmpdir(), 'petanka-shots'));
-const PORT = 4399;
+// puerto al azar en cada ejecución: si quedara un servidor viejo colgado en
+// un puerto fijo, las capturas saldrían de él (de otra edición) sin avisar
+const PORT = 4400 + Math.floor(Math.random() * 1000);
 const extraQuery = args.query ? `&${args.query}` : '';
 
 function findChrome() {
@@ -43,10 +45,12 @@ function findChrome() {
   throw new Error('no se encontró Chromium/Chrome');
 }
 
-if (!args['no-build']) execFileSync('node', [join(ROOT, 'tools/build-editions.mjs'), 'full'], { stdio: 'ignore' });
+// --edition=demo captura la build demo (por defecto, la full)
+const EDITION = args.edition === 'demo' ? 'demo' : 'full';
+if (!args['no-build']) execFileSync('node', [join(ROOT, 'tools/build-editions.mjs'), EDITION], { stdio: 'ignore' });
 mkdirSync(outDir, { recursive: true });
 
-const server = spawn('node', [join(ROOT, 'tools/serve-dist.mjs'), join(ROOT, 'dist/full'), String(PORT)], { stdio: 'ignore' });
+const server = spawn('node', [join(ROOT, 'tools/serve-dist.mjs'), join(ROOT, `dist/${EDITION}`), String(PORT)], { stdio: 'ignore' });
 await new Promise((r) => setTimeout(r, 600));
 
 const chrome = findChrome();
