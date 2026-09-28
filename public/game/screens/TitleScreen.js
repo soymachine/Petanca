@@ -88,10 +88,12 @@ export class TitleScreen {
     screen.text(cx0 + 12, 35, `${player.money}€   ·   ${player.wins}G ${player.losses}P   ·   perfil ${Player.activeSlot()}/${Player.SLOT_COUNT}`, UI.textDim);
     const start = bigButton(this.game, Math.floor((screen.cols - 50) / 2), 38, 50, '▶  EMPEZAR A JUGAR  [ENTER]', { tone: TONE.good, selected: frame % 40 < 26 });
     const canErase = player.wins + player.losses > 0;
-    const bx = Math.floor((screen.cols - (canErase ? 46 : 20)) / 2);
+    const bx = Math.floor((screen.cols - (canErase ? 68 : 42)) / 2);
     const goSlots = button(this.game, bx, 42, '[P] PERFILES', { w: 20 });
-    const erase = canErase && button(this.game, bx + 22, 42, '[B] BORRAR PARTIDA', { w: 24, tone: TONE.bad });
-    screen.text(Math.floor((screen.cols - 54) / 2), 45, 'F11 pantalla completa · F8 efectos CRT · F7 vista del partido', UI.textFaint);
+    const goSettings = button(this.game, bx + 22, 42, '[F9] AJUSTES', { w: 20, tone: TONE.info });
+    const erase = canErase && button(this.game, bx + 44, 42, '[B] BORRAR PARTIDA', { w: 24, tone: TONE.bad });
+    screen.textCenter(45, 'F11 pantalla completa · F9 ajustes · F8 efectos CRT · F7 vista del partido', UI.textFaint);
+    if (goSettings) this.game.screens.ajustes.open('title');
 
     if (start || input.hit('Enter') || input.hit(' ')) this.game.state = 'hub';
     if (erase) {

@@ -4,7 +4,7 @@ import { CLIMAS } from '../data/climas.js';
 import { STAT_KEYS } from '../data/abuelos.js';
 import { hitRect, truncate } from '../core/utils.js';
 import { UI, TONE, STAT, SHOT, WEATHER_FX } from '../ui/theme.js';
-import { panel, titleBand, meter } from '../ui/widgets.js';
+import { panel, titleBand, meter, button } from '../ui/widgets.js';
 
 // dos páginas "dibujadas" (no solo texto) delante de las de siempre: los
 // controles del partido arcade y el código visual de todo el juego
@@ -42,6 +42,8 @@ export class AyudaScreen {
       screen.text(SIDE_X + 4, y, truncate(t.title, SIDE_W - 6), sel ? UI.accentHi : i < 2 ? TONE.info : UI.text);
       if (over && input.mouse.clicked) this.page = i;
     });
+
+    if (button(this.game, SIDE_X + 2, BOX_Y + BOX_H - 2, '[F9] AJUSTES', { w: SIDE_W - 4, tone: TONE.info })) this.game.screens.ajustes.open('ayuda');
 
     // el tema
     const topic = TOPICS[this.page];

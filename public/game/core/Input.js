@@ -19,7 +19,7 @@ export class Input {
     };
 
     window.addEventListener('keydown', (e) => {
-      if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', ' ', 'Tab', 'F8', 'F11'].includes(e.key)) e.preventDefault();
+      if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', ' ', 'Tab', 'F3', 'F7', 'F8', 'F9', 'F11'].includes(e.key)) e.preventDefault();
       if (!this.keys[e.key]) this.pressed[e.key] = true;
       this.keys[e.key] = true;
     });

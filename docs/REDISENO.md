@@ -11,12 +11,12 @@
   rediseño; se fusiona cuando el usuario lo pida.
 - **Fase en curso:** Fase 5 — pulido (Fases 0-4 hechas; en la 3 queda
   como mejora opcional la repetición a cámara lenta).
-- **SIGUIENTE PASO CONCRETO:** Fase 5 — pantalla de AJUSTES dentro del
-  juego (bloom, scanlines, sacudidas, transiciones, reducir movimiento,
-  vista del partido; hoy solo hay teclas F7/F8), accesible desde la
-  Portada y desde Ayuda. Después: tutorial del primer partido con los
-  controles nuevos (onboarding de HubScreen), audio, rendimiento y
-  revisión de builds demo/full.
+- **SIGUIENTE PASO CONCRETO:** Fase 5 — tutorial del primer partido con
+  los controles nuevos: en la primera mano de un partido de liga (o en el
+  onboarding de HubScreen) carteles cortos sobre la vista arcade: "mueve el
+  ratón para apuntar", "mantén pulsado", "suelta en el tramo dorado",
+  "TAB / fichas = tipo de tiro"; que se recuerde en Player (visto una vez).
+  Después: audio, rendimiento de la escena 3D y builds demo/full.
 - **Último commit relevante:** (se rellena en cada commit)
 
 ## Visión
@@ -346,6 +346,14 @@ dinámico sin perder profundidad**.
 ### Fase 5 — Pulido
 - [ ] Tutorial del primer partido con controles nuevos · [ ] Audio ·
       [ ] Rendimiento · [ ] Accesibilidad · [ ] Builds demo/full revisadas
+- [x] Pantalla de AJUSTES (`screens/AjustesScreen.js`, estado `ajustes`,
+      escena `?scene=ajustes`): vista del partido ARCADE/CLÁSICA,
+      resplandor, líneas CRT, sacudidas, transiciones, reducir movimiento,
+      contador de FPS y pantalla completa, con interruptores clicables,
+      ↑↓/ENTER/←→ y botón PROBAR EFECTOS [T]. Se abre con F9 desde
+      cualquier pantalla menos en partido (F9 otra vez o ESC vuelve a donde
+      se estaba), con botones en la Portada y en Ayuda. F3/F7/F8/F9/F11 ya
+      no llegan al navegador (preventDefault).
 
 ## Registro de commits
 
@@ -368,7 +376,8 @@ dinámico sin perder profundidad**.
 | 2026-09-28 | 098cffd | Fase 4: Mi Peña reskin + pestañas/títulos/modales transversales |
 | 2026-09-28 | 9c69e85 | Fase 4: Ligas y Copa de Europa |
 | 2026-09-28 | e2fda22 | Fase 4: El Club y El Bar |
-| 2026-09-28 | (este) | Fase 4: Portada animada, Ayuda con código visual, Capítulos |
+| 2026-09-28 | 8414e29 | Fase 4: Portada animada, Ayuda con código visual, Capítulos |
+| 2026-09-28 | (este) | Fase 5: pantalla de Ajustes (F9) |
 
 ## Problemas conocidos / notas
 

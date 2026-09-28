@@ -51,6 +51,7 @@ import { ResultScreen } from '../screens/ResultScreen.js';
 import { SeasonEndScreen } from '../screens/SeasonEndScreen.js';
 import { GameOverScreen } from '../screens/GameOverScreen.js';
 import { EuropeanCupScreen } from '../screens/EuropeanCupScreen.js';
+import { AjustesScreen } from '../screens/AjustesScreen.js';
 import { StyleScreen } from '../screens/StyleScreen.js';
 
 const COLS = 140, ROWS = 46;
@@ -129,6 +130,7 @@ export class Game {
       gameover: new GameOverScreen(this),
       eurocup: new EuropeanCupScreen(this),
       estilo: new StyleScreen(this), // hoja de estilo viva (?scene=estilo)
+      ajustes: new AjustesScreen(this), // F9 desde cualquier pantalla (menos en partido)
     };
 
     // ?scene=<id>[&freeze=1]: arrancar directamente en una pantalla o
@@ -1037,6 +1039,12 @@ export class Game {
 
     if (this.input.hit('F3')) this.showFps = !this.showFps;
     // F8: efectos CRT (resplandor + líneas de barrido) · F11: pantalla completa
+    // F9: ajustes (y otra vez F9 para volver); en pleno partido no, que
+    // cortaría la mano a medias
+    if (this.input.hit('F9') && this.state !== 'match') {
+      if (this.state === 'ajustes') this.state = this.screens.ajustes.returnTo;
+      else this.screens.ajustes.open(this.state);
+    }
     if (this.input.hit('F8')) { const on = !Settings.get('bloom'); Settings.set('bloom', on); Settings.set('scanlines', on); }
     if (this.input.hit('F11') && typeof document !== 'undefined') {
       if (document.fullscreenElement) document.exitFullscreen();

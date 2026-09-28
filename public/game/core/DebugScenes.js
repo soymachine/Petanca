@@ -10,7 +10,7 @@ import { DECISION_EVENTS } from '../data/decisionEvents.js';
 import { Settings } from './Settings.js';
 
 // pantallas que solo necesitan cambiar de estado (id de escena = estado)
-const PLAIN = ['title', 'hub', 'agenda', 'penya', 'club', 'leaguemap', 'bar', 'capitulos', 'hemeroteca', 'ayuda', 'estilo'];
+const PLAIN = ['title', 'ajustes', 'hub', 'agenda', 'penya', 'club', 'leaguemap', 'bar', 'capitulos', 'hemeroteca', 'ayuda', 'estilo'];
 
 // ids de escena disponibles (tools/shots.mjs los recorre todos)
 export const SCENE_IDS = [
