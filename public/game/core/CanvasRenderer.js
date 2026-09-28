@@ -35,6 +35,7 @@ const BLOCK = {
   '▖': [[0, 0.5, 0.5, 1]], '▗': [[0.5, 0.5, 1, 1]], '▘': [[0, 0, 0.5, 0.5]], '▝': [[0.5, 0, 1, 0.5]],
   '▁': [[0, 7 / 8, 1, 1]], '▂': [[0, 6 / 8, 1, 1]], '▃': [[0, 5 / 8, 1, 1]], '▅': [[0, 3 / 8, 1, 1]],
   '▆': [[0, 2 / 8, 1, 1]], '▇': [[0, 1 / 8, 1, 1]], '▏': [[0, 0, 1 / 8, 1]], '▕': [[7 / 8, 0, 1, 1]],
+  '▎': [[0, 0, 2 / 8, 1]], '▍': [[0, 0, 3 / 8, 1]], '▋': [[0, 0, 5 / 8, 1]], '▊': [[0, 0, 6 / 8, 1]], '▉': [[0, 0, 7 / 8, 1]],
 };
 const SHADE = { '░': 0.25, '▒': 0.5, '▓': 0.75 };
 
@@ -218,7 +219,15 @@ export class CanvasRenderer {
         const col = colors[i] || '#556';
         const bg = bgs[i];
         const phase = SHADE[g] !== undefined ? ((c + r) & 1) + 2 * (r & 1) : 0;
-        const key = lowHalf ? `~${bg || ''}` : `${g}\u0001${col}\u0001${bg || ''}\u0001${phase}`;
+        // borde de panel con fondo: el trazo pasa por el CENTRO de la celda,
+        // así que solo se rellena el lado que da al interior (el vecino con
+        // el mismo fondo) — si no, el relleno asoma media celda por fuera
+        let bgMask = 15;
+        if (bg && BOX[g]) {
+          bgMask = (c > 0 && bgs[i - 1] === bg ? 1 : 0) | (c < cols - 1 && bgs[i + 1] === bg ? 2 : 0)
+            | (r > 0 && bgs[i - cols] === bg ? 4 : 0) | (r < rows - 1 && bgs[i + cols] === bg ? 8 : 0);
+        }
+        const key = lowHalf ? `~${bg || ''}` : `${g}\u0001${col}\u0001${bg || ''}\u0001${phase}\u0001${bgMask}`;
         if (key === prev[i]) continue;
         prev[i] = key;
         const x = c * cw, y = r * ch;
@@ -229,7 +238,16 @@ export class CanvasRenderer {
           continue;
         }
         t.clearRect(x, y, cw * span, ch);
-        if (bg) { t.fillStyle = bg; t.fillRect(x, y, cw * span, ch); }
+        if (bg) {
+          t.fillStyle = bg;
+          if (bgMask === 15) t.fillRect(x, y, cw * span, ch);
+          else {
+            const hx = Math.floor(cw / 2), hy = Math.floor(ch / 2);
+            const fx0 = bgMask & 1 ? 0 : hx, fx1 = bgMask & 2 ? cw : hx;
+            const fy0 = bgMask & 4 ? 0 : hy, fy1 = bgMask & 8 ? ch : hy;
+            if (fx1 > fx0 && fy1 > fy0) t.fillRect(x + fx0, y + fy0, fx1 - fx0, fy1 - fy0);
+          }
+        }
         if (g !== ' ') {
           const img = this._glyph(g, col, null, span, phase);
           t.drawImage(img.canvas, x, y);

@@ -51,6 +51,7 @@ import { ResultScreen } from '../screens/ResultScreen.js';
 import { SeasonEndScreen } from '../screens/SeasonEndScreen.js';
 import { GameOverScreen } from '../screens/GameOverScreen.js';
 import { EuropeanCupScreen } from '../screens/EuropeanCupScreen.js';
+import { StyleScreen } from '../screens/StyleScreen.js';
 
 const COLS = 140, ROWS = 46;
 const calendar = new Calendar();
@@ -127,6 +128,7 @@ export class Game {
       seasonEnd: new SeasonEndScreen(this),
       gameover: new GameOverScreen(this),
       eurocup: new EuropeanCupScreen(this),
+      estilo: new StyleScreen(this), // hoja de estilo viva (?scene=estilo)
     };
 
     // ?scene=<id>[&freeze=1]: arrancar directamente en una pantalla o
