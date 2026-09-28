@@ -11,10 +11,10 @@
   rediseño; se fusiona cuando el usuario lo pida.
 - **Fase en curso:** Fase 4 — pantallas de gestión (la 3 está hecha salvo
   la repetición a cámara lenta, que queda como mejora opcional).
-- **SIGUIENTE PASO CONCRETO:** Resultado (`screens/ResultScreen.js`,
-  escena `?scene=result`): marcador final grande, estadísticas que se
-  animan al entrar, XP/nivel subiendo con medidor, dinero con signo
-  correcto (arreglar el "+-5€" heredado), noticias del partido en tarjetas.
+- **SIGUIENTE PASO CONCRETO:** Agenda (`screens/AgendaScreen.js`, escena
+  `?scene=agenda`): calendario de la semana/mes como tablero de juego,
+  cada día con icono de su evento (liga, Copa, Europa, entreno, festivo),
+  el día de hoy resaltado y el próximo partido destacado.
 - **Último commit relevante:** (se rellena en cada commit)
 
 ## Visión
@@ -266,7 +266,15 @@ dinámico sin perder profundidad**.
       las 5 respuestas como cartas con MORAL / RIESGO (castigo si perdéis)
       / IMAGEN (humilde ↔ chulería) en medidores; debajo, qué pasará con
       la elegida. ←→ o 1-5, ENTER, ratón (pasar elige, clic responde).
-- [ ] Resultado · [ ] Agenda ·
+- [x] Resultado (`screens/ResultScreen.js`): VICTORIA/DERROTA entra de
+      golpe, marcador enorme que cuenta entre los dos escudos, confeti y
+      destello al ganar (Fx), tarjeta por abuelo con XP llenando su barra de
+      nivel y MVP, "LA CAJA DEL PARTIDO" con asientos que aparecen uno a
+      uno (dinero con signo correcto: arreglado el "+-5€"), barra de
+      RENOMBRE del club y botón CONTINUAR. Congelado/reducir movimiento =
+      estado final directo. La escena `result` se inventa un marcador (al
+      simular no se apunta).
+- [ ] Agenda ·
       [ ] Mi Peña · [ ] Ligas / Copa de Europa · [ ] El Club · [ ] El Bar ·
       [ ] Capítulos / Hemeroteca / Ayuda / Portada
 
@@ -289,7 +297,8 @@ dinámico sin perder profundidad**.
 | 2026-09-28 | dc23f9f | Fase 3: vista arcade en perspectiva + controles de gesto (tras ?nuevo=1 / F7) |
 | 2026-09-28 | 17dd160 | Fase 3: juice, visibilidad por clima, clima 3D, arcade por defecto |
 | 2026-09-28 | 724e5c1 | Fase 4: Inicio rediseñado |
-| 2026-09-28 | (este) | Fase 4: Alineación + Prensa rediseñadas, escena `press` |
+| 2026-09-28 | 0e182a2 | Fase 4: Alineación + Prensa rediseñadas, escena `press` |
+| 2026-09-28 | (este) | Fase 4: Resultado rediseñado |
 
 ## Problemas conocidos / notas
 
@@ -310,5 +319,5 @@ dinámico sin perder profundidad**.
   piedras lejanas.
 - Las escenas `match-*` se capturan ya con la vista arcade (por defecto);
   `tools/shots.mjs --query=nuevo=0` para la clásica.
-- Detalle heredado visto en `result`: "+-5€" cuando el premio es negativo
+- (Resuelto) Detalle heredado visto en `result`: "+-5€" cuando el premio es negativo
   (cosmético, ResultScreen) — arreglar en Fase 4.

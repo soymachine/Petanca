@@ -97,6 +97,10 @@ export function applySceneFromUrl(game) {
   } else if (id === 'result') {
     game._startWeeklyMatch();
     game.simulateMatch();
+    // simular no apunta marcador ni quién jugó (lo hace Match al jugarse):
+    // se inventa uno coherente para que la pantalla salga completa
+    const ctx = game.weeklyMatch, o = game.outcome;
+    if (ctx && o && !ctx.results.length) ctx.recordRoundResult(o.won, o.won ? 13 : 9, o.won ? 8 : 13, game.player.roster.ids.slice(0, 1));
   } else if (id.startsWith('match-')) {
     startLeagueMatch(game);
     const M = game.match;
