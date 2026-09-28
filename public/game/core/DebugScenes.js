@@ -14,7 +14,7 @@ const PLAIN = ['title', 'ajustes', 'hub', 'agenda', 'penya', 'club', 'leaguemap'
 
 // ids de escena disponibles (tools/shots.mjs los recorre todos)
 export const SCENE_IDS = [
-  ...PLAIN, 'title-menu', 'ayuda-codigo', 'agenda-decision', 'agenda-train', 'penya-detail', 'penya-mercado', 'penya-ojeadores', 'penya-panteon', 'club-facilities', 'club-sponsor', 'club-junta', 'bar-amuletos', 'bar-consumibles', 'eurocup', 'lineup', 'press', 'result',
+  ...PLAIN, 'title-menu', 'season-end', 'gameover', 'ayuda-codigo', 'agenda-decision', 'agenda-train', 'penya-detail', 'penya-mercado', 'penya-ojeadores', 'penya-panteon', 'club-facilities', 'club-sponsor', 'club-junta', 'bar-amuletos', 'bar-consumibles', 'eurocup', 'lineup', 'press', 'result',
   'match-aim', 'match-power', 'match-flight', 'match-settled', 'match-measure',
   'train-arrime', 'fx-demo',
 ];
@@ -88,6 +88,12 @@ export function applySceneFromUrl(game) {
     // portada de una partida ya empezada (sin selectores de partida nueva)
     game.player.difficultyChosen = true;
     game.state = 'title';
+  } else if (id === 'season-end') {
+    game.seasonEndInfo = { rank: 1, cityName: game.player.league.cityName, promoted: true, relegated: false, awards: [{ stat: 'pulso', id: game.player.roster.ids[0] }, { stat: 'temple', id: game.player.roster.ids[0] }] };
+    game.state = 'seasonEnd';
+  } else if (id === 'gameover') {
+    game.player.negativeWeeksStreak = 6;
+    game.state = 'gameover';
   } else if (id === 'ayuda-codigo') {
     game.screens.ayuda.page = 1;
     game.state = 'ayuda';

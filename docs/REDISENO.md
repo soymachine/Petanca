@@ -15,8 +15,8 @@
   por orden de impacto: (1) repetición a cámara lenta de la mano decisiva
   (Fase 3, `M.trail`/`M.decisive` ya existen); (2) llevar el sonido y el
   "juice" también a la vista clásica cenital (`screens/MatchScreen.js`);
-  (3) pasar Hemeroteca y Temporada/Game Over (`SeasonEndScreen`,
-  `GameOverScreen`) a los widgets. Pedir al usuario que lo pruebe en su
+  (3) Hemeroteca a los widgets (ya tiene su cabecera de periódico).
+  Pedir al usuario que lo pruebe en su
   máquina (run-full.command) y recoger sus impresiones antes de fusionar
   con main.
 - **Último commit relevante:** (se rellena en cada commit)
@@ -386,6 +386,11 @@ dinámico sin perder profundidad**.
       cualquier pantalla menos en partido (F9 otra vez o ESC vuelve a donde
       se estaba), con botones en la Portada y en Ayuda. F3/F7/F8/F9/F11 ya
       no llegan al navegador (preventDefault).
+- [x] Fin de temporada y Game Over (`SeasonEndScreen`, `GameOverScreen`):
+      títulos en píxeles, veredicto grande (campeones / ascenso /
+      descenso), premios de la peña como tarjetas con el glifo y color de
+      su stat, confeti al celebrar, balance en panel y botón grande.
+      Escenas `season-end` y `gameover`.
 
 ## Registro de commits
 
@@ -413,7 +418,8 @@ dinámico sin perder profundidad**.
 | 2026-09-28 | 8d60317 | Fase 5: tutorial de controles del partido arcade |
 | 2026-09-28 | 9063187 | Fase 5: audio sintetizado |
 | 2026-09-28 | f1b7134 | Fase 5: fondo 3D cacheado con la cámara quieta |
-| 2026-09-28 | (este) | Fase 5: contraste, build demo revisada, shots con puerto al azar |
+| 2026-09-28 | 569e2c6 | Fase 5: contraste, build demo revisada, shots con puerto al azar |
+| 2026-09-28 | (este) | Fase 5: fin de temporada y Game Over |
 
 ## Problemas conocidos / notas
 
