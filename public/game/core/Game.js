@@ -2,6 +2,7 @@ import { Screen } from './Screen.js';
 import { Input } from './Input.js';
 import { CanvasRenderer } from './CanvasRenderer.js';
 import { Settings } from './Settings.js';
+import { Fx } from './Fx.js';
 import { TARGET } from '../physics/constants.js';
 import { Geography } from '../data/geography.js';
 import { PHOTO_BANNER } from '../data/art/photoBanner.js';
@@ -64,8 +65,12 @@ export class Game {
     this.input = new Input(screenEl, COLS, ROWS);
     // renderer Neo-ASCII a pantalla completa (docs/REDISENO.md, Fase 1);
     // sin canvas (tests headless) Screen.render() no dibuja nada
+    // efectos (partículas, sacudidas, rótulos, transiciones): las pantallas
+    // los piden con this.game.fx.burst(...) etc. — ver core/Fx.js
+    this.fx = new Fx();
     if (screenEl && screenEl.getContext) {
       this.renderer = new CanvasRenderer(screenEl, this.screen);
+      this.renderer.fx = this.fx;
       this.input.setMapper((x, y) => this.renderer.clientToCell(x, y));
     }
     this.geography = new Geography(286, 92);
@@ -1042,6 +1047,13 @@ export class Game {
     // pocos frames — rápido, pero visible en la mini-agenda en vez de
     // saltar la temporada entera de golpe en un solo frame
     if (this.simulating && this.state !== 'match' && this.frame % 4 === 0) this.debugAdvanceOneDay();
+
+    this.fx.update(Math.min(0.1, dtReal));
+    // al cambiar de pantalla, la nueva destapa a la anterior (Fx.beginTransition)
+    if (this.state !== this._prevState) {
+      if (this._prevState && this.renderer) this.fx.beginTransition(this.renderer.snapshot());
+      this._prevState = this.state;
+    }
 
     const screen = this.screens[this.state];
     if (this.state === 'match' && !this.frozen) screen.update(dt);

@@ -15,7 +15,7 @@ const PLAIN = ['title', 'hub', 'agenda', 'penya', 'club', 'leaguemap', 'bar', 'c
 export const SCENE_IDS = [
   ...PLAIN, 'eurocup', 'lineup', 'result',
   'match-aim', 'match-power', 'match-flight', 'match-settled', 'match-measure',
-  'train-arrime',
+  'train-arrime', 'fx-demo',
 ];
 
 const DT = 1 / 60;
@@ -109,6 +109,17 @@ export function applySceneFromUrl(game) {
       autoplay(game, (m) => m.phase === 'measuring' && m.phaseT > 0.9);
     }
     if (!M) game.state = 'hub';
+  } else if (id === 'fx-demo') {
+    // efectos de core/Fx.js disparados justo antes de la captura (el
+    // harness captura a los ~2.5 s de tiempo virtual)
+    game.state = 'hub';
+    setTimeout(() => {
+      game.fx.burst(40, 20, { n: 40, colors: ['#ffe14d', '#ff8c5b', '#fff3c4'], speed: 16 });
+      game.fx.burst(100, 30, { n: 30, color: '#4fc3f7', speed: 10, glyph: '·' });
+      game.fx.float(70, 34, '+150€', '#7ec850', { size: 2 });
+      game.fx.banner('¡CARREAU!', '#ffe14d', { sub: 'la bola rival sale disparada y la tuya se queda en su sitio', life: 3 });
+      game.fx.shake(1);
+    }, 2150);
   } else if (id === 'train-arrime') {
     game.startPractice(game.player.roster.ids[0], 'ARRIME');
     autoplay(game, (m) => m.phase === 'aim');

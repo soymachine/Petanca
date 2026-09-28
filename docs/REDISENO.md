@@ -9,10 +9,11 @@
 - **Rama de trabajo:** `claude/petanca-rules-comparison-jb587u` (reiniciada
   desde `main` en `46bc963`). `main` queda estable mientras dura el
   rediseño; se fusiona cuando el usuario lo pida.
-- **Fase en curso:** Fase 1 — motor de render Neo-ASCII.
-- **SIGUIENTE PASO CONCRETO:** `core/Fx.js` (partículas, sacudida,
-  destellos, texto flotante, transiciones entre pantallas) enganchado a
-  `renderer.fx` — ver Fase 1, casilla 5.
+- **Fase en curso:** Fase 2 — sistema visual y código visual de mecánicas.
+- **SIGUIENTE PASO CONCRETO:** `ui/theme.js` (tokens, stats, clima) +
+  `ui/widgets.js` (panel, botón, medidor, chip de stat, insignia,
+  tooltip) + escena `?scene=estilo`; después `box()` global con relleno de
+  panel y la nueva `TabsBar`.
 - **Último commit relevante:** (se rellena en cada commit)
 
 ## Visión
@@ -137,8 +138,14 @@ dinámico sin perder profundidad**.
       `mouse.fx/fy` fraccionarios (celdas) además de `cx/cy`,
       `mouse.downFx/downFy` y `mouse.released` (para el gesto de Fase 3),
       cursor propio dibujado en píxeles por el renderer.
-- [ ] `core/Fx.js`: partículas, sacudida, destellos, texto flotante,
-      transiciones entre pantallas, bloom/scanlines opcionales.
+- [x] `core/Fx.js` (`game.fx`, coordenadas en celdas): `burst(x,y,{n,
+      color|colors,speed,life,gravity,spread,angle,size,glyph})`,
+      `float(x,y,texto,color,{size,life,rise})`, `banner(texto,color,{sub,
+      life,size})`, `shake(0..2)`, `flash(color,alpha,life)`. Transición
+      automática al cambiar `game.state` (frente diagonal con lluvia de
+      glifos que destapa la pantalla nueva sobre una copia de la anterior,
+      `renderer.snapshot()`). Respeta `Settings` (reduceMotion, shake,
+      transitions). Escena `?scene=fx-demo` para verlo en captura.
 - [~] Ajustes: `core/Settings.js` (`petanka-ajustes` en localStorage:
       bloom, scanlines, shake, transitions, reduceMotion; `Settings.motion(k)`
       respeta reducir movimiento). Falta una pantalla/panel de ajustes
@@ -181,7 +188,8 @@ dinámico sin perder profundidad**.
 |---|---|---|
 | 2026-09-28 | b72c332 | Fase 0: documento vivo + CLAUDE.md |
 | 2026-09-28 | a89ddba | Fase 0: escenas `?scene=`, `tools/shots.mjs`, capturas "antes" |
-| 2026-09-28 | (este) | Fase 1: renderer canvas a pantalla completa, Input pointer, Settings, harness con errores JS y bench |
+| 2026-09-28 | 642c8a1 | Fase 1: renderer canvas a pantalla completa, Input pointer, Settings, harness con errores JS y bench |
+| 2026-09-28 | (este) | Fase 1: core/Fx.js + transiciones entre pantallas |
 
 ## Problemas conocidos / notas
 

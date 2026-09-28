@@ -77,6 +77,8 @@ export class CanvasRenderer {
     this._glyphs = new Map(); // caché de glifos: se invalida al cambiar el tamaño de celda
     this.W = W; this.H = H;
     this.font = `${fontPx}px ${FONT_STACK}`;
+    this.fontFamily = FONT_STACK;
+    this.screenRows = rows;
     this._bloom.width = Math.max(1, Math.round(W / 8)); this._bloom.height = Math.max(1, Math.round(H / 8));
     this._bloomFrame = -1;
     this.bloomAutoOff = false; this._avgMs = undefined; this._samples = 0;
@@ -88,6 +90,14 @@ export class CanvasRenderer {
     this._prevKeys = new Array(cols * rows).fill(null);
     this._ambient = this._makeAmbient();
     this._scan = this._makeScanlines();
+  }
+
+  // copia del último frame pintado (para la transición entre pantallas)
+  snapshot() {
+    const c = document.createElement('canvas');
+    c.width = this.W; c.height = this.H;
+    c.getContext('2d').drawImage(this.canvas, 0, 0);
+    return c;
   }
 
   // píxel de dispositivo del borde izquierdo/superior de una celda
