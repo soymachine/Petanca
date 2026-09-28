@@ -89,7 +89,12 @@ export class Camera {
 
   update(dt, reduceMotion = false) {
     const k = reduceMotion ? 1 : 1 - Math.exp(-this.speed * dt);
-    for (const key of ['x', 'l', 'z', 'hz', 'zoom']) this[key] = lerp(this[key], this.target[key], k);
+    for (const key of ['x', 'l', 'z', 'hz', 'zoom']) {
+      // al llegar (casi) al plano se clava en él: así la cámara queda quieta
+      // de verdad y PerspectiveCourt puede reutilizar el fondo ya pintado
+      const v = lerp(this[key], this.target[key], k);
+      this[key] = Math.abs(v - this.target[key]) < 1e-3 ? this.target[key] : v;
+    }
   }
 
   // salto instantáneo al plano objetivo (al entrar al partido, capturas)

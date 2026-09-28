@@ -11,12 +11,12 @@
   rediseño; se fusiona cuando el usuario lo pida.
 - **Fase en curso:** Fase 5 — pulido (Fases 0-4 hechas; en la 3 queda
   como mejora opcional la repetición a cámara lenta).
-- **SIGUIENTE PASO CONCRETO:** Fase 5 — rendimiento de la escena 3D
-  (`match/view/PerspectiveCourt.js`, ~20 ms/frame sin GPU a 1920×1080):
-  cachear cielo+skyline+suelo+grava en un canvas fuera de pantalla mientras
-  la cámara no se mueva (clave: parámetros de cámara + tamaño), y medir con
-  `node tools/shots.mjs --bench --scenes=match-aim,match-flight`. Después
-  revisar builds demo/full (`tools/build-editions.mjs`) y accesibilidad.
+- **SIGUIENTE PASO CONCRETO:** Fase 5 — revisar las builds demo y full
+  (`node tools/build-editions.mjs demo|full` y abrir `dist/demo` con
+  `tools/serve-dist.mjs`): que la Portada, Ajustes, Ayuda y el partido
+  arcade funcionen en demo (sin Europa ni países); y accesibilidad
+  (contraste de textos tenues `UI.textFaint`, tamaño mínimo de letra a
+  1280×720, todo usable solo con teclado).
 - **Último commit relevante:** (se rellena en cada commit)
 
 ## Visión
@@ -358,7 +358,15 @@ dinámico sin perder profundidad**.
       primer gesto (política de los navegadores). AJUSTES: Sonido sí/no y
       Volumen 25/50/75/100 % (`Settings.sound`, `Settings.volume`). Sin
       WebAudio (Node) es un no-op.
-- [ ] Rendimiento · [ ] Accesibilidad · [ ] Builds demo/full revisadas
+- [x] Rendimiento: la parte estática de la escena 3D (cielo, pueblo,
+      suelo, ~1100 piedras y líneas) se pinta una vez en un lienzo aparte
+      cuando la cámara está quieta y se copia de golpe
+      (`PerspectiveCourt._drawStatic`); la cámara se clava en su plano al
+      llegar (`Camera.update`) para que "quieta" sea quieta de verdad.
+      Bench headless sin GPU a 1920×1080 (sin bloom): match-aim 23.5 → 7 ms,
+      match-flight 24 → 1.5 ms (congelado). El tutorial se colocó entre la
+      columna del clima y el minimapa, con el texto partido en dos líneas.
+- [ ] Accesibilidad · [ ] Builds demo/full revisadas
 - [x] Pantalla de AJUSTES (`screens/AjustesScreen.js`, estado `ajustes`,
       escena `?scene=ajustes`): vista del partido ARCADE/CLÁSICA,
       resplandor, líneas CRT, sacudidas, transiciones, reducir movimiento,
@@ -392,7 +400,8 @@ dinámico sin perder profundidad**.
 | 2026-09-28 | 8414e29 | Fase 4: Portada animada, Ayuda con código visual, Capítulos |
 | 2026-09-28 | cf0fe9f | Fase 5: pantalla de Ajustes (F9) |
 | 2026-09-28 | 8d60317 | Fase 5: tutorial de controles del partido arcade |
-| 2026-09-28 | (este) | Fase 5: audio sintetizado |
+| 2026-09-28 | 9063187 | Fase 5: audio sintetizado |
+| 2026-09-28 | (este) | Fase 5: fondo 3D cacheado con la cámara quieta |
 
 ## Problemas conocidos / notas
 
@@ -407,10 +416,9 @@ dinámico sin perder profundidad**.
 - El scratchpad de sesiones anteriores se pierde al recrearse el
   contenedor: los tests útiles deben vivir en `tools/` (verify, shots).
 - Headless Chromium va SIN GPU: las cifras de `--bench` son el peor caso;
-  en un navegador normal el canvas va acelerado. La escena 3D cuesta ~20
-  ms/frame sin GPU (1920×1080): candidatos a optimizar si hiciera falta —
-  cachear suelo+grava en un canvas mientras la cámara no se mueva, menos
-  piedras lejanas.
+  en un navegador normal el canvas va acelerado. La escena 3D con la
+  cámara quieta ya va cacheada (~1.5-7 ms); en movimiento sigue costando
+  ~20 ms sin GPU — si hiciera falta, menos piedras lejanas.
 - Las escenas `match-*` se capturan ya con la vista arcade (por defecto);
   `tools/shots.mjs --query=nuevo=0` para la clásica.
 - (Resuelto) Detalle heredado visto en `result`: "+-5€" cuando el premio es negativo

@@ -83,10 +83,7 @@ export class PerspectiveCourt {
     ctx.save();
     ctx.beginPath(); ctx.rect(v.x, v.y, v.w, v.h); ctx.clip();
     const sky = SKY[M.weather.type] || SKY.SOL;
-    this._drawSky(ctx, cam, sky, M, t);
-    this._drawGround(ctx, cam, sky, M);
-    this._drawStones(ctx, cam, sky);
-    this._drawLines(ctx, cam);
+    this._drawStatic(ctx, cam, sky, M, t);
     this._drawFeatures(ctx, cam, M, t);
     if (M.training) this._drawTrainingMarks(ctx, cam, M, t);
     this._trackArc(M);
@@ -95,6 +92,37 @@ export class PerspectiveCourt {
     this._drawWeather(ctx, cam, M, t);
     this._drawFog(ctx, cam, sky, M);
     ctx.restore();
+  }
+
+  // cielo, pueblo, suelo, grava y líneas no dependen del tiempo, solo de la
+  // cámara, el tamaño, el clima y el terreno: con la cámara quieta (apuntar,
+  // esperar a la IA...) se pintan una vez en un lienzo aparte y luego se
+  // copian de golpe — lo más caro de la escena, sobre todo las ~1100
+  // piedras. Con la cámara en marcha se pinta directo, como antes.
+  _drawStatic(ctx, cam, sky, M, t) {
+    const v = cam.view;
+    const key = [Math.round(v.x), Math.round(v.y), Math.round(v.w), Math.round(v.h), cam.x, cam.l, cam.z, cam.hz, cam.zoom, M.weather.type, M.city && M.city.name].join('|');
+    const still = key === this._lastKey;
+    this._lastKey = key;
+    const paint = (c) => {
+      this._drawSky(c, cam, sky, M, t);
+      this._drawGround(c, cam, sky, M);
+      this._drawStones(c, cam, sky);
+      this._drawLines(c, cam);
+    };
+    if (!still || typeof document === 'undefined') { paint(ctx); return; }
+    if (this._bgKey !== key || this._bgCourt !== M.court) {
+      const w = Math.max(1, Math.ceil(v.w)), h = Math.max(1, Math.ceil(v.h));
+      if (!this._bg) this._bg = document.createElement('canvas');
+      if (this._bg.width !== w || this._bg.height !== h) { this._bg.width = w; this._bg.height = h; }
+      const c = this._bg.getContext('2d');
+      c.setTransform(1, 0, 0, 1, 0, 0);
+      c.clearRect(0, 0, w, h);
+      c.translate(-v.x, -v.y);
+      paint(c);
+      this._bgKey = key; this._bgCourt = M.court;
+    }
+    ctx.drawImage(this._bg, v.x, v.y);
   }
 
   _drawSky(ctx, cam, sky, M, t) {

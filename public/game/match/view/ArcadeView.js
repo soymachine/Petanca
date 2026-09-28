@@ -10,7 +10,7 @@
 // (beginPower/release, y ENTER sintético para el boliche y las pausas),
 // así que el partido se juega igual que con la vista clásica.
 import { CW, CH, THROW_X, BALL_R, JACK_R, ballsPerPlayer } from '../../physics/constants.js';
-import { dist2d } from '../../core/utils.js';
+import { dist2d, wrapText } from '../../core/utils.js';
 import { CLIMAS, isRainy } from '../../data/climas.js';
 import { STAT_KEYS, ABUELO_DATA } from '../../data/abuelos.js';
 import { drillFor } from '../../data/trainingDrills.js';
@@ -293,14 +293,16 @@ export class ArcadeView {
     const { screen } = this.game;
     const lines = this._coachUpdate(M, this.game.input);
     if (!lines) return;
-    const w = Math.max(...lines.map((l) => l.length)) + 8, h = 5;
-    // centrado en la zona libre a la izquierda del minimapa
-    const x = Math.max(2, Math.floor((96 - w) / 2)), y = VIEW_TOP + 4;
+    // en el cielo, entre la columna del clima (izquierda) y el minimapa
+    // (derecha): el texto largo se parte para caber en ese hueco
+    const body = wrapText(lines[1], 60);
+    const w = Math.max(lines[0].length, ...body.map((l) => l.length)) + 8, h = body.length + 4;
+    const x = Math.max(30, Math.floor((130 - w) / 2)), y = VIEW_TOP + 4;
     const pulse = frame % 30 < 20;
     panel(screen, x, y, w, h, { title: 'CÓMO SE JUEGA', tone: pulse ? UI.accent : UI.edge, titleColor: UI.accentHi, style: 'double', fill: '#12161f' });
     screen.text(x + 4, y + 1, lines[0], UI.accentHi);
     screen.glow(x + 4, y + 1, lines[0].length, 1);
-    screen.text(x + 4, y + 2, lines[1], UI.text);
+    body.forEach((l, i) => screen.text(x + 4, y + 2 + i, l, UI.text));
     screen.text(x + w - 18, y + h - 1, ' [H] no mostrar ', UI.textDim);
   }
 
