@@ -9,11 +9,10 @@
 - **Rama de trabajo:** `claude/petanca-rules-comparison-jb587u` (reiniciada
   desde `main` en `46bc963`). `main` queda estable mientras dura el
   rediseño; se fusiona cuando el usuario lo pida.
-- **Fase en curso:** Fase 2 — sistema visual y código visual de mecánicas.
-- **SIGUIENTE PASO CONCRETO:** `ui/theme.js` (tokens, stats, clima) +
-  `ui/widgets.js` (panel, botón, medidor, chip de stat, insignia,
-  tooltip) + escena `?scene=estilo`; después `box()` global con relleno de
-  panel y la nueva `TabsBar`.
+- **Fase en curso:** Fase 3 — partido arcade.
+- **SIGUIENTE PASO CONCRETO:** extraer `Match.release(power)` del caso
+  `'power'` de `Match.update` (falta de pie, sweet spot, ruido) para que
+  teclado y gesto lancen igual; después `match/view/Camera.js`.
 - **Último commit relevante:** (se rellena en cada commit)
 
 ## Visión
@@ -152,13 +151,29 @@ dinámico sin perder profundidad**.
       (de momento solo F8).
 
 ### Fase 2 — Sistema visual y código visual de mecánicas
-- [ ] `ui/theme.js`: tokens semánticos; color + glifo fijo por stat
-      (Pulso, Brazo, Maña, Temple, Aguante), clima y tipo de tiro.
-- [ ] `ui/widgets.js`: Panel, Botón, Pestañas, Medidor, Tarjeta, Insignia,
-      Tooltip. `TabsBar` → navegación de videojuego.
-- [ ] Lenguaje de mecánicas (fatiga desatura retrato, temple = latido,
-      pulso = temblor del retículo, chips de clima, afinidades).
-- [ ] Escena `?scene=estilo` (hoja de estilo viva).
+- [x] `ui/theme.js`: `UI` (superficies/texto/acento), `TONE` (player,
+      rival, jack, good, warn, bad, info, money, xp, gold), `STAT` (glifo +
+      color + qué hace: Pulso ◎ cian, Brazo ➤ naranja, Maña ∿ lila, Temple
+      ♥ rosa, Aguante ◆ verde), `statValueColor(v)`, `WEATHER_FX` (qué
+      cambia cada clima en la pista), `SHOT` (tipos de tiro para Fase 3:
+      arrimar/media/bombeo/tirar con loft y rol), y `mix/tint/desaturate`.
+- [x] `ui/widgets.js`: `panel`, `button` (1 fila, hover/selected/disabled,
+      devuelve true al activarse), `bigButton` (3-4 filas, pulsa), `meter`
+      (octavos de celda), `segments`, `statChip`, `statBar`, `badge`,
+      `tooltip` (se recoloca dentro de pantalla).
+- [x] `screen.box()` rellena el interior como panel por defecto (7º arg
+      `fill`, `null` = solo marco) → todas las pantallas con aspecto de
+      tarjeta; el renderer solo rellena la mitad interior de las celdas de
+      borde.
+- [x] `TabsBar` rediseñada: franja de cabecera, icono por sección
+      (⌂☰☺♜★⚑✦✉?), activa con fondo teñido + brillo + subrayado grueso,
+      dinero como insignia. Mismas teclas.
+- [~] Lenguaje de mecánicas en pantallas concretas (fatiga desatura
+      retrato, temple = latido, pulso = temblor del retículo, chips de
+      clima, afinidades): se aplica al rediseñar cada pantalla (HUD del
+      partido en Fase 3; alineación, Mi Peña… en Fase 4) usando theme.js.
+- [x] Escena `?scene=estilo` (`screens/StyleScreen.js`, hoja de estilo viva;
+      [F] rótulo, [B] chispas, [S] sacudida).
 
 ### Fase 3 — Partido arcade
 - [ ] Extraer `Match.release(power)` (falta de pie, sweet spot, ruido) —
@@ -189,7 +204,10 @@ dinámico sin perder profundidad**.
 | 2026-09-28 | b72c332 | Fase 0: documento vivo + CLAUDE.md |
 | 2026-09-28 | a89ddba | Fase 0: escenas `?scene=`, `tools/shots.mjs`, capturas "antes" |
 | 2026-09-28 | 642c8a1 | Fase 1: renderer canvas a pantalla completa, Input pointer, Settings, harness con errores JS y bench |
-| 2026-09-28 | (este) | Fase 1: core/Fx.js + transiciones entre pantallas |
+| 2026-09-28 | 194a2b1 | Fase 1: core/Fx.js + transiciones entre pantallas |
+| 2026-09-28 | 4336869 | Fase 2: theme.js, widgets.js, hoja de estilo |
+| 2026-09-28 | 0613c06 | Fase 2: box() con relleno de panel |
+| 2026-09-28 | (este) | Fase 2: nueva barra de navegación |
 
 ## Problemas conocidos / notas
 

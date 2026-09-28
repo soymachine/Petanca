@@ -1,41 +1,56 @@
 import { hitRect } from '../core/utils.js';
+import { UI, TONE, tint } from '../ui/theme.js';
 
-// Barra de pestañas compartida por (casi) todas las pantallas del juego,
-// incluida la portada, para que el menú esté siempre a mano.
+// Barra de navegación compartida por (casi) todas las pantallas del juego
+// (filas 0-2). Rediseño Neo-ASCII (docs/REDISENO.md, Fase 2): franja de
+// cabecera con fondo propio, un icono por sección, la activa resaltada con
+// fondo teñido, brillo y subrayado grueso; el dinero como insignia a la
+// derecha. Mismas teclas 1-9 / Tab / Esc de siempre.
+const HEADER_BG = '#141b28';
+
 export class TabsBar {
   static TABS = [
-    { id: 'hub', label: ' [1]INICIO ' },
-    { id: 'agenda', label: ' [2]AGENDA ' },
-    { id: 'penya', label: ' [3]MI PEÑA ' },
-    { id: 'club', label: ' [4]EL CLUB ' },
-    { id: 'leaguemap', label: ' [5]LIGAS ' },
-    { id: 'bar', label: ' [6]EL BAR ' },
-    { id: 'capitulos', label: ' [7]HISTORIA ' },
-    { id: 'hemeroteca', label: ' [8]HEMEROTECA ' },
-    { id: 'ayuda', label: ' [9]AYUDA ' },
+    { id: 'hub', key: '1', icon: '⌂', label: 'INICIO' },
+    { id: 'agenda', key: '2', icon: '☰', label: 'AGENDA' },
+    { id: 'penya', key: '3', icon: '☺', label: 'MI PEÑA' },
+    { id: 'club', key: '4', icon: '♜', label: 'EL CLUB' },
+    { id: 'leaguemap', key: '5', icon: '★', label: 'LIGAS' },
+    { id: 'bar', key: '6', icon: '⚑', label: 'EL BAR' },
+    { id: 'capitulos', key: '7', icon: '✦', label: 'HISTORIA' },
+    { id: 'hemeroteca', key: '8', icon: '✉', label: 'HEMEROTECA' },
+    { id: 'ayuda', key: '9', icon: '?', label: 'AYUDA' },
   ];
 
   static draw(game, active) {
     const { screen, input } = game;
-    let x = 4;
-    screen.put(2, 1, '║', '#8a7f66');
+    screen.fill(0, 0, screen.cols, 3, HEADER_BG);
+    for (let i = 0; i < screen.cols; i++) screen.put(i, 2, '─', UI.edgeDim);
+    let x = 2;
     const rects = [];
     for (const t of TabsBar.TABS) {
       const on = t.id === active;
-      const w = t.label.length + 2;
+      const w = t.label.length + 7;
       const over = hitRect(input.mouse.cx, input.mouse.cy, x, 0, w, 3);
       rects.push({ id: t.id, x, w });
-      const col = on ? '#ffb347' : over ? '#c9a35d' : '#5a5347';
-      const labelCol = on ? '#ffe680' : over ? '#ffe680' : '#8a7f66';
-      screen.text(x, 0, '┌' + '─'.repeat(t.label.length) + '┐', col);
-      screen.text(x, 1, '│', col);
-      screen.text(x + 1, 1, t.label, labelCol);
-      screen.text(x + 1 + t.label.length, 1, '│', col);
-      screen.text(x, 2, on ? '┘' + ' '.repeat(t.label.length) + '└' : '┴' + '─'.repeat(t.label.length) + '┴', col);
-      x += t.label.length + 1;
+      const bg = on ? tint(UI.accent, 0.26) : over ? tint(UI.accent, 0.12) : HEADER_BG;
+      screen.fill(x, 0, w, 3, bg);
+      screen.text(x + 1, 1, t.key, on ? UI.accent : UI.textFaint);
+      screen.put(x + 3, 1, t.icon, on ? UI.accentHi : over ? UI.accent : UI.textDim);
+      screen.text(x + 5, 1, t.label, on ? UI.accentHi : over ? UI.text : UI.textDim);
+      if (on) {
+        screen.glow(x + 3, 1, t.label.length + 2, 1);
+        for (let i = 0; i < w; i++) screen.put(x + i, 2, '▀', UI.accent);
+      } else if (over) {
+        for (let i = 0; i < w; i++) screen.put(x + i, 2, '▀', UI.edge);
+      }
+      x += w + 1;
     }
-    for (let i = x + 1; i < screen.cols - 2; i++) screen.put(i, 2, '─', '#5a5347');
-    screen.text(x + 2, 1, `${game.player.money}€`, '#8a7f66');
+    // dinero como insignia a la derecha
+    const money = `${game.player.money}€`;
+    const mx = Math.max(x + 1, screen.cols - money.length - 4);
+    const mcol = game.player.money < 0 ? TONE.bad : TONE.money;
+    screen.fill(mx, 0, money.length + 2, 3, tint(mcol, 0.16));
+    screen.text(mx + 1, 1, money, mcol);
 
     // modo Debugger simulando: indicador visible (y parable) desde
     // cualquier pantalla, no solo desde Inicio — para poder mirar ligas y
