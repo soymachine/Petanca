@@ -1,4 +1,5 @@
 import { Settings } from '../core/Settings.js';
+import { Audio } from '../core/Audio.js';
 import { hitRect } from '../core/utils.js';
 import { UI, TONE, tint } from '../ui/theme.js';
 import { panel, titleBand, button } from '../ui/widgets.js';
@@ -11,6 +12,9 @@ import { panel, titleBand, button } from '../ui/widgets.js';
 const OPTIONS = [
   { key: 'matchView', label: 'Vista del partido', kind: 'choice', values: [['arcade', 'ARCADE'], ['clasica', 'CLÁSICA']],
     desc: 'arcade: en perspectiva, detrás del lanzador · clásica: desde arriba (F7)' },
+  { key: 'sound', label: 'Sonido', desc: 'choques de bolas, albero, clics y fanfarrias (sintetizados, sin archivos)' },
+  { key: 'volume', label: 'Volumen', kind: 'choice', values: [[0.25, '25%'], [0.5, '50%'], [0.75, '75%'], [1, '100%']],
+    desc: 'volumen general de los sonidos' },
   { key: 'bloom', label: 'Resplandor', desc: 'brillo suave alrededor de lo luminoso (F8 junto con las líneas)' },
   { key: 'scanlines', label: 'Líneas CRT', desc: 'líneas de barrido muy tenues, como una tele de tubo' },
   { key: 'shake', label: 'Sacudidas', desc: 'la pantalla tiembla con los golpes fuertes (carreau, choques)' },
@@ -37,6 +41,7 @@ export class AjustesScreen {
 
   _toggle(opt, dir = 1) {
     const { game } = this;
+    Audio.play('click');
     if (opt.kind === 'choice') {
       const vals = opt.values.map(([v]) => v);
       const k = (vals.indexOf(Settings.get(opt.key)) + (dir > 0 ? 1 : vals.length - 1)) % vals.length;
@@ -69,7 +74,8 @@ export class AjustesScreen {
       // interruptor / selector a la derecha
       const sx = X + W - 22;
       if (opt.kind === 'choice') {
-        let cx = sx;
+        const cw = opt.values.reduce((n, [, label]) => n + label.length + 3, 0);
+        let cx = Math.min(sx, X + W - 2 - cw);
         for (const [v, label] of opt.values) {
           const on = Settings.get(opt.key) === v;
           screen.fill(cx, y, label.length + 2, 1, on ? tint(TONE.good, 0.35) : '#141a24');
@@ -90,6 +96,7 @@ export class AjustesScreen {
     // probar efectos al momento
     const by = Y0 + OPTIONS.length * ROW_H + 3;
     if (button(this.game, X, by, 'PROBAR EFECTOS', { hotkey: 'T', w: 26 })) {
+      Audio.play('clack');
       fx.shake(0.8);
       fx.burst(70, by - 6, { n: 40, colors: [TONE.gold, '#ff8c5b', '#fff3c4'], speed: 16 });
       fx.banner('¡CARREAU!', TONE.gold, { sub: 'así se ven los momentos fuertes' });

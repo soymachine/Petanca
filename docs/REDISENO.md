@@ -11,11 +11,12 @@
   rediseño; se fusiona cuando el usuario lo pida.
 - **Fase en curso:** Fase 5 — pulido (Fases 0-4 hechas; en la 3 queda
   como mejora opcional la repetición a cámara lenta).
-- **SIGUIENTE PASO CONCRETO:** Fase 5 — audio (sin archivos: sonidos
-  sintetizados con WebAudio en `core/Audio.js`: choque de bolas, caída en
-  albero, clic de UI, fanfarria de victoria; volumen y silencio en
-  AJUSTES; respetar que el navegador exige un gesto antes de sonar).
-  Después: rendimiento de la escena 3D y revisión de builds demo/full.
+- **SIGUIENTE PASO CONCRETO:** Fase 5 — rendimiento de la escena 3D
+  (`match/view/PerspectiveCourt.js`, ~20 ms/frame sin GPU a 1920×1080):
+  cachear cielo+skyline+suelo+grava en un canvas fuera de pantalla mientras
+  la cámara no se mueva (clave: parámetros de cámara + tamaño), y medir con
+  `node tools/shots.mjs --bench --scenes=match-aim,match-flight`. Después
+  revisar builds demo/full (`tools/build-editions.mjs`) y accesibilidad.
 - **Último commit relevante:** (se rellena en cada commit)
 
 ## Visión
@@ -349,8 +350,15 @@ dinámico sin perder profundidad**.
       → ③ carga la potencia → ④ ¡suelta!), [H] lo salta; se recuerda en el
       perfil (`Player.arcadeTutorialDone`, también lo ven una vez las
       partidas guardadas de antes). Check nuevo en `npm run verify` (21).
-- [ ] Audio ·
-      [ ] Rendimiento · [ ] Accesibilidad · [ ] Builds demo/full revisadas
+- [x] Audio (`core/Audio.js`): todo sintetizado con WebAudio, sin
+      archivos — choque metálico de bolas, caída en el albero (y el
+      boliche más ligero), punto dulce, punto para ti / para el rival,
+      fanfarria de victoria y lamento de derrota en el partido arcade;
+      clic en botones y pestañas de toda la interfaz. Se desbloquea con el
+      primer gesto (política de los navegadores). AJUSTES: Sonido sí/no y
+      Volumen 25/50/75/100 % (`Settings.sound`, `Settings.volume`). Sin
+      WebAudio (Node) es un no-op.
+- [ ] Rendimiento · [ ] Accesibilidad · [ ] Builds demo/full revisadas
 - [x] Pantalla de AJUSTES (`screens/AjustesScreen.js`, estado `ajustes`,
       escena `?scene=ajustes`): vista del partido ARCADE/CLÁSICA,
       resplandor, líneas CRT, sacudidas, transiciones, reducir movimiento,
@@ -383,7 +391,8 @@ dinámico sin perder profundidad**.
 | 2026-09-28 | e2fda22 | Fase 4: El Club y El Bar |
 | 2026-09-28 | 8414e29 | Fase 4: Portada animada, Ayuda con código visual, Capítulos |
 | 2026-09-28 | cf0fe9f | Fase 5: pantalla de Ajustes (F9) |
-| 2026-09-28 | (este) | Fase 5: tutorial de controles del partido arcade |
+| 2026-09-28 | 8d60317 | Fase 5: tutorial de controles del partido arcade |
+| 2026-09-28 | (este) | Fase 5: audio sintetizado |
 
 ## Problemas conocidos / notas
 

@@ -17,6 +17,7 @@ import { drillFor } from '../../data/trainingDrills.js';
 import { CONSUMABLES, CONSUMABLE_IDS, MAX_CONSUMABLES_PER_MATCH } from '../../data/consumables.js';
 import { clamp } from '../../core/utils.js';
 import { Settings } from '../../core/Settings.js';
+import { Audio } from '../../core/Audio.js';
 import { UI, TONE, STAT, SHOT, WEATHER_FX, tint } from '../../ui/theme.js';
 import { panel, statChip, segments, badge } from '../../ui/widgets.js';
 import { Camera } from './Camera.js';
@@ -157,10 +158,12 @@ export class ArcadeView {
     const prev = this._prev || {};
     const toCell = (b) => (b && b._screen && R ? { x: (b._screen.x - R.ox) / R.cw, y: (b._screen.y - R.oy) / R.ch } : null);
     if (M.lastLanded && !prev.landed && M.lastThrown) {
+      Audio.play(M.lastThrown === M.jack ? 'tick' : 'thud');
       const c = toCell(M.lastThrown);
       if (c) fx.burst(c.x, c.y, { n: 16, colors: ['#c9b98a', '#a89868', '#e8d8a8'], speed: 7, gravity: 12, life: 0.6, angle: -Math.PI / 2, spread: Math.PI * 1.2 });
     }
     if (M.lastCollision && !prev.coll && M.lastThrown) {
+      Audio.play('clack');
       const c = toCell(M.lastThrown);
       if (c) fx.burst(c.x, c.y, { n: 26, colors: ['#fff3c4', '#ffe14d', '#ffffff'], speed: 14, gravity: 10, life: 0.5 });
       fx.shake(0.7);
@@ -172,16 +175,19 @@ export class ArcadeView {
     if (M.phase === 'throwDone' && prev.phase === 'sim' && this._snap) { this._readPlay(M, this._snap); this._snap = null; }
     if (M.lastCollision && !prev.coll) this._slow = 0.55;
     if (M.phase === 'sim' && prev.phase === 'power' && M.lastReleaseSweet) {
+      Audio.play('sweet');
       fx.float(70, 30, '¡PUNTO DULCE!', TONE.gold, { size: 1.6, life: 1 });
       fx.flash('#ffe14d', 0.12, 0.2);
     }
     if (M.phase === 'roundEnd' && prev.phase !== 'roundEnd' && M.lastWinner) {
       const mine = M.lastWinner === 'P';
+      Audio.play(mine ? 'point' : 'pointRival');
       fx.banner(mine ? `¡+${M.lastPoints} PARA TI!` : `+${M.lastPoints} PARA ${M.rival.split(' ')[0]}`, mine ? TONE.good : TONE.rival, { life: 1.8, size: 3.2 });
       if (mine) fx.burst(70, 20, { n: 40, colors: [TONE.gold, TONE.good, '#ffffff'], speed: 18, life: 1 });
     }
     if (M.phase === 'matchEnd' && prev.phase !== 'matchEnd' && !M.training) {
       const won = M.scoreP >= M.target;
+      Audio.play(won ? 'win' : 'lose');
       fx.banner(won ? '¡VICTORIA!' : 'DERROTA', won ? TONE.gold : TONE.bad, { life: 3, size: 4.5, sub: `${M.scoreP} - ${M.scoreA}` });
       if (won) { fx.burst(40, 20, { n: 60, colors: [TONE.gold, '#ffffff', TONE.good], speed: 22, life: 1.4 }); fx.burst(100, 20, { n: 60, colors: [TONE.gold, '#ffffff', TONE.player], speed: 22, life: 1.4 }); }
     }

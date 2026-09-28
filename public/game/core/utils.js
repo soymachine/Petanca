@@ -1,4 +1,5 @@
 // Funciones puras compartidas por todo el juego.
+import { Audio } from './Audio.js';
 export const rnd = (a, b) => a + Math.random() * (b - a);
 export const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
 
@@ -99,7 +100,7 @@ export function drawTabRow(screen, input, x, y, labels, activeIndex, opts = {}) 
     if (screen.fill) screen.fill(cx, y, text.length, 1, isDisabled ? '#0e1117' : active ? '#3a2a10' : over ? '#1e2636' : '#141a24');
     screen.text(cx, y, text, col);
     if (active && screen.glow) screen.glow(cx + 2, y, labels[i].length, 1);
-    if (!isDisabled && over && input.mouse.clicked) clicked = i;
+    if (!isDisabled && over && input.mouse.clicked) { clicked = i; Audio.play('click'); }
     cx += text.length + gap;
   }
   return clicked;

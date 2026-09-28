@@ -9,6 +9,8 @@ const DEFAULTS = {
   transitions: true,  // barrido entre pantallas
   reduceMotion: false, // corta sacudidas, transiciones y partículas grandes
   matchView: 'arcade', // 'arcade' (perspectiva, Fase 3) | 'clasica' (cenital de siempre); F7 en partido
+  sound: true,         // sonidos sintetizados (core/Audio.js)
+  volume: 0.5,
 };
 
 function load() {

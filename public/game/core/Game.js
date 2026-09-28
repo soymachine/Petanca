@@ -51,6 +51,7 @@ import { ResultScreen } from '../screens/ResultScreen.js';
 import { SeasonEndScreen } from '../screens/SeasonEndScreen.js';
 import { GameOverScreen } from '../screens/GameOverScreen.js';
 import { EuropeanCupScreen } from '../screens/EuropeanCupScreen.js';
+import { Audio } from './Audio.js';
 import { AjustesScreen } from '../screens/AjustesScreen.js';
 import { StyleScreen } from '../screens/StyleScreen.js';
 
@@ -141,6 +142,7 @@ export class Game {
     // guardado. F7 alterna en pleno partido.
     const q = typeof location !== 'undefined' ? new URLSearchParams(location.search) : null;
     this.arcadeMatch = q && q.has('nuevo') ? q.get('nuevo') !== '0' : Settings.get('matchView') === 'arcade';
+    Audio.init();
     applySceneFromUrl(this);
   }
 

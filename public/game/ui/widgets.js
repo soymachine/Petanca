@@ -4,6 +4,7 @@
 // Los interactivos reciben `game` (screen + input) y devuelven true el
 // frame en que se activan (clic o tecla), como el resto del juego.
 import { UI, TONE, STAT, statValueColor, tint, mix } from './theme.js';
+import { Audio } from '../core/Audio.js';
 import { hitRect } from '../core/utils.js';
 
 // panel: relleno + borde + título incrustado en el borde superior
@@ -36,7 +37,9 @@ export function button(game, x, y, label, { hotkey = null, tone = UI.accent, w =
   screen.text(x + 2, y, text.slice(0, width - 3), fg);
   if (hot) screen.glow(x + 2, y, Math.min(text.length, width - 3), 1);
   if (disabled) return false;
-  return (over && input.mouse.clicked) || (hotkey ? input.hit(hotkey.toLowerCase()) || input.hit(hotkey.toUpperCase()) : false);
+  const go = (over && input.mouse.clicked) || (hotkey ? input.hit(hotkey.toLowerCase()) || input.hit(hotkey.toUpperCase()) : false);
+  if (go) Audio.play('click');
+  return go;
 }
 
 // botón grande de 3 filas, 4 con subtítulo (acciones principales: "JUGAR",
@@ -56,7 +59,9 @@ export function bigButton(game, x, y, w, label, { hotkey = null, tone = UI.accen
   if (hot) screen.glow(tx, y + 1, text.length, 1);
   if (sub) screen.text(x + Math.max(1, Math.floor((w - sub.length) / 2)), y + 2, sub.slice(0, w - 2), hot ? UI.text : UI.textDim);
   if (disabled) return false;
-  return (over && input.mouse.clicked) || (hotkey ? input.hit(hotkey) || input.hit(hotkey.toLowerCase()) : false);
+  const go = (over && input.mouse.clicked) || (hotkey ? input.hit(hotkey) || input.hit(hotkey.toLowerCase()) : false);
+  if (go) Audio.play('click');
+  return go;
 }
 
 // medidor horizontal suave (octavos de celda): value/max en w celdas
