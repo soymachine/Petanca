@@ -9,11 +9,11 @@
 - **Rama de trabajo:** `claude/petanca-rules-comparison-jb587u` (reiniciada
   desde `main` en `46bc963`). `main` queda estable mientras dura el
   rediseño; se fusiona cuando el usuario lo pida.
-- **Fase en curso:** Fase 3 — partido arcade.
-- **SIGUIENTE PASO CONCRETO:** "juice" del partido arcade: cámara lenta
-  y sacudida en el impacto, detección de carreau/biberón/boliche fuera con
-  rótulo, abuelo lanzador visible (silueta ASCII) y marcador animado;
-  después hacer la vista arcade la de por defecto (ajuste `matchView`).
+- **Fase en curso:** Fase 4 — pantallas de gestión (la 3 está hecha salvo
+  la repetición a cámara lenta, que queda como mejora opcional).
+- **SIGUIENTE PASO CONCRETO:** rediseñar el Hub (Inicio) con los widgets de
+  Fase 2: tarjetas grandes, "próximo evento" como botón grande de acción,
+  y el botón de AVANZAR DÍA protagonista.
 - **Último commit relevante:** (se rellena en cada commit)
 
 ## Visión
@@ -218,9 +218,22 @@ dinámico sin perder profundidad**.
       (filtrada/sintética) que recibe `Match.update`: ninguna regla cambia.
       Tipos de tiro (theme `SHOT` + BLOQUEAR): fijan `loft` y `role`.
       Probado en `npm run verify` (check "partido arcade").
-- [ ] Juice: carreau, biberón, boliche fuera, remontada, cámara lenta,
-      repetición, marcador animado.
-- [ ] Nueva vista por defecto (clásica disponible en Ajustes).
+- [x] Juice (`ArcadeView._juice/_readPlay`): polvo al caer, chispas +
+      sacudida + CÁMARA LENTA (0.3× durante 0.55 s, `timeScale`, nunca con
+      reducir movimiento) en los choques, "¡PUNTO DULCE!" + destello,
+      rótulos de CARREAU (tu bola queda donde estaba la rival que sacas),
+      BIBERÓN (pegada al boliche) y BOLICHE MOVIDO (también los del rival),
+      rótulo de mano ganada/perdida y de VICTORIA/DERROTA con confeti,
+      marcador que "salta" al cambiar. Abuelo lanzador en trazo de tiza
+      (boina, brazo que se carga con la potencia) en los planos de tiro.
+      Pendiente opcional: repetición a cámara lenta de la mano decisiva.
+- [x] Mecánica de visibilidad portada: niebla/lluvia/tormenta ocultan o
+      hacen parpadear bolas lejanas y el boliche (misma regla que la vista
+      clásica, `_visibility`), también en el minimapa. Lluvia, nieve,
+      calima y ráfagas en 3D a partir de `Weather.particles`.
+- [x] Vista arcade por defecto (`Settings.matchView = 'arcade'`); F7 en
+      partido alterna con la clásica y lo recuerda. `?nuevo=0/1` lo fuerza.
+      Tramo del punto dulce muy visible (blanco dorado con brillo y ▾).
 
 ### Fase 4 — Pantallas de gestión
 - [ ] Hub · [ ] Alineación + Prensa · [ ] Resultado · [ ] Agenda ·
@@ -243,7 +256,8 @@ dinámico sin perder profundidad**.
 | 2026-09-28 | 0613c06 | Fase 2: box() con relleno de panel |
 | 2026-09-28 | 0cbfee0 | Fase 2: nueva barra de navegación |
 | 2026-09-28 | 08fb1d5 | Fase 3: Match.release/beginPower + tools/replay-match.mjs |
-| 2026-09-28 | (este) | Fase 3: vista arcade en perspectiva + controles de gesto (tras ?nuevo=1 / F7) |
+| 2026-09-28 | dc23f9f | Fase 3: vista arcade en perspectiva + controles de gesto (tras ?nuevo=1 / F7) |
+| 2026-09-28 | (este) | Fase 3: juice, visibilidad por clima, clima 3D, arcade por defecto |
 
 ## Problemas conocidos / notas
 
@@ -262,7 +276,7 @@ dinámico sin perder profundidad**.
   ms/frame sin GPU (1920×1080): candidatos a optimizar si hiciera falta —
   cachear suelo+grava en un canvas mientras la cámara no se mueva, menos
   piedras lejanas.
-- `tools/shots.mjs --query=nuevo=1` captura las escenas de partido con la
-  vista arcade.
+- Las escenas `match-*` se capturan ya con la vista arcade (por defecto);
+  `tools/shots.mjs --query=nuevo=0` para la clásica.
 - Detalle heredado visto en `result`: "+-5€" cuando el premio es negativo
   (cosmético, ResultScreen) — arreglar en Fase 4.

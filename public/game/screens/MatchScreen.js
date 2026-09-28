@@ -7,6 +7,7 @@ import { CONSUMABLES, CONSUMABLE_IDS, MAX_CONSUMABLES_PER_MATCH } from '../data/
 import { clamp, dist2d } from '../core/utils.js';
 import { Sfx } from '../core/Sfx.js';
 import { ArcadeView } from '../match/view/ArcadeView.js';
+import { Settings } from '../core/Settings.js';
 
 export class MatchScreen {
   constructor(game) {
@@ -19,9 +20,10 @@ export class MatchScreen {
   update(dt) {
     const { match, input, player } = this.game;
     const prevPhase = this._prevMatchPhase;
-    if (input.hit('F7')) this.game.arcadeMatch = !this.game.arcadeMatch;
+    if (input.hit('F7')) { this.game.arcadeMatch = !this.game.arcadeMatch; Settings.set('matchView', this.game.arcadeMatch ? 'arcade' : 'clasica'); }
     match.tickFrame(this.game.frame);
-    match.update(dt, this.game.arcadeMatch ? this.arcade.input(dt) : input);
+    if (this.game.arcadeMatch) match.update(dt * this.arcade.timeScale(dt), this.arcade.input(dt));
+    else match.update(dt, input);
     if (prevPhase !== match.phase) {
       if ((prevPhase === 'power' || prevPhase === 'aiTurn') && match.phase === 'sim') {
         Sfx.throwSound();

@@ -8,6 +8,7 @@ const DEFAULTS = {
   shake: true,        // sacudidas de pantalla en golpes y momentos fuertes
   transitions: true,  // barrido entre pantallas
   reduceMotion: false, // corta sacudidas, transiciones y partículas grandes
+  matchView: 'arcade', // 'arcade' (perspectiva, Fase 3) | 'clasica' (cenital de siempre); F7 en partido
 };
 
 function load() {

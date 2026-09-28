@@ -9,9 +9,10 @@
 // No cambia ninguna regla: todo acaba en los mismos métodos de Match
 // (beginPower/release, y ENTER sintético para el boliche y las pausas),
 // así que el partido se juega igual que con la vista clásica.
-import { CW, CH, THROW_X, ballsPerPlayer } from '../../physics/constants.js';
-import { CLIMAS } from '../../data/climas.js';
-import { STAT_KEYS } from '../../data/abuelos.js';
+import { CW, CH, THROW_X, BALL_R, JACK_R, ballsPerPlayer } from '../../physics/constants.js';
+import { dist2d } from '../../core/utils.js';
+import { CLIMAS, isRainy } from '../../data/climas.js';
+import { STAT_KEYS, ABUELO_DATA } from '../../data/abuelos.js';
 import { drillFor } from '../../data/trainingDrills.js';
 import { CONSUMABLES, CONSUMABLE_IDS, MAX_CONSUMABLES_PER_MATCH } from '../../data/consumables.js';
 import { clamp } from '../../core/utils.js';
@@ -36,6 +37,34 @@ export class ArcadeView {
     this._match = null;
     this._lastMouse = { fx: -1, fy: -1 };
     this._t = 0;
+  }
+
+  // cámara lenta: factor de tiempo para Match.update (solo la vista arcade;
+  // lo pide _juice en los choques). Nunca con "reducir movimiento".
+  timeScale(dt) {
+    if (!this._slow || Settings.get('reduceMotion')) return 1;
+    this._slow = Math.max(0, this._slow - dt);
+    return this._slow > 0 ? 0.3 : 1;
+  }
+
+  // Visibilidad con niebla/lluvia/tormenta: MISMA regla que la vista
+  // clásica (MatchScreen._drawBalls) — más allá de cierta distancia las
+  // bolas solo se ven a ratos, y con niebla el boliche no se ve hasta que
+  // alguien lo destapa; el abuelo inmune a ese clima lo ve todo. Es
+  // información de juego: se aplica también al minimapa.
+  _visibility(M, frame) {
+    const rainFog = isRainy(M.weather.type) || M.weather.type === 'NIEBLA' || M.weather.type === 'TORMENTA';
+    const s = M.roster.get(M.abuelo);
+    const immune = s.hasImmunity(isRainy(M.weather.type) || M.weather.type === 'TORMENTA' ? 'LLUVIA' : M.weather.type);
+    const fogFrom = immune ? 999
+      : M.weather.type === 'NIEBLA' ? 32
+      : M.weather.type === 'TORMENTA' ? 40
+      : ABUELO_DATA[M.abuelo] && ABUELO_DATA[M.abuelo].clima.LLUVIA === -1 ? 45 : 70;
+    return (b) => {
+      if (M.weather.type === 'NIEBLA' && b === M.jack && !M.jackRevealed && !immune) return frame % 24 < 2;
+      if (!rainFog || b.x < fogFrom || (b === M.lastThrown && b.moving)) return true;
+      return frame % 8 < 3;
+    };
   }
 
   // --- estado por partido ---
@@ -136,6 +165,12 @@ export class ArcadeView {
       if (c) fx.burst(c.x, c.y, { n: 26, colors: ['#fff3c4', '#ffe14d', '#ffffff'], speed: 14, gravity: 10, life: 0.5 });
       fx.shake(0.7);
     }
+    // foto de la pista justo al soltar, para leer la jugada al pararse todo
+    if (M.phase === 'sim' && prev.phase !== 'sim') {
+      this._snap = { thrown: M.lastThrown, balls: M.balls.filter((b) => b !== M.lastThrown).map((b) => ({ b, x: b.x, y: b.y })), jack: M.jack ? { x: M.jack.x, y: M.jack.y } : null };
+    }
+    if (M.phase === 'throwDone' && prev.phase === 'sim' && this._snap) { this._readPlay(M, this._snap); this._snap = null; }
+    if (M.lastCollision && !prev.coll) this._slow = 0.55;
     if (M.phase === 'sim' && prev.phase === 'power' && M.lastReleaseSweet) {
       fx.float(70, 30, '¡PUNTO DULCE!', TONE.gold, { size: 1.6, life: 1 });
       fx.flash('#ffe14d', 0.12, 0.2);
@@ -153,6 +188,35 @@ export class ArcadeView {
     this._prev = { phase: M.phase, landed: !!M.lastLanded, coll: !!M.lastCollision, round: M.round };
   }
 
+  // ¿qué ha pasado en esta tirada? carreau (tu bola se queda donde estaba
+  // la que ha sacado), biberón (pegada al boliche), boliche movido
+  _readPlay(M, snap) {
+    const { fx } = this.game;
+    const t = snap.thrown;
+    if (!t) return;
+    const mine = t.owner === 'P';
+    const col = mine ? TONE.gold : TONE.rival;
+    const who = mine ? '' : ` DE ${M.rival.split(' ')[0]}`;
+    for (const o of snap.balls) {
+      if (o.b.owner === t.owner || o.b.owner === 'J' || o.b.owner === 'J2') continue;
+      const moved = dist2d(o.x, o.y, o.b.x, o.b.y);
+      if (moved > 4 && dist2d(t.x, t.y, o.x, o.y) < 2.2) {
+        fx.banner(`¡CARREAU${who}!`, col, { sub: mine ? 'la tuya se queda justo donde estaba la del rival' : 'te ha sacado la bola y se ha quedado en su sitio', life: 2.2 });
+        if (mine) fx.burst(70, 22, { n: 50, colors: [TONE.gold, '#ffffff', TONE.player], speed: 20, life: 1.1 });
+        fx.shake(1.2);
+        return;
+      }
+    }
+    if (snap.jack && M.jack && dist2d(snap.jack.x, snap.jack.y, M.jack.x, M.jack.y) > 3) {
+      fx.banner('¡BOLICHE MOVIDO!', TONE.jack, { sub: 'la mano cambia de sitio', life: 1.8, size: 3 });
+      return;
+    }
+    if (M.jack && dist2d(t.x, t.y, M.jack.x, M.jack.y) < BALL_R + JACK_R + 0.35) {
+      fx.banner(`¡BIBERÓN${who}!`, col, { sub: 'pegada al boliche', life: 1.8, size: 3.2 });
+      if (mine) fx.burst(70, 24, { n: 30, colors: [TONE.gold, '#ffffff'], speed: 14, life: 0.9 });
+    }
+  }
+
   // --- dibujo ---
   draw(dt) {
     const { screen, match: M, frame } = this.game;
@@ -162,11 +226,14 @@ export class ArcadeView {
     this.cam.update(dt || 1 / 60, Settings.get('reduceMotion'));
     screen.clear();
 
+    const vis = this._visibility(M, frame);
+    this._vis = vis;
     // escena 3D + minimapa en la capa de píxeles, por debajo del texto
     screen.layer('under', (ctx, R) => {
       const x0 = R.cx(0), y0 = R.cy(VIEW_TOP), x1 = R.cx(screen.cols), y1 = R.cy(VIEW_BOTTOM + 1);
       this.cam.setView(x0, y0, x1 - x0, y1 - y0);
-      this.court.draw(ctx, this.cam, M, this._t);
+      this.court.draw(ctx, this.cam, M, this._t, vis);
+      this._drawThrower(ctx, R, M);
       this._drawAimOverlay(ctx, R, M);
       this._drawMinimap(ctx, R, M);
       this._drawWind(ctx, R, M);
@@ -224,13 +291,20 @@ export class ArcadeView {
   _drawScore(ctx, R, M) {
     if (M.training) return;
     const cx = R.W / 2, cy = R.cy(1.25);
+    // el número que acaba de cambiar "salta" y brilla un momento
+    if (!this._score || this._score.p !== M.scoreP || this._score.a !== M.scoreA) {
+      const prevS = this._score;
+      this._score = { p: M.scoreP, a: M.scoreA, tp: prevS && prevS.p !== M.scoreP ? this._t : -9, ta: prevS && prevS.a !== M.scoreA ? this._t : -9 };
+    }
+    const pop = (t0) => { const k = (this._t - t0) / 0.6; return k >= 0 && k < 1 ? 1 + Math.sin(k * Math.PI) * 0.45 : 1; };
     ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-    ctx.font = `bold ${R.ch * 2.3}px ${FONT}`;
-    ctx.shadowBlur = R.ch * 0.8;
-    ctx.shadowColor = TONE.player; ctx.fillStyle = TONE.player;
-    ctx.fillText(String(M.scoreP), cx - R.cw * 5, cy);
-    ctx.shadowColor = TONE.rival; ctx.fillStyle = TONE.rival;
-    ctx.fillText(String(M.scoreA), cx + R.cw * 5, cy);
+    const big = (txt, x, col, s) => {
+      ctx.font = `bold ${R.ch * 2.3 * s}px ${FONT}`;
+      ctx.shadowBlur = R.ch * 0.8 * s; ctx.shadowColor = col; ctx.fillStyle = col;
+      ctx.fillText(txt, x, cy);
+    };
+    big(String(M.scoreP), cx - R.cw * 5, TONE.player, pop(this._score.tp));
+    big(String(M.scoreA), cx + R.cw * 5, TONE.rival, pop(this._score.ta));
     ctx.shadowBlur = 0;
     ctx.fillStyle = UI.textDim;
     ctx.font = `bold ${R.ch * 1.4}px ${FONT}`;
@@ -316,10 +390,18 @@ export class ArcadeView {
     for (let i = 0; i < pw; i++) {
       const k = i / pw;
       const sweet = ph === 'power' && M.sweetSpot !== null && Math.abs(k - M.sweetSpot) < M.sweetWidth;
-      if (sweet) screen.put(px + i, y0 + 4, k <= power ? '█' : '▒', TONE.gold);
-      else if (k <= power) screen.put(px + i, y0 + 4, '█', k < 0.4 ? TONE.good : k < 0.75 ? TONE.warn : TONE.bad);
+      if (sweet) {
+        // el tramo del punto dulce: blanco dorado y con brillo, siempre visible
+        screen.put(px + i, y0 + 4, k <= power ? '█' : '▒', '#fff2b0');
+        screen.glow(px + i, y0 + 4, 1, 1, TONE.gold);
+      } else if (k <= power) screen.put(px + i, y0 + 4, '█', k < 0.4 ? '#5fae4a' : k < 0.75 ? '#d88a3a' : '#d84a3a');
     }
-    if (inSweet) { screen.glow(px, y0 + 4, pw, 1); screen.text(px + pw + 2, y0 + 4, '¡DENTRO!', TONE.gold); }
+    // marcas ▼ encima del tramo dorado
+    if (ph === 'power' && M.sweetSpot !== null) {
+      screen.put(px + Math.round((M.sweetSpot - M.sweetWidth) * pw), y0 + 3, '▾', TONE.gold);
+      screen.put(px + Math.round((M.sweetSpot + M.sweetWidth) * pw) - 1, y0 + 3, '▾', TONE.gold);
+    }
+    if (inSweet) screen.text(px + pw + 2, y0 + 4, '¡DENTRO!', TONE.gold);
     else if (ph === 'power' || ph === 'jackPower') screen.text(px + pw + 2, y0 + 4, `${Math.round(M.power * 100)}%`, UI.text);
 
     // controles según fase
@@ -345,6 +427,50 @@ export class ArcadeView {
       }
       screen.text(cx, cy, `quedan ${MAX_CONSUMABLES_PER_MATCH - M.consumablesUsedThisMatch} uso(s)`, UI.textFaint);
     }
+  }
+
+  // el abuelo que tira, en trazo de tiza junto al círculo: boina, cara,
+  // brazo que se echa atrás mientras cargas la potencia y se estira al
+  // soltar. Del color del bando que tira. Solo en los planos de tiro.
+  _drawThrower(ctx, R, M) {
+    const cam = this.cam;
+    if (!['aim', 'jack'].includes(cam.shot)) return;
+    const mine = M.turn === 'P';
+    const base = cam.project(THROW_X, -4, 0);
+    if (!base) return;
+    // tamaño fijo de "personaje" (a escala real, tan cerca de la cámara,
+    // taparía media pista): ~28% del alto de la vista, anclado abajo
+    const v = cam.view;
+    const H = v.h * 0.28;
+    const u = H / 15;
+    const x = Math.max(v.x + v.w * 0.52, Math.min(v.x + v.w * 0.9, base.sx + v.w * 0.08));
+    const y = v.y + v.h - R.ch * 0.6;
+    const col = mine ? TONE.player : TONE.rival;
+    const charge = M.phase === 'power' || M.phase === 'jackPower' ? M.power : 0;
+    const thrown = M.phase === 'sim' || M.phase === 'jackSim';
+    ctx.save();
+    ctx.globalAlpha = 0.8;
+    ctx.strokeStyle = col; ctx.fillStyle = col;
+    ctx.lineWidth = Math.max(2, u * 0.45); ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+    ctx.shadowColor = col; ctx.shadowBlur = u * 0.8;
+    const hip = { x, y: y - H * 0.45 }, neck = { x: x + u * 0.6, y: y - H * 0.78 };
+    // piernas (una adelantada, flexionada)
+    ctx.beginPath(); ctx.moveTo(hip.x, hip.y); ctx.lineTo(x - u * 2.2, y); ctx.moveTo(hip.x, hip.y); ctx.lineTo(x + u * 2.4, y - H * 0.08); ctx.lineTo(x + u * 2.8, y); ctx.stroke();
+    // tronco un poco inclinado
+    ctx.beginPath(); ctx.moveTo(hip.x, hip.y); ctx.lineTo(neck.x, neck.y); ctx.stroke();
+    // cabeza + boina
+    const hr = H * 0.085;
+    ctx.beginPath(); ctx.arc(neck.x + u * 0.3, neck.y - hr * 1.2, hr, 0, Math.PI * 2); ctx.stroke();
+    ctx.beginPath(); ctx.ellipse(neck.x + u * 0.3, neck.y - hr * 2.1, hr * 1.25, hr * 0.45, -0.15, 0, Math.PI * 2); ctx.fill();
+    // brazo de tirar: atrás al cargar, adelante al soltar
+    const a = thrown ? -0.5 : 0.9 + charge * 1.6;
+    const sh = { x: neck.x, y: neck.y + u * 0.8 };
+    const hand = { x: sh.x + Math.sin(a) * H * 0.34, y: sh.y + Math.cos(a) * H * 0.34 };
+    ctx.beginPath(); ctx.moveTo(sh.x, sh.y); ctx.lineTo(hand.x, hand.y); ctx.stroke();
+    if (!thrown) { ctx.beginPath(); ctx.arc(hand.x, hand.y, u * 0.9, 0, Math.PI * 2); ctx.fill(); }
+    // brazo libre
+    ctx.beginPath(); ctx.moveTo(sh.x, sh.y); ctx.lineTo(sh.x - u * 2.5, sh.y + H * 0.2); ctx.stroke();
+    ctx.restore();
   }
 
   // retícula de destino, arco previsto (limitado por la guía) y punto de caída
@@ -422,12 +548,13 @@ export class ArcadeView {
     }
     const dot = (b, col, r) => { ctx.fillStyle = col; ctx.beginPath(); ctx.arc(X(b.x), Y(b.y), r, 0, Math.PI * 2); ctx.fill(); };
     const br = Math.max(3, w * 0.012);
-    if (M.jack && M.training !== 'TIRO') dot(M.jack, TONE.jack, br * 0.8);
-    for (const b of M.balls) dot(b, b.owner === 'P' ? TONE.player : b.owner === 'A' ? TONE.rival : '#c9c2a8', br);
+    const vis = this._vis || (() => true);
+    if (M.jack && M.training !== 'TIRO' && vis(M.jack)) dot(M.jack, TONE.jack, br * 0.8);
+    for (const b of M.balls) if (vis(b)) dot(b, b.owner === 'P' ? TONE.player : b.owner === 'A' ? TONE.rival : '#c9c2a8', br);
     // quién manda: anillo en la bola más cercana
     const p = M.bestBall && M.bestBall('P'), a = M.bestBall && M.bestBall('A');
     const lead = p && a ? (p.d < a.d ? p.b : a.b) : p ? p.b : a ? a.b : null;
-    if (lead) { ctx.strokeStyle = TONE.gold; ctx.lineWidth = R.dpr * 1.5; ctx.beginPath(); ctx.arc(X(lead.x), Y(lead.y), br * 2, 0, Math.PI * 2); ctx.stroke(); }
+    if (lead && vis(lead) && (!M.jack || vis(M.jack))) { ctx.strokeStyle = TONE.gold; ctx.lineWidth = R.dpr * 1.5; ctx.beginPath(); ctx.arc(X(lead.x), Y(lead.y), br * 2, 0, Math.PI * 2); ctx.stroke(); }
     ctx.fillStyle = UI.textDim; ctx.font = `${R.fontPx * 0.85}px ${FONT}`; ctx.textAlign = 'left'; ctx.textBaseline = 'top';
     ctx.fillText('VISTA CENITAL', x0, y0 + h + R.dpr * 6);
   }

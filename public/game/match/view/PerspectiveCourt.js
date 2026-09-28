@@ -76,7 +76,8 @@ export class PerspectiveCourt {
     return c;
   }
 
-  draw(ctx, cam, M, t) {
+  draw(ctx, cam, M, t, visible = () => true) {
+    this._visible = visible;
     this._ensureTexture(M);
     const v = cam.view;
     ctx.save();
@@ -91,6 +92,7 @@ export class PerspectiveCourt {
     this._trackArc(M);
     this._drawArc(ctx, cam);
     this._drawBalls(ctx, cam, M, sky, t);
+    this._drawWeather(ctx, cam, M, t);
     this._drawFog(ctx, cam, sky, M);
     ctx.restore();
   }
@@ -352,9 +354,10 @@ export class PerspectiveCourt {
 
   _drawBalls(ctx, cam, M, sky, t) {
     const items = [];
-    for (const b of M.balls) items.push({ b, r: BALL_R });
-    if (M.jack && M.training !== 'TIRO') items.push({ b: M.jack, r: JACK_R });
-    if (M.twinJacks && M.jack2) items.push({ b: M.jack2, r: JACK_R });
+    const vis = this._visible || (() => true);
+    for (const b of M.balls) if (vis(b)) items.push({ b, r: BALL_R });
+    if (M.jack && M.training !== 'TIRO' && vis(M.jack)) items.push({ b: M.jack, r: JACK_R });
+    if (M.twinJacks && M.jack2 && vis(M.jack2)) items.push({ b: M.jack2, r: JACK_R });
     if (M.court.tree) items.push({ tree: M.court.tree, x: M.court.tree.x });
     // de lejos a cerca
     items.sort((a, b) => (b.tree ? b.x : b.b.x) - (a.tree ? a.x : a.b.x));
@@ -389,6 +392,48 @@ export class PerspectiveCourt {
       ctx.beginPath(); ctx.arc(p.sx, p.sy, rad * 1.25, 0, Math.PI * 2); ctx.stroke();
     }
     b._screen = { x: p.sx, y: p.sy, r: rad }; // para rótulos/efectos de la vista
+  }
+
+  // clima en 3D: las partículas de Weather (posiciones en el terreno) se
+  // levantan en columnas animadas — lluvia en trazos oblicuos con el viento,
+  // nieve que cae despacio, calima que sube
+  _drawWeather(ctx, cam, M, t) {
+    const type = M.weather.type;
+    const parts = M.weather.particles || [];
+    if (!parts.length) return;
+    const wind = M.weather.wind || { x: 0, y: 0 };
+    ctx.save();
+    for (let i = 0; i < parts.length; i++) {
+      const pt = parts[i];
+      if (isRainy(type)) {
+        const z = 14 - ((t * 22 + i * 3.7) % 14);
+        const a = cam.projectWorld(pt.x, pt.y, z);
+        const b = cam.projectWorld(pt.x + wind.x * 0.4, pt.y + wind.y * 0.2, z - 1.6);
+        if (!a || !b) continue;
+        ctx.strokeStyle = 'rgba(160,200,230,0.45)'; ctx.lineWidth = Math.max(1, a.s * 0.08);
+        ctx.beginPath(); ctx.moveTo(a.sx, a.sy); ctx.lineTo(b.sx, b.sy); ctx.stroke();
+      } else if (type === 'HELADA') {
+        const z = 12 - ((t * 2.5 + i * 1.3) % 12);
+        const p = cam.projectWorld(pt.x + Math.sin(t + i) * 0.8, pt.y, z);
+        if (!p) continue;
+        ctx.fillStyle = 'rgba(235,245,255,0.8)';
+        const r = Math.max(1, p.s * 0.18);
+        ctx.fillRect(p.sx - r, p.sy - r, r * 2, r * 2);
+      } else if (type === 'CALOR') {
+        const z = (t * 1.5 + i * 0.9) % 6;
+        const p = cam.projectWorld(pt.x, pt.y, z);
+        if (!p) continue;
+        ctx.strokeStyle = `rgba(255,220,150,${0.25 * (1 - z / 6)})`; ctx.lineWidth = Math.max(1, p.s * 0.08);
+        ctx.beginPath(); ctx.moveTo(p.sx - p.s * 0.8, p.sy); ctx.quadraticCurveTo(p.sx, p.sy - p.s * 0.4, p.sx + p.s * 0.8, p.sy); ctx.stroke();
+      } else if (type === 'VIENTO') {
+        const z = 1 + (i % 5);
+        const p = cam.projectWorld(pt.x, pt.y, z);
+        if (!p) continue;
+        ctx.strokeStyle = 'rgba(220,215,180,0.35)'; ctx.lineWidth = Math.max(1, p.s * 0.06);
+        ctx.beginPath(); ctx.moveTo(p.sx, p.sy); ctx.lineTo(p.sx + wind.y * p.s * 2, p.sy - wind.x * p.s * 0.6); ctx.stroke();
+      }
+    }
+    ctx.restore();
   }
 
   // niebla de distancia + efectos de clima por encima de la escena
