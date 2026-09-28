@@ -11,11 +11,11 @@
   rediseño; se fusiona cuando el usuario lo pida.
 - **Fase en curso:** Fase 4 — pantallas de gestión (la 3 está hecha salvo
   la repetición a cámara lenta, que queda como mejora opcional).
-- **SIGUIENTE PASO CONCRETO:** Ligas / Copa de Europa
-  (`screens/LeagueMapScreen.js`, `screens/EuropeanCupScreen.js`, escenas
-  `leaguemap` y `eurocup`): `titleBand` en la cabecera, clasificación con
-  zonas de color y filas con fondo, cuadro de Europa con cruces como
-  tarjetas. Después El Club, El Bar y Capítulos/Hemeroteca/Ayuda/Portada.
+- **SIGUIENTE PASO CONCRETO:** El Club (`screens/ClubScreen.js`, escena
+  `club`) y El Bar (`screens/BarScreen.js`, escena `bar`): `titleBand`,
+  paneles/botones de widgets.js, medidores de theme en instalaciones,
+  finanzas y junta; objetos del bar como cartas. Después
+  Capítulos/Hemeroteca/Ayuda/Portada.
 - **Último commit relevante:** (se rellena en cada commit)
 
 ## Visión
@@ -308,7 +308,14 @@ dinámico sin perder profundidad**.
       rellenos negros de modales/tooltips heredados (`'█' #000`) pasan a
       `screen.opaque()` (Club, Europa, Bar, Ligas, Mi Peña); los
       "resaltados con espacios" (invisibles en canvas) pasan a fondos reales.
-- [ ] Ligas / Copa de Europa · [ ] El Club · [ ] El Bar ·
+- [x] Ligas (`screens/LeagueMapScreen.js`): clasificación con fondo por
+      zona (ascenso verde, descenso rojo), tu club en azul, hover, récord
+      compacto "3G 1P" (antes se salía de la caja); jornada con tu partido
+      resaltado y el marcador/"vs" como chip.
+- [x] Copa de Europa (`screens/EuropeanCupScreen.js`): título en píxeles,
+      rondas como chips (la que se juega en verde, FINAL en oro) y el
+      trofeo ♛ grande brillando sobre la final, con el campeón debajo.
+- [ ] El Club · [ ] El Bar ·
       [ ] Capítulos / Hemeroteca / Ayuda / Portada
 
 ### Fase 5 — Pulido
@@ -333,7 +340,8 @@ dinámico sin perder profundidad**.
 | 2026-09-28 | 0e182a2 | Fase 4: Alineación + Prensa rediseñadas, escena `press` |
 | 2026-09-28 | 631b121 | Fase 4: Resultado rediseñado |
 | 2026-09-28 | 356a906 | Fase 4: Agenda como tablero + paneles opacos |
-| 2026-09-28 | (este) | Fase 4: Mi Peña reskin + pestañas/títulos/modales transversales |
+| 2026-09-28 | 098cffd | Fase 4: Mi Peña reskin + pestañas/títulos/modales transversales |
+| 2026-09-28 | (este) | Fase 4: Ligas y Copa de Europa |
 
 ## Problemas conocidos / notas
 

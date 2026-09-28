@@ -314,11 +314,17 @@ export class LeagueMapScreen {
       const zone = (i < 2 && canPromote) ? '▲' : (i >= table.length - 2 && canRelegate) ? '▼' : ' ';
       const zoneCol = zone === '▲' ? '#7ec850' : zone === '▼' ? '#ff5c5c' : '#5a5347';
       const nameCol = row.isPlayer ? '#7CFC00' : '#c9c2a8';
+      // fondo por zona (ascenso verde, descenso rojo), tu club en azul y
+      // la fila bajo el ratón algo más clara
+      const over = hitRect(input.mouse.cx, input.mouse.cy, x, ty, w, 1);
+      const bg = row.isPlayer ? '#16283a' : over ? '#1e2636' : zone === '▲' ? '#14241a' : zone === '▼' ? '#281618' : null;
+      if (bg) screen.fill(x - 1, ty, w + 2, 1, bg);
       screen.text(x, ty, zone, zoneCol);
       screen.text(x + 2, ty, `${(i + 1 + '').padStart(2)}º`, rankCol);
       const label = `${row.name}${row.isPlayer ? ' ★' : ''}`.slice(0, nameW).padEnd(nameW);
       screen.text(x + 6, ty, label, nameCol);
-      screen.text(x + 6 + nameW + 1, ty, `${row.won} (G) / ${row.lost} (P)`, nameCol);
+      const rec = `${row.won}G ${row.lost}P`;
+      screen.text(x + w - rec.length, ty, rec, nameCol);
       rowRects.push({ club: row, x, y: ty, w });
     }
 
@@ -376,6 +382,9 @@ export class LeagueMapScreen {
       const colB = clubB.isPlayer ? '#7CFC00' : '#c9c2a8';
       const mid = r ? `${r.a === aId ? r.scoreA : r.scoreB}-${r.a === aId ? r.scoreB : r.scoreA}` : 'vs';
       const half = Math.ceil(mid.length / 2);
+      if (clubA.isPlayer || clubB.isPlayer) screen.fill(b.x + 2, ty, b.w - 4, 1, '#16283a');
+      // marcador (o "vs") como chip centrado
+      screen.fill(midX - half - 1, ty, mid.length + 2, 1, r ? '#3a2a10' : '#161c28');
       screen.text(midX - half - 2 - nameW, ty, nameA.slice(0, nameW).padStart(nameW), colA);
       screen.text(midX - half, ty, mid, r ? '#ffe680' : '#8a8a7a');
       screen.text(midX + (mid.length - half) + 2, ty, nameB.slice(0, nameW).padEnd(nameW), colB);

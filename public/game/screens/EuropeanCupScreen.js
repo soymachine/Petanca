@@ -45,7 +45,13 @@ export class EuropeanCupScreen {
     }
 
     screen.box(PAGE_X, PAGE_Y, PAGE_W, PAGE_H, '#88c8e8', 'double');
-    screen.textCenter(PAGE_Y + 1, '╣ COPA DE EUROPA — EL CUADRO COMPLETO ╠', '#88c8e8');
+    screen.layer('over', (c, R) => {
+      c.textAlign = 'center'; c.textBaseline = 'middle';
+      c.font = `bold ${R.ch * 1.5}px "Menlo", "Consolas", "DejaVu Sans Mono", monospace`;
+      c.fillStyle = '#88c8e8'; c.shadowColor = '#88c8e8'; c.shadowBlur = R.ch * 0.6;
+      c.fillText('COPA DE EUROPA', R.W / 2, R.cy(PAGE_Y + 1.6));
+      c.shadowBlur = 0;
+    });
 
     let statusText, statusCol;
     if (cup.finished && cup.isChampion()) {
@@ -106,12 +112,31 @@ export class EuropeanCupScreen {
     const centers = this._centers(treeTop);
     const colOf = (round, side) => cols.find((c) => c.round === round && c.side === side);
 
+    // rondas como chips; la que se está jugando, resaltada
     for (const c of cols) {
       if (c.side === 'C') continue;
-      screen.text(startX + c.x + Math.max(0, Math.floor((c.w - ROUND_ABBR[c.round].length) / 2)), treeTop - 2, ROUND_ABBR[c.round], '#8a7f66');
+      const live = !cup.finished && cup.roundIdx === c.round;
+      screen.fill(startX + c.x, treeTop - 2, c.w, 1, live ? '#1c3a2a' : '#141a24');
+      screen.text(startX + c.x + Math.max(0, Math.floor((c.w - ROUND_ABBR[c.round].length) / 2)), treeTop - 2, ROUND_ABBR[c.round], live ? '#7CFC00' : '#8a7f66');
     }
     const finalCol = colOf(4, 'C');
+    screen.fill(startX + finalCol.x, treeTop - 2, finalCol.w, 1, '#3a2a10');
     screen.text(startX + finalCol.x + Math.floor((finalCol.w - 5) / 2), treeTop - 2, 'FINAL', '#ffd75e');
+    // el trofeo, grande y brillando sobre la final; con campeón, su nombre debajo
+    const trophyX = startX + finalCol.x + finalCol.w / 2;
+    const trophyY = Math.round(centers[3][0] - 0.5) - 5;
+    const frame = this.game.frame;
+    screen.layer('over', (c, R) => {
+      c.textAlign = 'center'; c.textBaseline = 'middle';
+      c.font = `${R.ch * 4.2}px "DejaVu Sans", sans-serif`;
+      c.fillStyle = '#ffd75e'; c.shadowColor = '#ffd75e'; c.shadowBlur = R.ch * (1 + 0.4 * Math.sin(frame * 0.06));
+      c.fillText('♛', R.cx(trophyX), R.cy(trophyY));
+      c.shadowBlur = 0;
+    });
+    if (cup.finished && cup.championClub) {
+      const nm = truncate(cup.championClub.name, finalCol.w + 8);
+      screen.text(Math.round(trophyX - nm.length / 2), trophyY + 3, nm, '#ffd75e');
+    }
 
     for (const side of ['L', 'R']) {
       for (let r = 0; r < 4; r++) {
