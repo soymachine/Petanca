@@ -621,11 +621,11 @@ export class PenyaScreen {
     // en la fila de la tabla no cabían, aquí sí hay sitio para verlos
     lines.push(['NIVEL:', '#ffb347']);
     if (s.isMaxLevel()) {
-      lines.push([`  Nv.${s.level}  ${'▓'.repeat(20)}  NIVEL MÁXIMO`, '#a8d8ff']);
+      lines.push([`  Nv.${s.level}  ${'▮'.repeat(20)}  NIVEL MÁXIMO`, '#a8d8ff']);
     } else {
       const pct = Math.max(0, Math.min(1, s.xp / s.xpToNextLevel()));
       const filled = Math.round(pct * 20);
-      const bar = `${'▓'.repeat(filled)}${'░'.repeat(20 - filled)}`;
+      const bar = `${'▮'.repeat(filled)}${'▯'.repeat(20 - filled)}`;
       lines.push([`  Nv.${s.level}  ${bar}  ${s.xp}/${s.xpToNextLevel()} XP`, '#a8d8ff']);
     }
     if (s.points > 0) lines.push([`  ${s.points} puntos por repartir (clic en el nivel de la tabla)`, '#ffd75e']);

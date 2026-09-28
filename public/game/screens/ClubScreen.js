@@ -1,5 +1,6 @@
 import { wrapText, hitRect, drawTabRow, truncate } from '../core/utils.js';
 import { TabsBar } from './TabsBar.js';
+import { titleBand, meter } from '../ui/widgets.js';
 import { SHIRT_SPONSOR_POOL } from '../data/sponsors.js';
 import { boardPresidentFor, boardAdj } from '../data/boardPresident.js';
 import { TRAINING_DRILLS } from '../data/trainingDrills.js';
@@ -32,7 +33,7 @@ export class ClubScreen {
     // Inicio", o se sale de El Club sin querer (mismo patrón que Mi Peña)
     if (input.hit('Escape') && this.practiceStep) { this.practiceStep = null; input.pressed.Escape = false; }
     TabsBar.draw(this.game, 'club');
-    screen.textCenter(4, '═══ EL CLUB ═══', '#ffb347');
+    titleBand(screen, 'EL CLUB', { right: `caja: ${this.game.player.money}€`, rightColor: this.game.player.money < 0 ? '#ff5c5c' : '#7ec850' });
     // Patrocinios y Junta se desbloquean solos las primeras semanas (ver
     // Player.systemsRevealed / Career._maybeRevealSystems) — Descampado
     // está disponible desde el minuto uno
@@ -92,18 +93,20 @@ export class ClubScreen {
       const row = i % perCol;
       const cx = 8 + col * 43;
       const yy = 11 + row * 4;
-      const rx = cx - 3, ry = yy - 1, rw = 40, rh = 4;
+      // la ficha ocupa sus 4 filas (nombre, precio, 2 de descripción): la
+      // seleccionada/bajo el ratón se marca con fondo y una barra lateral,
+      // sin marco (el marco de antes pisaba la descripción)
+      const rx = cx - 2, ry = yy, rw = 41, rh = 4;
       this._facRects.push({ x: rx, y: ry, w: rw, h: rh });
       const sel = i === this.cursor;
       const over = hitRect(input.mouse.cx, input.mouse.cy, rx, ry, rw, rh);
       if (over) hover = i;
       if (sel || over) {
-        for (let r = 1; r < rh - 1; r++) screen.fill(rx + 1, ry + r, rw - 2, 1, '#3a4a3a');
+        screen.fill(rx, ry, rw, rh, sel ? '#172414' : '#1e2130');
+        for (let r = 0; r < rh; r++) screen.put(rx, ry + r, '▌', sel ? '#7CFC00' : '#ffe680');
       }
-      if (sel) screen.box(rx, ry, rw, rh, '#7CFC00');
-      else if (over) screen.box(rx, ry, rw, rh, '#ffe680');
       const maxed = !it.next;
-      const nameCol = sel ? '#fff' : over ? '#ffe680' : it.level > 0 ? '#88c8e8' : '#8a8a8a';
+      const nameCol = sel ? '#fff' : over ? '#ffe680' : it.level > 0 ? '#88c8e8' : '#d8d0b8';
       const levelTag = it.level > 0 ? ` (nv.${it.level}/${it.maxLevel})` : '';
       screen.text(cx, yy, truncate(`${it.name}${levelTag}`, 36), nameCol);
       if (maxed) {
@@ -222,7 +225,7 @@ export class ClubScreen {
       const locked = rep < s.repRequired;
       const isCurrent = current && current.id === s.id;
       const sel = i === this.cursor;
-      if (sel) screen.box(bx + 2, yy - 1, 60, 3, '#7CFC00');
+      if (sel) screen.box(bx + 2, yy - 1, 60, 3, '#7CFC00', 'double', '#15230f');
       screen.text(bx + 4, yy, s.name, locked ? '#5a5347' : isCurrent ? '#ffe14d' : sel ? '#fff' : '#88c8e8');
       screen.text(bx + 4, yy + 1, locked ? `req. rep ${s.repRequired}` : isCurrent ? 'firmado ahora mismo' : `+${s.perWin}€/victoria · firma: ${s.signBonus}€`, locked ? '#ff8c5b' : isCurrent ? '#8a7f66' : '#9a927a');
       yy += 3;
@@ -258,10 +261,9 @@ export class ClubScreen {
     wrapText(`"${pres.tone}."`, 56).forEach((l, i) => screen.text(7, 14 + i, l, '#9a927a'));
 
     const confCol = player.boardConfidence <= 25 ? '#ff5c5c' : player.boardConfidence <= 50 ? '#ffe14d' : '#88e088';
-    const filled = Math.round((player.boardConfidence / 100) * 40);
-    const bar = `${'▓'.repeat(filled)}${'░'.repeat(40 - filled)}`;
+
     screen.text(7, 19, 'Confianza:', '#8a7f66');
-    screen.text(7, 20, bar, confCol);
+    meter(screen, 7, 20, 40, player.boardConfidence, 100, { color: confCol });
     screen.text(7, 21, `${player.boardConfidence}/100`, confCol);
 
     screen.text(7, 23, `Ultimátums esta temporada: ${player.boardUltimatums}`, player.boardUltimatums > 0 ? '#ff8c5b' : '#8a8a7a');

@@ -5,6 +5,7 @@ import { itemArtFor, ITEM_ART_W, ITEM_ART_H } from '../data/art/itemArt.js';
 import { CLIMAS } from '../data/climas.js';
 import { wrapText, hitRect, drawTabRow } from '../core/utils.js';
 import { TabsBar } from './TabsBar.js';
+import { titleBand } from '../ui/widgets.js';
 
 const SECTIONS = ['bolas', 'amuletos', 'consumibles'];
 const SECTION_LABEL = { bolas: 'BOLAS', amuletos: 'AMULETOS', consumibles: 'CONSUMIBLES' };
@@ -22,8 +23,7 @@ export class BarScreen {
     // que TabsBar la vea, o el atajo global "ESC = Inicio" se dispara igual
     if (this.buying && input.hit('Escape')) { this.buying = null; input.pressed.Escape = false; }
     TabsBar.draw(this.game, 'bar');
-    screen.textCenter(4, '═══ EL BAR DE LA PEÑA ═══', '#ffb347');
-    screen.textCenter(5, 'humo, carajillos y la tele con el volumen a tope', '#8a7f66');
+    titleBand(screen, 'EL BAR DE LA PEÑA', { right: 'humo, carajillos y la tele a tope', rightColor: '#8a7f66' });
     const clicked = drawTabRow(screen, input, 4, 6, SECTIONS.map((s) => SECTION_LABEL[s]), SECTIONS.indexOf(this.section));
     screen.text(80, 6, '[Q] cambiar de pestaña', '#8a7f66');
 
@@ -55,7 +55,7 @@ export class BarScreen {
       const rowRect = { x: boxX + 1, y: yy, w: boxW - 2, h: CONSUMABLE_ROW_H };
       const over = hitRect(input.mouse.cx, input.mouse.cy, rowRect.x, rowRect.y, rowRect.w, rowRect.h);
       if (over) rowHover = idx;
-      if (sel || over) screen.box(rowRect.x, rowRect.y, rowRect.w, rowRect.h, sel ? '#7CFC00' : '#ffe680');
+      if (sel || over) screen.box(rowRect.x, rowRect.y, rowRect.w, rowRect.h, sel ? '#7CFC00' : '#ffe680', sel ? 'double' : 'single', sel ? '#15230f' : '#1e2130');
 
       screen.text(boxX + 4, yy + 1, c.name, sel ? '#fff' : over ? '#ffe680' : '#88c8e8');
       screen.text(boxX + 42, yy + 1, `${c.price}€`, player.money >= c.price ? '#7ec850' : '#ff5c5c');
@@ -89,7 +89,7 @@ export class BarScreen {
       const b = BOLAS[i];
       const owned = player.bolasOwned.includes(i);
       const sel = i === this.cursor;
-      if (sel) screen.box(5, yy - 1, 64, 5, '#7CFC00');
+      if (sel) screen.box(5, yy - 1, 64, 5, '#7CFC00', 'double', '#15230f');
       screen.text(8, yy, `${b.name}`, sel ? '#fff' : owned ? '#88c8e8' : '#8a8a8a');
       screen.text(30, yy, owned ? (player.bolaSel === i ? '★ EN USO' : 'EN LA VITRINA') : `${b.price}€`,
         owned ? '#ffe14d' : player.money >= b.price ? '#7ec850' : '#ff5c5c');
@@ -138,7 +138,7 @@ export class BarScreen {
       const rowRect = { x: boxX + 1, y: yy, w: boxW - 2, h: AMULET_ROW_H };
       const over = hitRect(input.mouse.cx, input.mouse.cy, rowRect.x, rowRect.y, rowRect.w, rowRect.h);
       if (over) rowHover = idx;
-      if (sel || over) screen.box(rowRect.x, rowRect.y, rowRect.w, rowRect.h, sel ? '#7CFC00' : '#ffe680');
+      if (sel || over) screen.box(rowRect.x, rowRect.y, rowRect.w, rowRect.h, sel ? '#7CFC00' : '#ffe680', sel ? 'double' : 'single', sel ? '#15230f' : '#1e2130');
 
       const artX = boxX + 4, artY = yy + 1;
       screen.drawPhotoArt(itemArtFor(id), artX, artY);

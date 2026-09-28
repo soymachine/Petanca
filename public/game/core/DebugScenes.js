@@ -14,7 +14,7 @@ const PLAIN = ['title', 'hub', 'agenda', 'penya', 'club', 'leaguemap', 'bar', 'c
 
 // ids de escena disponibles (tools/shots.mjs los recorre todos)
 export const SCENE_IDS = [
-  ...PLAIN, 'agenda-decision', 'agenda-train', 'penya-detail', 'penya-mercado', 'penya-ojeadores', 'penya-panteon', 'eurocup', 'lineup', 'press', 'result',
+  ...PLAIN, 'agenda-decision', 'agenda-train', 'penya-detail', 'penya-mercado', 'penya-ojeadores', 'penya-panteon', 'club-facilities', 'club-sponsor', 'club-junta', 'bar-amuletos', 'bar-consumibles', 'eurocup', 'lineup', 'press', 'result',
   'match-aim', 'match-power', 'match-flight', 'match-settled', 'match-measure',
   'train-arrime', 'fx-demo',
 ];
@@ -98,6 +98,12 @@ export function applySceneFromUrl(game) {
     if (id === 'penya-detail') pen.detailAbuelo = game.player.roster.ids[0];
     else pen.section = id.slice(6);
     game.state = 'penya';
+  } else if (id.startsWith('club-') || id.startsWith('bar-')) {
+    const [scr, section] = id.split('-');
+    game.player.systemsRevealed.patrocinios = true;
+    game.player.systemsRevealed.junta = true;
+    game.screens[scr].section = section;
+    game.state = scr;
   } else if (id === 'eurocup') {
     if (!game.player.euroCup) game.player.euroCup = demoEuroCup(game.player);
     game.state = 'eurocup';
