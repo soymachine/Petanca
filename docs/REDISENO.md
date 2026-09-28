@@ -11,10 +11,10 @@
   rediseño; se fusiona cuando el usuario lo pida.
 - **Fase en curso:** Fase 4 — pantallas de gestión (la 3 está hecha salvo
   la repetición a cámara lenta, que queda como mejora opcional).
-- **SIGUIENTE PASO CONCRETO:** Alineación (`screens/LineupScreen.js`) +
-  Prensa (`screens/PressScreen.js`) como "vestuario" pre-partido: rival y
-  pista en cartel, abuelos como tarjetas con chips de stats (theme.STAT),
-  stamina/moral con medidores, afinidad de clima con ✚/▼.
+- **SIGUIENTE PASO CONCRETO:** Resultado (`screens/ResultScreen.js`,
+  escena `?scene=result`): marcador final grande, estadísticas que se
+  animan al entrar, XP/nivel subiendo con medidor, dinero con signo
+  correcto (arreglar el "+-5€" heredado), noticias del partido en tarjetas.
 - **Último commit relevante:** (se rellena en cada commit)
 
 ## Visión
@@ -249,7 +249,24 @@ dinámico sin perder profundidad**.
       grande AVANZAR DÍA que dice qué viene (`_nextEvent`: mañana/el jueves
       + entreno/Copa/Europa/jornada); panel Debugger con botones. Mismos
       atajos (ENTER/ESPACIO, D, E, S/X, V/C).
-- [ ] Alineación + Prensa · [ ] Resultado · [ ] Agenda ·
+- [x] Alineación (`screens/LineupScreen.js`): cabecera con la competición
+      en grande + "TU CLUB vs RIVAL" + chips (derbi/némesis/fiestas/sede);
+      cuatro paneles: VS RIVAL (cara, NIVEL en 10 segmentos, puntos),
+      PISTA (pictograma con el rasgo + descripción), CLIMA (icono grande con
+      brillo, efectos de WEATHER_FX, aviso de cambio, líder), FORMATO
+      (plazas ●○, CAMBIAR [M], CALENTAR [W]); abuelos como tarjetas 4×3
+      paginadas con chips de stats, STA en segmentos, moral, afinidad ✚/▼
+      con el clima de hoy y vínculo ♥/♡; huecos "plaza libre" si la peña
+      es corta; abajo bolas ◀ ▶, apuesta del bar con ACEPTAR [A], suceso
+      del día y botón grande ¡A LA PISTA! [S] (dobles/tripletas). Mismas
+      teclas que antes; clic en tarjeta = ENTER.
+- [x] Prensa (`screens/PressScreen.js`, escena nueva `?scene=press`):
+      periodista con micro y la pregunta en grande, flashes de cámara (se
+      apagan con reducir movimiento), pulla del rival en derbi/némesis, y
+      las 5 respuestas como cartas con MORAL / RIESGO (castigo si perdéis)
+      / IMAGEN (humilde ↔ chulería) en medidores; debajo, qué pasará con
+      la elegida. ←→ o 1-5, ENTER, ratón (pasar elige, clic responde).
+- [ ] Resultado · [ ] Agenda ·
       [ ] Mi Peña · [ ] Ligas / Copa de Europa · [ ] El Club · [ ] El Bar ·
       [ ] Capítulos / Hemeroteca / Ayuda / Portada
 
@@ -271,7 +288,8 @@ dinámico sin perder profundidad**.
 | 2026-09-28 | 08fb1d5 | Fase 3: Match.release/beginPower + tools/replay-match.mjs |
 | 2026-09-28 | dc23f9f | Fase 3: vista arcade en perspectiva + controles de gesto (tras ?nuevo=1 / F7) |
 | 2026-09-28 | 17dd160 | Fase 3: juice, visibilidad por clima, clima 3D, arcade por defecto |
-| 2026-09-28 | (este) | Fase 4: Inicio rediseñado |
+| 2026-09-28 | 724e5c1 | Fase 4: Inicio rediseñado |
+| 2026-09-28 | (este) | Fase 4: Alineación + Prensa rediseñadas, escena `press` |
 
 ## Problemas conocidos / notas
 

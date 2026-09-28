@@ -1,30 +1,27 @@
-import { ABUELO_DATA, STAT_KEYS, STAT_LABEL } from '../data/abuelos.js';
+import { ABUELO_DATA, STAT_KEYS } from '../data/abuelos.js';
 import { BOLAS } from '../data/bolas.js';
 import { CLIMAS } from '../data/climas.js';
 import { RIVAL_FACES } from '../data/art/rivalFaces.js';
-import { wrapText, hitRect } from '../core/utils.js';
+import { wrapText, hitRect, truncate } from '../core/utils.js';
 import { countryTag } from '../data/countries.js';
 import { chemistryLevel, gamesFor } from '../domain/Chemistry.js';
 import { archetypeFor } from '../data/rivalArchetypes.js';
+import { UI, TONE, STAT, WEATHER_FX, tint } from '../ui/theme.js';
+import { panel, bigButton, button, statChip, segments, badge, tooltip } from '../ui/widgets.js';
 
+const FONT = '"Menlo", "Consolas", "DejaVu Sans Mono", monospace';
 const WARMUP_COST = 15;
-const PANEL_Y = 3, PANEL_H = 16;
-const PANELS = [
-  { key: 'rival', label: 'RIVAL', x: 2, w: 33 },
-  { key: 'pista', label: 'PISTA', x: 36, w: 33 },
-  { key: 'clima', label: 'CLIMA', x: 70, w: 33 },
-  { key: 'formato', label: 'FORMATO', x: 104, w: 33 },
-];
-const PX = 4; // arranque del panel de alineación, a pantalla completa bajo las categorías
-const ROSTER_Y = PANEL_Y + PANEL_H + 2;
+const CARD_W = 32, CARD_H = 5, CARD_GAP_X = 1, GRID_X = 4, GRID_Y = 22, GRID_COLS = 4, GRID_ROWS = 3;
 
-// Alineación del partido de liga de la jornada (domingo): elige quién
-// juega, el juego de bolas, y de paso puedes aceptar la apuesta del bar.
-// Arriba, cuatro tarjetas separadas (rival / pista / clima / formato) en
-// vez de todo mezclado en líneas sueltas, cada una con su propio icono.
-// El rival y cada abuelo de tu plantilla reaccionan al rollover con un
-// tooltip de detalle — los tooltips se pintan siempre los últimos, para
-// quedar por encima de cualquier otra cosa en pantalla.
+// Alineación del partido — el "vestuario" (docs/REDISENO.md, Fase 4).
+// Arriba la competición en grande; debajo cuatro tarjetas (RIVAL, PISTA,
+// CLIMA con lo que cambia en la pista, FORMATO); en el centro los abuelos
+// disponibles como tarjetas con sus 5 stats en chips (código visual de
+// ui/theme.js), stamina, moral, afinidad con el clima de hoy y vínculo con
+// quien ya esté elegido; abajo bolas, apuesta del bar y el botón de salir
+// a la pista. Teclado de siempre: ↑↓←→ se mueve por las tarjetas (←→
+// sin tarjetas cambia de bolas: ver _input), ENTER elige, M formato, W
+// calentamiento, A apuesta, S a la pista, F simular (debug).
 export class LineupScreen {
   constructor(game) { this.game = game; this.cursor = 0; }
 
@@ -34,170 +31,234 @@ export class LineupScreen {
     screen.clear();
     const r = ctx.currentRound;
     const opponent = ctx.opponentClub;
-    if (ctx.isEuropean) {
-      screen.textCenter(1, `╣ COPA DE EUROPA — ${ctx.cup.roundName} · SEDE: ${ctx.city.name} ╠`, '#88c8e8');
-    } else if (ctx.isCup) {
-      screen.textCenter(1, `╣ COPA DE ESPAÑA — ${ctx.cup.roundName} · SEDE: ${ctx.city.name} ╠`, '#ffd75e');
-    } else if (ctx.isFriendly) {
-      screen.textCenter(1, `╣ AMISTOSO DE PRETEMPORADA · SEDE: ${ctx.city.name} ╠`, '#88c8e8');
-    } else {
-      screen.textCenter(1, `╣ JORNADA ${ctx.league.matchday + 1} — LIGA DE ${ctx.city.name} ╠`, ctx.city.color);
-    }
-    if (ctx.festival) screen.textCenter(2, `${ctx.festival} — ambiente de feria, mejor taquilla si se gana`, frame % 24 < 16 ? '#ffb347' : '#c98a3a');
-
     const isNemesis = !ctx.isCup && !ctx.isFriendly && player.nemesis && player.nemesis.city === opponent.id;
     const isDerby = !ctx.isCup && !ctx.isFriendly && player.derbyClub && player.derbyClub.id === opponent.id;
     const important = ctx.isCup || isDerby || isNemesis;
 
-    let rivalHover = null, rowHover = null;
+    this._drawHeader(ctx, isDerby, isNemesis, frame);
+    const rivalHover = this._drawRival(2, 5, 34, 16, ctx, opponent, r, isDerby, isNemesis, frame);
+    this._drawCourt(37, 5, 32, 16, ctx);
+    this._drawWeather(70, 5, 34, 16, ctx, r);
+    this._drawFormat(105, 5, 33, 16, ctx, important);
 
-    for (const p of PANELS) screen.box(p.x, PANEL_Y, p.w, PANEL_H, '#8a7f66');
-    for (const p of PANELS) screen.text(p.x + 2, PANEL_Y, ` ${p.label} `, '#ffb347');
-
-    // --- RIVAL: thumbnail + nombre/nivel/puntos + derbi/némesis ---
-    {
-      const p = PANELS[0];
-      const rx = p.x + 2, ry = PANEL_Y + 2;
-      rivalHover = hitRect(input.mouse.cx, input.mouse.cy, p.x, PANEL_Y, p.w, PANEL_H) ? { opponent, r } : null;
-      screen.drawAnyPortrait(r.rivalMini || r.rivalPortrait || RIVAL_FACES[0].photo, rx, ry);
-      screen.text(p.x + 2, PANEL_Y + PANEL_H - 4, opponent.name.slice(0, p.w - 4), isDerby ? '#ffb347' : '#ef9f9f');
-      const euroTag = ctx.isEuropean && ctx.cup.playerOpponent() ? ` ${countryTag(ctx.cup.playerOpponent().country, player.homeCountry)}` : '';
-      screen.text(p.x + 2, PANEL_Y + PANEL_H - 3, `Nivel ${r.aiLevel}/10   ·   ${opponent.pts} pts${euroTag}`, '#c9c2a8');
-      if (isDerby) screen.text(p.x + 2, PANEL_Y + PANEL_H - 2, `¡EL DERBI! (${player.derbyHistory.wins}-${player.derbyHistory.losses})`, frame % 20 < 14 ? '#ffb347' : '#a08050');
-      else if (isNemesis) screen.text(p.x + 2, PANEL_Y + PANEL_H - 2, '¡TU NÉMESIS! Véngate.', frame % 20 < 14 ? '#ff8c5b' : '#a05838');
-      // estilo de juego del capitán rival: solo si ya se lo has visto hacer
-      // (ver domain/Club.seenArchetype) — partidos de liga solamente, en
-      // copa el rival es un cruce puntual y no llega a "conocerse"
-      if (!ctx.isCup && !ctx.isFriendly && opponent.seenArchetype) {
-        screen.text(p.x + 2, PANEL_Y + PANEL_H - 1, archetypeFor(opponent.name).label, '#c8a0e8');
-      }
-    }
-
-    // --- PISTA: mini icono de cancha + ciudad + descripción ---
-    {
-      const p = PANELS[1];
-      const ix = p.x + 2, iy = PANEL_Y + 2;
-      screen.text(ix, iy, '┌──────────┐', ctx.city.color);
-      screen.text(ix, iy + 1, '│    ◦     │', ctx.city.color);
-      screen.text(ix, iy + 2, '└──────────┘', ctx.city.color);
-      screen.text(p.x + 2, iy + 4, ctx.city.name.toUpperCase(), '#ffe680');
-      wrapText(ctx.city.feature.desc, p.w - 4).slice(0, 6).forEach((l, k) => screen.text(p.x + 2, iy + 5 + k, l, '#9a927a'));
-    }
-
-    // --- CLIMA: icono en bloque + etiqueta + aviso de cambio ---
-    const cl = CLIMAS[r.forecast.main];
-    {
-      const p = PANELS[2];
-      const ix = p.x + 2, iy = PANEL_Y + 2;
-      for (let row = 0; row < 3; row++) screen.text(ix, iy + row, `${cl.icon} ${cl.icon} ${cl.icon}`, cl.color);
-      screen.text(p.x + 2, iy + 4, cl.label, cl.color);
-      if (r.forecast.changeProb > 0) {
-        wrapText(`ojo, podría cambiar a ${CLIMAS[r.forecast.changeTo].icon} ${CLIMAS[r.forecast.changeTo].label}`, p.w - 4)
-          .forEach((l, k) => screen.text(p.x + 2, iy + 6 + k, l, '#9a927a'));
-      }
-      if (ctx.isCup) {
-        screen.text(p.x + 2, PANEL_Y + PANEL_H - 2, 'partido único: quien gana pasa', '#9a927a');
-      } else if (ctx.isFriendly) {
-        screen.text(p.x + 2, PANEL_Y + PANEL_H - 3, 'amistoso: no cuenta', '#9a927a');
-        screen.text(p.x + 2, PANEL_Y + PANEL_H - 2, 'para la clasificación', '#9a927a');
-      } else {
-        const top1 = ctx.league.standings()[0];
-        const myRank = ctx.league.standings().findIndex((c) => c.isPlayer) + 1;
-        screen.text(p.x + 2, PANEL_Y + PANEL_H - 3, `líder: ${top1.name.slice(0, p.w - 10)}`, '#9a927a');
-        screen.text(p.x + 2, PANEL_Y + PANEL_H - 2, `(${top1.pts}pts) · tú vas ${myRank}º`, '#9a927a');
-      }
-    }
-
-    // --- FORMATO: pictograma de bolas + etiqueta + calentamiento ---
-    {
-      const p = PANELS[3];
-      const formatoLabel = { 1: '1 CONTRA 1', 2: 'DOBLETE (2)', 3: 'TRIPLETA (3)' }[ctx.formato];
-      const dots = Array.from({ length: ctx.formato }, (_, i) => (i < ctx.teamSel.length ? '●' : '○')).join(' ');
-      screen.text(p.x + 2, PANEL_Y + 2, dots, '#7CFC00');
-      screen.text(p.x + 2, PANEL_Y + 4, formatoLabel, '#ffe680');
-      screen.text(p.x + 2, PANEL_Y + 5, '[M] cambiar formato', '#8a7f66');
-      screen.text(p.x + 2, PANEL_Y + 6, ctx.formato === 1 ? 'elige y sales a la pista' : `${ctx.teamSel.length}/${ctx.formato} elegidos`, '#c9c2a8');
-      if (important) {
-        const on = ctx.warmup && ctx.warmup.wanted;
-        wrapText(`[W] calentamiento (-${WARMUP_COST} STA, tiro más firme): ${on ? 'SÍ' : 'no'}`, p.w - 4)
-          .forEach((l, k) => screen.text(p.x + 2, PANEL_Y + 9 + k, l, on ? '#7CFC00' : '#8a7f66'));
-      }
-    }
-
-    // --- plantilla disponible ---
     const available = this._available();
     if (available.length && this.cursor >= available.length) this.cursor = 0;
-    screen.text(PX, ROSTER_Y - 1, '¿QUIÉN JUEGA?', '#7CFC00');
+    const rowHover = this._drawRoster(ctx, r, available);
+    this._drawBottom(ctx, available, frame);
 
-    let yy = ROSTER_Y + 1;
-    for (let k = 0; k < available.length; k++) {
+    this._input(ctx, ctx.teamSel.length === ctx.formato, available, important);
+
+    // tooltips al final de todo, por encima del resto
+    if (rowHover) this._drawAbueloTooltip(rowHover.id, input.mouse.cx, input.mouse.cy);
+    if (rivalHover) this._drawRivalTooltip(opponent, r, input.mouse.cx, input.mouse.cy);
+    if (rowHover && input.mouse.clicked) { this.cursor = rowHover.k; this._select(ctx, available); }
+  }
+
+  _drawHeader(ctx, isDerby, isNemesis, frame) {
+    const { screen } = this.game;
+    screen.fill(0, 0, screen.cols, 4, '#0f1520');
+    const title = ctx.isEuropean ? `COPA DE EUROPA · ${ctx.cup.roundName}`
+      : ctx.isCup ? `COPA · ${ctx.cup.roundName}`
+      : ctx.isFriendly ? 'AMISTOSO DE PRETEMPORADA'
+      : `JORNADA ${ctx.league.matchday + 1} · LIGA DE ${ctx.city.name}`;
+    const col = ctx.isEuropean ? TONE.info : ctx.isCup ? TONE.gold : ctx.city.color || UI.accentHi;
+    screen.layer('over', (c, R) => {
+      c.font = `bold ${R.ch * 1.6}px ${FONT}`;
+      c.textAlign = 'center'; c.textBaseline = 'middle';
+      c.shadowColor = col; c.shadowBlur = R.ch * 0.6; c.fillStyle = col;
+      c.fillText(title, R.W / 2, R.cy(1.3));
+      c.shadowBlur = 0;
+      c.font = `bold ${R.ch * 0.9}px ${FONT}`;
+      const mine = this.game.player.clubName, vs = '  vs  ', theirs = ctx.opponentClub.name;
+      const wm = c.measureText(mine).width, wv = c.measureText(vs).width, wt = c.measureText(theirs).width;
+      let tx = R.W / 2 - (wm + wv + wt) / 2;
+      c.textAlign = 'left';
+      c.fillStyle = TONE.player; c.fillText(mine, tx, R.cy(2.7)); tx += wm;
+      c.fillStyle = UI.textDim; c.fillText(vs, tx, R.cy(2.7)); tx += wv;
+      c.fillStyle = TONE.rival; c.fillText(theirs, tx, R.cy(2.7));
+    });
+    const chips = [];
+    if (ctx.isEuropean || ctx.isCup) chips.push([`sede: ${ctx.city.name}`, UI.textDim]);
+    if (isDerby) chips.push(['¡EL DERBI!', '#ff9c5b']);
+    if (isNemesis) chips.push(['¡TU NÉMESIS!', TONE.bad]);
+    if (ctx.festival) chips.push([ctx.festival, frame % 24 < 16 ? UI.accent : '#c98a3a']);
+    let total = chips.reduce((s, [t]) => s + t.length + 3, 0);
+    let x = Math.floor((screen.cols - total) / 2);
+    for (const [t, c] of chips) x += badge(screen, x, 4, t, c) + 1;
+  }
+
+  _drawRival(x, y, w, h, ctx, opponent, r, isDerby, isNemesis, frame) {
+    const { screen, input, player } = this.game;
+    const over = hitRect(input.mouse.cx, input.mouse.cy, x, y, w, h);
+    panel(screen, x, y, w, h, { title: `VS ${truncate(opponent.name, w - 9)}`, tone: over ? TONE.rival : UI.edge, titleColor: isDerby ? '#ff9c5b' : TONE.rival });
+    const art = r.rivalMini || r.rivalPortrait || RIVAL_FACES[0].photo;
+    screen.drawAnyPortrait(art, x + Math.max(2, Math.floor((w - (art.cols || 20)) / 2)), y + 1);
+    // nivel del rival como medidor de 10 segmentos, debajo de la cara
+    const lv = r.aiLevel;
+    screen.text(x + 2, y + h - 3, 'NIVEL', UI.textDim);
+    segments(screen, x + 8, y + h - 3, 10, lv, { color: lv >= 7 ? TONE.bad : lv >= 4 ? TONE.warn : TONE.good });
+    screen.text(x + 19, y + h - 3, `${lv}/10`, UI.text);
+    const euroTag = ctx.isEuropean && ctx.cup.playerOpponent() ? ` ${countryTag(ctx.cup.playerOpponent().country, player.homeCountry)}` : '';
+    screen.text(x + 25, y + h - 3, `${opponent.pts ?? 0} pts${euroTag}`.slice(0, w - 26), UI.textDim);
+    if (isDerby) screen.text(x + 2, y + h - 2, `derbi: ${player.derbyHistory.wins}G-${player.derbyHistory.losses}P`, frame % 20 < 14 ? '#ff9c5b' : '#a08050');
+    else if (isNemesis) screen.text(x + 2, y + h - 2, '¡véngate!', frame % 20 < 14 ? TONE.bad : '#a05838');
+    else if (!ctx.isCup && !ctx.isFriendly && opponent.seenArchetype) screen.text(x + 2, y + h - 2, archetypeFor(opponent.name).label, TONE.xp);
+    return over;
+  }
+
+  _drawCourt(x, y, w, h, ctx) {
+    const { screen } = this.game;
+    panel(screen, x, y, w, h, { title: 'PISTA', tone: UI.edge });
+    // pictograma de la pista con su rasgo
+    const f = ctx.city.feature.id;
+    const mark = { slope: '▼', puddles: '≈', tree: '♣', walls: '▌', cierzo: '≋', fastdry: '»', pressure: '!', flat: '·' }[f] || '·';
+    screen.fill(x + 3, y + 2, w - 6, 4, '#3a3420');
+    screen.box(x + 3, y + 2, w - 6, 4, '#c9b98a', 'single', null);
+    screen.put(x + 5, y + 3, '○', '#c9b98a');
+    for (let i = 0; i < 4; i++) screen.put(x + 10 + i * 4, y + 3 + (i % 2), mark, ctx.city.color || UI.accent);
+    screen.put(x + w - 7, y + 3, '●', TONE.jack);
+    screen.text(x + 2, y + 7, ctx.city.name.toUpperCase(), UI.accentHi);
+    wrapText(ctx.city.feature.desc, w - 4).slice(0, 6).forEach((l, k) => screen.text(x + 2, y + 8 + k, l, UI.textDim));
+  }
+
+  _drawWeather(x, y, w, h, ctx, r) {
+    const { screen } = this.game;
+    const cl = CLIMAS[r.forecast.main];
+    panel(screen, x, y, w, h, { title: 'CLIMA', tone: UI.edge, titleColor: cl.color });
+    screen.layer('over', (c, R) => {
+      c.font = `${R.ch * 3}px ${FONT}`; c.textAlign = 'center'; c.textBaseline = 'middle';
+      c.shadowColor = cl.color; c.shadowBlur = R.ch; c.fillStyle = cl.color;
+      c.fillText(cl.icon, R.cx(x + 6), R.cy(y + 3.6));
+      c.shadowBlur = 0;
+    });
+    screen.text(x + 11, y + 3, cl.label, cl.color);
+    let ly = y + 4;
+    for (const e of WEATHER_FX[r.forecast.main] || ['sin efecto en la pista']) {
+      wrapText(e, w - 14).forEach((l, k) => { if (ly < y + 8) screen.text(x + 11, ly++, `${k ? '  ' : '· '}${l}`, UI.text); });
+    }
+    if (r.forecast.changeProb > 0) {
+      const to = CLIMAS[r.forecast.changeTo];
+      wrapText(`puede cambiar a ${to.icon} ${to.label} a mitad`, w - 4).forEach((l, k) => screen.text(x + 2, y + 8 + k, l, TONE.warn));
+    }
+    if (ctx.isCup) screen.text(x + 2, y + h - 2, 'partido único: quien gana pasa', UI.textDim);
+    else if (ctx.isFriendly) screen.text(x + 2, y + h - 2, 'amistoso: no puntúa', UI.textDim);
+    else {
+      const st = ctx.league.standings();
+      const myRank = st.findIndex((c) => c.isPlayer) + 1;
+      screen.text(x + 2, y + h - 3, `líder: ${truncate(st[0].name, w - 12)}`, UI.textDim);
+      screen.text(x + 2, y + h - 2, `(${st[0].pts} pts) · tú vas ${myRank}º`, UI.textDim);
+    }
+  }
+
+  _drawFormat(x, y, w, h, ctx, important) {
+    const { screen } = this.game;
+    panel(screen, x, y, w, h, { title: 'FORMATO', tone: UI.edge });
+    const label = { 1: '1 CONTRA 1', 2: 'DOBLETE', 3: 'TRIPLETA' }[ctx.formato];
+    screen.text(x + 3, y + 2, label, UI.accentHi);
+    screen.glow(x + 3, y + 2, label.length, 1);
+    screen.text(x + 3, y + 4, 'PLAZAS', UI.textDim);
+    let dx = x + 10;
+    for (let i = 0; i < ctx.formato; i++) { screen.text(dx, y + 4, i < ctx.teamSel.length ? '●' : '○', i < ctx.teamSel.length ? TONE.good : UI.text); dx += 3; }
+    screen.text(x + 3, y + 6, ctx.formato === 1 ? 'elige y sales a la pista' : `${ctx.teamSel.length}/${ctx.formato} elegidos`, UI.text);
+    if (button(this.game, x + 2, y + 8, 'CAMBIAR FORMATO', { hotkey: 'M', w: w - 4 })) this._cycleFormat(ctx);
+    if (important) {
+      const on = ctx.warmup && ctx.warmup.wanted;
+      if (button(this.game, x + 2, y + 10, `CALENTAR ${on ? '✔' : ''}`, { hotkey: 'W', w: w - 4, tone: on ? TONE.good : UI.accent, selected: on })) this._toggleWarmup(ctx);
+      screen.text(x + 3, y + 11, `-${WARMUP_COST} STA · tiro más firme`, UI.textDim);
+    }
+  }
+
+  // tarjetas de abuelos disponibles (página que contiene al cursor)
+  _drawRoster(ctx, r, available) {
+    const { screen, input, player } = this.game;
+    screen.text(GRID_X, GRID_Y - 1, '¿QUIÉN JUEGA?', TONE.good);
+    screen.glow(GRID_X, GRID_Y - 1, 13, 1);
+    const per = GRID_COLS * GRID_ROWS;
+    const page = Math.floor(this.cursor / per);
+    const pages = Math.max(1, Math.ceil(available.length / per));
+    if (pages > 1) screen.text(GRID_X + 16, GRID_Y - 1, `página ${page + 1}/${pages}`, UI.textDim);
+    let hover = null;
+    const main = r.forecast.main;
+    for (let n = 0; n < per; n++) {
+      const k = page * per + n;
+      if (k >= available.length) break;
       const id = available[k];
       const s = player.roster.get(id);
       const d = ABUELO_DATA[id];
+      const cx = GRID_X + (n % GRID_COLS) * (CARD_W + CARD_GAP_X);
+      const cy = GRID_Y + Math.floor(n / GRID_COLS) * (CARD_H + 1);
       const sel = k === this.cursor;
       const picked = ctx.teamSel.includes(id);
-      const stCol = s.st > 60 ? '#7ec850' : s.st > 30 ? '#ffe14d' : '#ff5c5c';
-      const aff = d.clima[r.forecast.main] !== undefined ? d.clima[r.forecast.main] : 0;
-      const affStr = r.forecast.main === 'SOL' ? '  ' : aff === 1 ? ' ✡' : aff === -1 ? ' ▼' : '  ';
-      const affCol = aff === 1 ? '#7ec850' : aff === -1 ? '#ff5c5c' : '#666';
-      // una sola línea por abuelo: las 5 stats ya no hace falta repetirlas
-      // aquí, viven en el tooltip del rollover — así caben todos sin scroll
-      const rowRect = { x: PX - 1, y: yy, w: 130, h: 1 };
-      const over = hitRect(input.mouse.cx, input.mouse.cy, rowRect.x, rowRect.y, rowRect.w, rowRect.h);
-      if (over) rowHover = { id, k };
-      if (sel || over) screen.text(rowRect.x, yy, ' '.repeat(rowRect.w), '#3a4a3a');
-      // vínculo con quien ya esté elegido para este partido (ver
-      // domain/Chemistry.js): un corazón junto al nombre si la pareja
-      // llega con algo de rodaje, más lleno cuanto más fuerte el vínculo
-      const bondLvl = ctx.teamSel.filter((oid) => oid !== id)
-        .reduce((best, oid) => Math.max(best, chemistryLevel(gamesFor(player.chemistry, id, oid))), 0);
-      const bondIcon = bondLvl >= 3 ? '♥' : bondLvl >= 1 ? '♡' : '';
-      const bondCol = bondLvl >= 3 ? '#ff8fc0' : '#a8e8c8';
-      screen.text(PX + 1, yy, `${picked ? '✓ ' : '  '}${this.game.displayName(id)}`, picked ? '#ffe680' : (sel || over) ? '#fff' : '#c9c2a8');
-      if (bondIcon) screen.text(PX + 21, yy, bondIcon, bondCol);
-      screen.text(PX + 24, yy, `STA ${'▮'.repeat(Math.round(s.st / 12.5))}${'▯'.repeat(8 - Math.round(s.st / 12.5))} ${Math.round(s.st)}`, stCol);
-      screen.text(PX + 48, yy, `MOR ${s.mo >= 0 ? '+' : ''}${s.mo}`, s.mo >= 0 ? '#88e088' : '#ef9f9f');
-      screen.text(PX + 60, yy, `${CLIMAS[r.forecast.main].icon}${affStr}`, affCol);
-      yy += 2;
-      if (yy > 36) break;
+      const over = hitRect(input.mouse.cx, input.mouse.cy, cx, cy, CARD_W, CARD_H);
+      if (over) hover = { id, k };
+      const tone = picked ? TONE.gold : sel || over ? UI.accent : UI.edge;
+      panel(screen, cx, cy, CARD_W, CARD_H, {
+        title: `${picked ? '✔ ' : ''}${truncate(this.game.displayName(id), CARD_W - 12)}`, tone, titleColor: picked ? TONE.gold : sel || over ? '#ffffff' : UI.text,
+        fill: picked ? tint(TONE.gold, 0.14) : sel || over ? UI.panelHi : UI.panel, style: picked || sel ? 'double' : 'single',
+      });
+      screen.text(cx + CARD_W - 7, cy, ` Nv${s.level} `, UI.textDim);
+      // 5 stats en chips
+      let sx = cx + 2;
+      for (const key of STAT_KEYS) sx += statChip(screen, sx, cy + 1, key, s.getStat(key)) + 2;
+      // stamina + moral
+      const stCol = s.st > 60 ? TONE.good : s.st > 30 ? TONE.warn : TONE.bad;
+      screen.text(cx + 2, cy + 2, 'STA', UI.textDim);
+      segments(screen, cx + 6, cy + 2, 10, Math.round(s.st / 10), { color: stCol });
+      screen.text(cx + 17, cy + 2, `${Math.round(s.st)}`.padStart(3), stCol);
+      screen.text(cx + 22, cy + 2, `MOR ${s.mo >= 0 ? '+' : ''}${s.mo}`, s.mo >= 0 ? TONE.good : TONE.bad);
+      // afinidad con el clima de hoy + vínculo con los ya elegidos
+      const aff = main === 'SOL' || !d ? 0 : (d.clima[main] ?? 0);
+      const cl = CLIMAS[main];
+      if (aff === 1) screen.text(cx + 2, cy + 3, `${cl.icon} ✚ le va este clima`, TONE.good);
+      else if (aff === -1) screen.text(cx + 2, cy + 3, `${cl.icon} ▼ sufre este clima`, TONE.bad);
+      const bondLvl = ctx.teamSel.filter((oid) => oid !== id).reduce((best, oid) => Math.max(best, chemistryLevel(gamesFor(player.chemistry, id, oid))), 0);
+      if (bondLvl >= 1) screen.text(cx + CARD_W - 4, cy + 3, bondLvl >= 3 ? '♥' : '♡', bondLvl >= 3 ? '#ff8fc0' : '#a8e8c8');
     }
+    // peña corta: huecos vacíos en la primera fila, para que se vea que caben más
+    for (let n = available.length; page === 0 && n < GRID_COLS; n++) {
+      const cx = GRID_X + n * (CARD_W + CARD_GAP_X);
+      screen.box(cx, GRID_Y, CARD_W, CARD_H, UI.edgeDim, 'single', null);
+      screen.text(cx + Math.floor((CARD_W - 11) / 2), GRID_Y + 2, 'plaza libre', UI.textFaint);
+      screen.text(cx + Math.floor((CARD_W - 20) / 2), GRID_Y + 3, 'se ficha en MI PEÑA', UI.textFaint);
+    }
+    return hover;
+  }
 
+  _drawBottom(ctx, available, frame) {
+    const { screen, player } = this.game;
+    const y0 = 40;
     const injured = player.roster.ids.filter((id) => player.roster.get(id).isInjured(player.seasonClock.day));
     if (injured.length) {
       const dias = Math.max(...injured.map((id) => player.roster.get(id).injuredUntil - player.seasonClock.day));
-      screen.text(PX, 38, `De baja: ${injured.map((id) => this.game.displayName(id)).join(', ')} (vuelve en ${dias}d)`, '#ff8c5b');
+      screen.text(GRID_X, y0 - 1, `✚ de baja: ${injured.map((id) => this.game.displayName(id)).join(', ')} (vuelve en ${dias}d)`, '#ff8c5b');
     }
-
+    // bolas: ◀ nombre ▶
     const bolaName = BOLAS[ctx.bola].name;
     const many = player.bolasOwned.length > 1;
-    screen.text(PX, 39, `BOLAS: ${many ? '◀ ' : ''}${bolaName}${many ? ' ▶' : ''}`, '#88c8e8');
-    screen.text(PX + 10 + bolaName.length + (many ? 4 : 0) + 3, 39, BOLAS[ctx.bola].desc.slice(0, 60), '#6a86a0');
-
+    screen.text(GRID_X, y0, 'BOLAS', UI.textDim);
+    if (many && button(this.game, GRID_X + 7, y0, '◀', { w: 3 })) this._cycleBolas(ctx, -1);
+    screen.text(GRID_X + 11, y0, bolaName, TONE.info);
+    if (many && button(this.game, GRID_X + 12 + bolaName.length, y0, '▶', { w: 3 })) this._cycleBolas(ctx, 1);
+    screen.text(GRID_X + 17 + bolaName.length, y0, truncate(BOLAS[ctx.bola].desc, 70), UI.textDim);
+    // apuesta del bar
     if (ctx.bet) {
-      if (ctx.bet.accepted) screen.text(PX, 41, `✔ Apuesta aceptada: ${ctx.bet.desc}`, '#ffcf8a');
-      else screen.text(PX, 41, `EL DEL BAR: "${ctx.bet.desc}"   [A] aceptar`, frame % 30 < 22 ? '#ffcf8a' : '#a08050');
+      if (ctx.bet.accepted) screen.text(GRID_X, y0 + 1, `✔ apuesta aceptada: ${ctx.bet.desc}`, '#ffcf8a');
+      else {
+        screen.text(GRID_X, y0 + 1, `EL DEL BAR: "${ctx.bet.desc}"`, frame % 30 < 22 ? '#ffcf8a' : '#a08050');
+        if (button(this.game, GRID_X + ctx.bet.desc.length + 17, y0 + 1, 'ACEPTAR', { hotkey: 'A', w: 14 })) this._acceptBet(ctx);
+      }
     }
+    if (this.game.deathEvent) screen.text(GRID_X, y0 + 2, truncate(this.game.deathEvent.text, 130), UI.text);
+    else if (this.game.calendarEvent) screen.text(GRID_X, y0 + 2, truncate(this.game.calendarEvent.text, 130), '#ff9c5b');
 
-    if (this.game.deathEvent) screen.text(PX, 42, this.game.deathEvent.text, '#c9c2a8');
-    else if (this.game.calendarEvent) screen.text(PX, 42, this.game.calendarEvent.text, '#ff9c5b');
-
+    // botón de salir a la pista (1c1: basta con elegir una tarjeta)
     const canStart = ctx.teamSel.length === ctx.formato;
-    const baseHelp = ctx.formato === 1
-      ? '[↑/↓] abuelo · ratón = detalle/elegir   [ENTER] jugar   [←/→] bolas   [F] simular (debug)'
-      : `[↑/↓] abuelo · ratón = detalle/elegir   [ENTER] elegir/quitar   [←/→] bolas   [F] simular (debug)   (${ctx.teamSel.length}/${ctx.formato})`;
-    screen.text(PX + Math.floor((130 - baseHelp.length) / 2), 44, baseHelp, '#c9c2a8');
-    if (ctx.formato > 1 && canStart && frame % 24 < 16) {
-      const goLabel = '▶ [S] ¡A LA PISTA! ◀';
-      screen.text(PX + Math.floor((130 - goLabel.length) / 2), 45, goLabel, '#7CFC00');
+    if (ctx.formato > 1) {
+      if (bigButton(this.game, 46, y0 + 3, 48, '▶ ¡A LA PISTA!', { hotkey: 'S', tone: TONE.good, disabled: !canStart })) this._launch(ctx, ctx.teamSel);
+    } else {
+      screen.textCenter(y0 + 4, 'elige un abuelo (clic o ENTER) y sale directo a la pista', UI.text);
     }
-
-    this._input(ctx, canStart, available, important);
-
-    // los tooltips se pintan al final de todo, para quedar siempre por
-    // encima del resto (paneles, plantilla, avisos...)
-    if (rowHover) this._drawAbueloTooltip(rowHover.id, input.mouse.cx, input.mouse.cy);
-    if (rivalHover) this._drawRivalTooltip(rivalHover.opponent, rivalHover.r, input.mouse.cx, input.mouse.cy);
-    if (rowHover && input.mouse.clicked) { this.cursor = rowHover.k; this._select(ctx, available); }
+    screen.textCenter(45, '↑↓←→ moverse · ENTER elegir · ratón = detalle · [F] simular (debug)', UI.textFaint);
   }
 
   _available() {
@@ -205,8 +266,7 @@ export class LineupScreen {
     return player.roster.ids.filter((id) => !player.roster.get(id).isInjured(player.seasonClock.day));
   }
 
-  // misma acción que hace [ENTER] sobre el abuelo bajo el cursor, para que
-  // el clic del ratón se comporte igual que el teclado
+  // misma acción que ENTER sobre el abuelo bajo el cursor (y que el clic)
   _select(ctx, available) {
     const id = available[this.cursor];
     if (ctx.formato === 1) this._launch(ctx, [id]);
@@ -214,8 +274,7 @@ export class LineupScreen {
     else if (ctx.teamSel.length < ctx.formato) ctx.teamSel.push(id);
   }
 
-  // aplica el coste de STA del calentamiento (si se pidió) a quien vaya a
-  // jugar de verdad, y solo entonces arranca el partido
+  // coste de STA del calentamiento (si se pidió) a quien juega, y a la pista
   _launch(ctx, ids) {
     const { player } = this.game;
     if (ctx.warmup && ctx.warmup.wanted) {
@@ -225,95 +284,84 @@ export class LineupScreen {
     this.game.startMatch(ids);
   }
 
-  _fillBlack(x, y, w, h) {
-    const { screen } = this.game;
-    for (let r = 0; r < h; r++) for (let c = 0; c < w; c++) screen.put(x + c, y + r, '█', '#000');
+  _cycleFormat(ctx) {
+    const maxF = Math.min(3, this._available().length);
+    do { ctx.formato = ctx.formato % 3 + 1; } while (ctx.formato > maxF);
+    ctx.teamSel = [];
   }
 
-  // tooltip de un abuelo propio: retrato grande + stats completas, igual
-  // que en Mi Peña, para no tener que ir y volver de pantalla para mirarlo
+  _toggleWarmup(ctx) {
+    if (!ctx.warmup) ctx.warmup = { wanted: false, done: false };
+    ctx.warmup.wanted = !ctx.warmup.wanted;
+  }
+
+  _cycleBolas(ctx, dir) {
+    const { player } = this.game;
+    const owned = player.bolasOwned;
+    let k = owned.indexOf(ctx.bola);
+    k = (k + (dir > 0 ? 1 : owned.length - 1)) % owned.length;
+    ctx.bola = owned[k]; player.bolaSel = ctx.bola; player.save();
+  }
+
+  _acceptBet(ctx) {
+    const { player } = this.game;
+    if (!ctx.bet || ctx.bet.accepted) return;
+    ctx.acceptBet();
+    player.money -= ctx.bet.stake; player.save();
+  }
+
+  // tooltip de un abuelo propio: stats completas + qué hacen, y el retrato
+  // grande al lado
   _drawAbueloTooltip(id, mx, my) {
     const { screen, player, faces } = this.game;
     const s = player.roster.get(id);
-    const f = faces[id];
-    const lines = [];
-    lines.push([this.game.displayName(id), '#ffe680']);
-    lines.push([`edad ${s.age}  ·  moral ${s.mo >= 0 ? '+' : ''}${s.mo}  ·  STA ${Math.round(s.st)}`, '#c9c2a8']);
-    lines.push([`Nv.${s.level}  ·  ${STAT_KEYS.map((k) => `${STAT_LABEL[k][0]}${s.getStatDisplay(k)}`).join('  ')}`, '#88c8e8']);
-    if (s.points > 0) lines.push([`${s.points} puntos por repartir en Mi Peña`, '#ffd75e']);
-    if (!s.signed) wrapText(ABUELO_DATA[id].trait, 42).forEach((l) => lines.push(['  ' + l, '#d8b8e8']));
-    lines.push([`${s.career.wins}G ${s.career.losses}P`, '#9a927a']);
-
-    const tw = Math.min(56, Math.max(...lines.map((l) => l[0].length)) + 4);
-    const th = lines.length + 2;
-    const tx = Math.min(mx + 2, screen.cols - tw - 1);
-    const ty = Math.min(my + 1, screen.rows - th - 1);
-    this._fillBlack(tx, ty, tw, th);
-    screen.box(tx, ty, tw, th, '#ffe14d', 'double');
-    lines.forEach((l, i) => screen.text(tx + 2, ty + 1 + i, l[0].slice(0, tw - 3), l[1]));
-
-    const art = s.signed ? s.signed.portrait : f.photo;
+    const lines = [[`edad ${s.age} · moral ${s.mo >= 0 ? '+' : ''}${s.mo} · STA ${Math.round(s.st)} · Nv.${s.level}`, UI.text]];
+    for (const k of STAT_KEYS) lines.push([`${STAT[k].glyph} ${STAT[k].label.padEnd(8)} ${String(s.getStatDisplay(k)).padStart(3)}  ${STAT[k].does}`, STAT[k].color]);
+    if (s.points > 0) lines.push([`${s.points} puntos por repartir en Mi Peña`, TONE.gold]);
+    if (!s.signed && ABUELO_DATA[id]) wrapText(ABUELO_DATA[id].trait, 50).forEach((l) => lines.push([l, TONE.xp]));
+    lines.push([`historial: ${s.career.wins}G ${s.career.losses}P`, UI.textDim]);
+    const tip = tooltip(screen, mx + 2, my + 1, lines, { title: this.game.displayName(id), tone: UI.accent });
+    const art = s.signed ? s.signed.portrait : faces[id] && faces[id].photo;
     if (!art) return;
-    const pw = art.cols + 2, ph = art.rows + 3;
-    const py = Math.max(1, Math.min(screen.rows - ph - 1, Math.floor((screen.rows - ph) / 2)));
-    let px = tx + tw + 1;
-    if (px + pw > screen.cols) px = tx - pw - 1;
+    const pw = art.cols + 2, ph = art.rows + 2;
+    let px = tip.x + tip.w + 1;
+    if (px + pw > screen.cols) px = tip.x - pw - 1;
     if (px < 0) return;
-    this._fillBlack(px, py, pw, ph);
-    screen.box(px, py, pw, ph, '#ffe14d', 'double');
+    const py = Math.max(1, Math.min(screen.rows - ph - 1, tip.y));
+    panel(screen, px, py, pw, ph, { tone: UI.accent, fill: '#0a0d12' });
     screen.drawAnyPortrait(art, px + 1, py + 1);
   }
 
-  // del rival solo conocemos nombre y nivel (no sus 5 stats reales): el
-  // rollover sirve sobre todo para ver el retrato en grande
+  // del rival solo se conoce nombre y nivel: el rollover enseña su cara
   _drawRivalTooltip(opponent, r, mx, my) {
     const { screen } = this.game;
-    const lines = [[opponent.name, '#ef9f9f'], [`Nivel ${r.aiLevel}/10`, '#c9c2a8']];
-    const tw = Math.min(40, Math.max(...lines.map((l) => l[0].length)) + 4);
-    const th = lines.length + 2;
-    const tx = Math.min(mx + 2, screen.cols - tw - 1);
-    const ty = Math.min(my + 1, screen.rows - th - 1);
-    this._fillBlack(tx, ty, tw, th);
-    screen.box(tx, ty, tw, th, '#ef7676', 'double');
-    lines.forEach((l, i) => screen.text(tx + 2, ty + 1 + i, l[0], l[1]));
-
+    const tip = tooltip(screen, mx + 2, my + 1, [[`nivel ${r.aiLevel}/10`, UI.text]], { title: opponent.name, tone: TONE.rival });
     const art = r.rivalPortrait || RIVAL_FACES[0].photo;
     if (!art) return;
-    const pw = art.cols + 2, ph = art.rows + 3;
-    const py = Math.max(1, Math.min(screen.rows - ph - 1, Math.floor((screen.rows - ph) / 2)));
-    let px = tx + tw + 1;
-    if (px + pw > screen.cols) px = tx - pw - 1;
+    const pw = art.cols + 2, ph = art.rows + 2;
+    let px = tip.x + tip.w + 1;
+    if (px + pw > screen.cols) px = tip.x - pw - 1;
     if (px < 0) return;
-    this._fillBlack(px, py, pw, ph);
-    screen.box(px, py, pw, ph, '#ef7676', 'double');
+    const py = Math.max(1, Math.min(screen.rows - ph - 1, tip.y));
+    panel(screen, px, py, pw, ph, { tone: TONE.rival, fill: '#0a0d12' });
     screen.drawAnyPortrait(art, px + 1, py + 1);
   }
 
   _input(ctx, canStart, available, important) {
-    const { input, player } = this.game;
-    if (important && (input.hit('w') || input.hit('W'))) {
-      if (!ctx.warmup) ctx.warmup = { wanted: false, done: false };
-      ctx.warmup.wanted = !ctx.warmup.wanted;
-    }
+    const { input } = this.game;
+    if (important && (input.hit('w') || input.hit('W'))) this._toggleWarmup(ctx);
     if (!available.length) return;
-    if (input.hit('ArrowUp')) this.cursor = (this.cursor + available.length - 1) % available.length;
-    if (input.hit('ArrowDown')) this.cursor = (this.cursor + 1) % available.length;
-    if (input.hit('m') || input.hit('M')) {
-      const maxF = Math.min(3, available.length);
-      do { ctx.formato = ctx.formato % 3 + 1; } while (ctx.formato > maxF);
-      ctx.teamSel = [];
-    }
+    const n = available.length;
+    if (input.hit('ArrowUp')) this.cursor = Math.max(0, this.cursor - GRID_COLS);
+    if (input.hit('ArrowDown')) this.cursor = Math.min(n - 1, this.cursor + GRID_COLS);
+    // ←/→ se mueve entre tarjetas si hay más de una; con una sola, cambia de bolas
+    if (n > 1) {
+      if (input.hit('ArrowLeft')) this.cursor = (this.cursor + n - 1) % n;
+      if (input.hit('ArrowRight')) this.cursor = (this.cursor + 1) % n;
+    } else if (input.hit('ArrowLeft') || input.hit('ArrowRight')) this._cycleBolas(ctx, input.hit('ArrowRight') ? 1 : -1);
+    if (input.hit('m') || input.hit('M')) this._cycleFormat(ctx);
     if (input.hit('Enter') || input.hit(' ')) this._select(ctx, available);
-    if (input.hit('ArrowLeft') || input.hit('ArrowRight')) {
-      const owned = player.bolasOwned;
-      let k = owned.indexOf(ctx.bola);
-      k = (k + (input.hit('ArrowRight') ? 1 : owned.length - 1)) % owned.length;
-      ctx.bola = owned[k]; player.bolaSel = ctx.bola; player.save();
-    }
-    if ((input.hit('a') || input.hit('A')) && ctx.bet && !ctx.bet.accepted) {
-      ctx.acceptBet();
-      player.money -= ctx.bet.stake; player.save();
-    }
+    if ((input.hit('a') || input.hit('A')) && ctx.bet && !ctx.bet.accepted) this._acceptBet(ctx);
     if (ctx.formato > 1 && (input.hit('s') || input.hit('S')) && canStart) this._launch(ctx, ctx.teamSel);
     if (input.hit('f') || input.hit('F')) this.game.simulateMatch();
   }

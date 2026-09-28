@@ -13,7 +13,7 @@ const PLAIN = ['title', 'hub', 'agenda', 'penya', 'club', 'leaguemap', 'bar', 'c
 
 // ids de escena disponibles (tools/shots.mjs los recorre todos)
 export const SCENE_IDS = [
-  ...PLAIN, 'eurocup', 'lineup', 'result',
+  ...PLAIN, 'eurocup', 'lineup', 'press', 'result',
   'match-aim', 'match-power', 'match-flight', 'match-settled', 'match-measure',
   'train-arrime', 'fx-demo',
 ];
@@ -89,6 +89,11 @@ export function applySceneFromUrl(game) {
   } else if (id === 'lineup') {
     game._startWeeklyMatch();
     game.state = 'lineup';
+  } else if (id === 'press') {
+    // rueda de prensa de derbi (con la pulla del capitán rival)
+    game._startWeeklyMatch();
+    game.pressContext = { opponent: game.weeklyMatch.opponentClub, isDerby: true, isNemesis: false, isFinal: false, isCup: false };
+    game.state = 'press';
   } else if (id === 'result') {
     game._startWeeklyMatch();
     game.simulateMatch();
