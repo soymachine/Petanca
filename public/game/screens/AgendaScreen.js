@@ -1,19 +1,34 @@
 import { TabsBar } from './TabsBar.js';
 import { countryTag } from '../data/countries.js';
-import { wrapText } from '../core/utils.js';
+import { wrapText, hitRect, truncate } from '../core/utils.js';
 import { fillDecisionText } from '../data/decisionEvents.js';
 import { TRAINING_DRILLS } from '../data/trainingDrills.js';
 import { STAT_LABEL } from '../data/abuelos.js';
+import { UI, TONE, STAT, tint, desaturate } from '../ui/theme.js';
+import { panel, bigButton, button, badge, tooltip } from '../ui/widgets.js';
 
+const FONT = '"Menlo", "Consolas", "DejaVu Sans Mono", monospace';
 const WD_SHORT = { lunes: 'LUN', martes: 'MAR', miércoles: 'MIÉ', jueves: 'JUE', viernes: 'VIE', sábado: 'SÁB', domingo: 'DOM' };
-const AY = 10, PAGE_W = 55, PAGE_GAP = 5, PAGE_H = 33;
+// tablero: dos semanas, 7 casillas por semana (lunes siempre en su columna)
+const TILE_W = 18, TILE_H = 13, GX = 4, GY = 8, WEEK_GAP = 2;
+const STATUS_Y = GY + 2 * TILE_H + WEEK_GAP + 1;
+// código visual de cada tipo de día (icono + color), el mismo en casilla y tooltip
+const KIND = {
+  match: { icon: '◉', col: TONE.good, label: 'LIGA' },
+  cup: { icon: '♛', col: TONE.gold, label: 'COPA' },
+  euro: { icon: '✪', col: '#6fb8ff', label: 'EUROPA' },
+  training: { icon: '✎', col: '#9ad0c0', label: 'ENTRENO' },
+};
 const STEP_FRAMES = 12; // ritmo del avance automático por días vacíos
 const PAUSE_FRAMES = 60; // pausa (~1s) al caer en un día con evento antes de entrar
 const PAGE_STEP = 2; // el pasador siempre mueve las dos semanas visibles a la vez
 const MAX_PAGE_AHEAD = 12; // tope de semanas que se puede pasar hacia delante
 
-// La agenda a pantalla completa: un cuaderno abierto de dos semanas, con
-// posiciones FIJAS por día de la semana (lunes siempre en su columna) —
+// La agenda a pantalla completa: un tablero de dos semanas (Fase 4 del
+// rediseño, docs/REDISENO.md) con una casilla grande por día — número en
+// grande, icono y color del evento (◉ liga, ♛ Copa, ✪ Europa, ✎ entreno),
+// hoy con borde que late, días ya pasados sellados con su marcador. Las
+// posiciones son FIJAS por día de la semana (lunes siempre en su columna):
 // solo cambia de página semana a semana, nunca se desplaza día a día.
 // [ENTER] no salta directo al próximo evento: avanza día a día marcando
 // cada jornada vacía como completada, y en cuanto cae en un día con algo
@@ -42,7 +57,6 @@ export class AgendaScreen {
     // "ESC = Inicio" de TabsBar, o se sale de la Agenda sin resolverlo
     if (this.game.decisionEvent && input.hit('Escape')) { input.pressed.Escape = false; }
     TabsBar.draw(this.game, 'agenda');
-    screen.textCenter(4, '═══ AGENDA DE LA PEÑA ═══', '#ffb347');
 
     // el primer amistoso se juega de verdad (pasa por alineación y partido
     // completo) y vuelve aquí al terminar: se recoge el resultado y se
@@ -84,11 +98,24 @@ export class AgendaScreen {
     // pareja de semanas de una liga que ya no es la actual
     if (this.leftWeek === null || this.leftWeek < clock.seasonWeekOffset) this.leftWeek = clock.weekIndex;
     while (clock.weekIndex >= this.leftWeek + 2) this.leftWeek += 2;
-    const bookW = PAGE_W * 2 + PAGE_GAP;
-    const bx = Math.floor((screen.cols - bookW) / 2);
-    screen.box(bx, AY - 3, bookW, 3, '#c9a35d', 'double');
-    const todayLabel = `H O Y   ·   ${clock.weekdayName.toUpperCase()}   ·   SEMANA ${clock.weekIndex + 1}`;
-    screen.text(bx + Math.floor((bookW - todayLabel.length) / 2), AY - 2, todayLabel, '#ffe680');
+    // banda de título: AGENDA a la izquierda, HOY a la derecha
+    screen.fill(0, 3, screen.cols, 3, '#0f1520');
+    const todayLabel = `HOY · ${clock.weekdayName.toUpperCase()} · SEMANA ${clock.weekIndex + 1}`;
+    screen.layer('over', (c, R) => {
+      c.textBaseline = 'middle'; c.font = `bold ${R.ch * 1.5}px ${FONT}`;
+      c.textAlign = 'left'; c.fillStyle = UI.accent; c.shadowColor = UI.accent; c.shadowBlur = R.ch * 0.5;
+      c.fillText('AGENDA', R.cx(GX), R.cy(4.5));
+      c.font = `bold ${R.ch * 1.0}px ${FONT}`; c.textAlign = 'right';
+      c.fillStyle = UI.accentHi; c.shadowColor = UI.accentHi;
+      c.fillText(todayLabel, R.cx(screen.cols - GX), R.cy(4.5));
+      c.shadowBlur = 0;
+    });
+    // leyenda del código de colores, en la propia banda
+    let lgx = GX + 16;
+    for (const k of ['match', 'cup', 'euro', 'training']) {
+      screen.text(lgx, 4, `${KIND[k].icon} ${KIND[k].label.toLowerCase()}`, KIND[k].col);
+      lgx += KIND[k].label.length + 5;
+    }
 
     // pasador de páginas: qué par de semanas se ve ahora mismo, sin tocar
     // el avance real del calendario (this.pageOffset es solo de cámara).
@@ -102,122 +129,63 @@ export class AgendaScreen {
     const baseWeek = this.leftWeek + this.pageOffset;
     const week1 = clock.weekAt(baseWeek, player.league);
     const week2 = clock.weekAt(baseWeek + 1, player.league);
-    screen.box(bx, AY, PAGE_W, PAGE_H, '#8a7f66', 'double');
-    screen.box(bx + PAGE_W + PAGE_GAP, AY, PAGE_W, PAGE_H, '#8a7f66', 'double');
+    const bx = GX, bookW = 7 * TILE_W + 6;
 
-    // flechas de paginación, a los lados del libro
+    // flechas de paginación a los lados del tablero (no parpadean: el
+    // parpadeo queda reservado a "hoy")
     const canPagePrev = this.pageOffset > minPageOffset;
     const canPageNext = this.pageOffset < MAX_PAGE_AHEAD;
-    // estas flechas de paginación NO parpadean — solo el marcador del día
-    // actual (más abajo, `isToday`) lo hace, para que el parpadeo siga
-    // significando "hoy" y no se diluya en toda la pantalla
-    screen.text(bx - 3, AY + PAGE_H / 2, canPagePrev ? '◀' : ' ', canPagePrev ? '#ffe680' : '#3a352c');
-    screen.text(bx + bookW + 1, AY + PAGE_H / 2, canPageNext ? '▶' : ' ', canPageNext ? '#ffe680' : '#3a352c');
-
-    // lomo del cuaderno: degradado de caracteres para sugerir la curva del
-    // papel encuadernado, en vez de un simple relleno de '│'
-    const spineGlyphs = ['▏', '│', '║', '│', '▕'];
-    const spineCols = ['#3a2f1a', '#5a4f3a', '#7a6a4a', '#5a4f3a', '#3a2f1a'];
-    for (let i = 0; i < PAGE_GAP; i++) {
-      for (let r = 1; r < PAGE_H - 1; r++) screen.put(bx + PAGE_W + i, AY + r, spineGlyphs[i] || '│', spineCols[i] || '#5a4f3a');
-    }
-    // anillas de encuadernación sobre el lomo, como una agenda de anillas real
-    for (let r = 3; r < PAGE_H - 1; r += 7) screen.put(bx + PAGE_W + 2, AY + r, '◎', '#2a2418');
-
-    // textura de papel: puntos tenues y esquina "doblada" en cada página
-    for (const px of [bx, bx + PAGE_W + PAGE_GAP]) {
-      for (let r = 2; r < PAGE_H - 1; r++) {
-        for (let c = 3; c < PAGE_W - 2; c++) {
-          if ((c + r * 3) % 11 === 0) screen.put(px + c, AY + r, '·', '#2e2a1e');
-        }
-      }
-      screen.put(px + PAGE_W - 3, AY + PAGE_H - 2, '◢', '#6b5f42');
-      screen.put(px + PAGE_W - 2, AY + PAGE_H - 2, '◤', '#4a4230');
-    }
-
-    screen.text(bx + 2, AY + 1, `SEMANA ${baseWeek + 1}`, '#c9a35d');
-    screen.text(bx + PAGE_W + PAGE_GAP + 2, AY + 1, `SEMANA ${baseWeek + 2}`, '#c9a35d');
+    const midY = GY + TILE_H;
+    screen.text(bx - 3, midY, '◀', canPagePrev ? UI.accentHi : '#2a2f3a');
+    screen.text(bx + bookW + 1, midY, '▶', canPageNext ? UI.accentHi : '#2a2f3a');
 
     let hover = null;
-    [[week1, bx], [week2, bx + PAGE_W + PAGE_GAP]].forEach(([week, px]) => {
-      // margen tipo cuaderno: una línea vertical tenue a la izquierda
-      const marginX = px + 4;
-      for (let r = 2; r < PAGE_H - 1; r++) screen.put(marginX, AY + r, '│', '#6b3d3d');
-
-      let yy = AY + 3;
-      for (const d of week) {
+    [week1, week2].forEach((week, wi) => {
+      const wy = GY + wi * (TILE_H + WEEK_GAP);
+      const thisWeek = week.some((d) => d.day === clock.day);
+      screen.text(bx, wy - 1, `SEMANA ${baseWeek + 1 + wi}`, thisWeek ? UI.accentHi : UI.textDim);
+      if (thisWeek) screen.text(bx + 11, wy - 1, '· esta semana', UI.textDim);
+      week.forEach((d, i) => {
+        const x = bx + i * (TILE_W + 1);
         const entry = this._dayEntry(d);
         const isToday = d.day === clock.day;
         const completed = d.day < clock.day;
-        const rowOver = !this.playing && input.mouse.cy >= yy && input.mouse.cy <= yy + 2 && input.mouse.cx >= px + 1 && input.mouse.cx < px + PAGE_W - 1;
-        if (rowOver) hover = { d, entry, px, yy, completed };
-        const wd = WD_SHORT[d.weekdayName];
-        const dayCol = isToday ? '#ffe14d' : d.isMatchDay ? '#e8ddb8' : '#c9c2a8';
-        const tabCol = rowOver ? '#fff' : dayCol;
-
-        // fondo de la fila teñido según qué haya ese día: partido de liga
-        // o de Copa se ven de un vistazo por el color, sin tener que leer
-        // el texto — los días "libres"/entreno quedan con el papel normal.
-        // No hay capa de "background" de verdad (el buffer es char+color
-        // plano): se simula rellenando con un carácter de sombreado y
-        // dibujando el texto encima después, en vez de un espacio en
-        // blanco (que con solo color de texto no pintaría nada visible).
-        if (!completed && (entry.kind === 'match' || entry.kind === 'cup')) {
-          const bg = entry.kind === 'cup' ? (entry.european ? '#1a3a4a' : '#4a3a18') : '#20401f';
-          for (let r = 0; r < 3; r++) screen.text(px + 5, yy + r, '░'.repeat(PAGE_W - 6), bg);
-        }
-
-        // "pestaña" del día: una mini casilla con el número, como una
-        // agenda física de verdad. Los días ya pasados quedan "sellados":
-        // el relleno ahora ocupa todo el ancho de la fila, no solo la
-        // casilla del número, para que se note de un vistazo cuánto se ha
-        // avanzado en la semana.
-        if (completed) {
-          for (let r = 0; r < 3; r++) screen.text(px + 1, yy + r, '▓'.repeat(PAGE_W - 2), '#1f3d1f');
-          screen.text(px + 1, yy, '▓▓▓▓', '#3a6a3a');
-          screen.text(px + 1, yy + 1, `▓${String(d.day).padStart(2)}▓`, '#9fe89f');
-          screen.text(px + 1, yy + 2, '▓▓▓▓', '#3a6a3a');
-        } else {
-          screen.text(px + 1, yy, '┌──┐', tabCol);
-          screen.text(px + 1, yy + 1, `│${String(d.day).padStart(2)}│`, tabCol);
-          screen.text(px + 1, yy + 2, '└──┘', tabCol);
-        }
-        screen.text(px + 6, yy, wd, isToday ? '#ffe14d' : completed ? '#bcdcbc' : '#8a7f66');
-        if (isToday) screen.text(px, yy + 1, '▶', frame % 20 < 14 ? '#ffe14d' : '#a8901a');
-
-        // cintita roja de "hoy" en el margen derecho de la fila, como el
-        // marcapáginas de tela de una agenda de verdad
-        if (isToday) screen.text(px + PAGE_W - 4, yy + 1, '▐█▌', '#a83a3a');
-
-        if (entry.kind === 'match') screen.text(px + 6, yy + 1, entry.text, completed ? '#bfe8bf' : '#7ec850');
-        else if (entry.kind === 'cup') screen.text(px + 6, yy + 1, entry.text, completed ? '#c9b970' : (entry.european ? '#88c8e8' : '#ffd75e'));
-        else if (entry.kind === 'training') screen.text(px + 6, yy + 1, rowOver && !completed ? entry.text + '  ✕ cancelar' : entry.text, completed ? '#bfe8e8' : rowOver ? '#ff8c5b' : '#88c8e8');
-        else if (rowOver && !completed && entry.kind === 'free') screen.text(px + 6, yy + 1, '+ agendar entreno', frame % 20 < 14 ? '#7CFC00' : '#4a8a4a');
-
-        // regla horizontal punteada, como las líneas de una libreta real
-        // (solo si cabe dentro de la página, el último día no lleva línea)
-        if (yy + 3 < AY + PAGE_H - 1) screen.text(px + 1, yy + 3, '·'.repeat(PAGE_W - 2), '#3a352a');
-        yy += 4;
-      }
+        const over = !this.playing && hitRect(input.mouse.cx, input.mouse.cy, x, wy, TILE_W, TILE_H);
+        if (over) hover = { d, entry, completed };
+        this._drawTile(x, wy, d, entry, isToday, completed, over, frame);
+      });
     });
 
     const canFriendly = !this.playing && this.pageOffset === 0 && player.league.matchday === 0 && player.friendliesLeft > 0;
     if (this.playing) {
       const label = this.playing.pendingEvent ? '⏸ algo pasa hoy... un momento' : '▶▶ avanzando por la agenda...';
-      screen.textCenter(AY + PAGE_H + 1, label, frame % 20 < 14 ? '#7CFC00' : '#4a8a4a');
+      screen.textCenter(STATUS_Y, label, frame % 20 < 14 ? TONE.good : '#4a8a4a');
     } else if (this.pageOffset > 0) {
-      screen.textCenter(AY + PAGE_H + 1, '[←/→] cambiar de semana    click en un día libre para agendar un entreno', '#c9c2a8');
-      screen.textCenter(AY + PAGE_H + 2, `estás viendo por delante — [→ ${MAX_PAGE_AHEAD - this.pageOffset} más] · vuelve con [←] hasta la semana actual`, '#8a7f66');
+      screen.textCenter(STATUS_Y, `estás viendo por delante — [→ ${MAX_PAGE_AHEAD - this.pageOffset} más] · vuelve con [←] hasta la semana actual`, UI.textDim);
     } else if (this.pageOffset < 0) {
-      screen.textCenter(AY + PAGE_H + 1, '[←/→] cambiar de semana    pasa el ratón por un día jugado para ver el resultado', '#c9c2a8');
-      screen.textCenter(AY + PAGE_H + 2, canPagePrev
-        ? `estás viendo el pasado de esta temporada — vuelve con [→] hasta la semana actual`
-        : 'primera semana de la temporada — no se puede ir más atrás', '#8a7f66');
-    } else {
-      const navHelp = canPagePrev ? '[←/→] ver semanas pasadas/futuras' : '[→] ver semanas futuras';
-      const baseHelp = `[ENTER] avanzar día a día    ${navHelp}    click en un día libre para agendar un entreno`;
-      screen.textCenter(AY + PAGE_H + 1, canFriendly ? `${baseHelp}    [F] amistoso de pretemporada (quedan ${player.friendliesLeft})` : baseHelp, '#c9c2a8');
+      screen.textCenter(STATUS_Y, canPagePrev
+        ? 'estás viendo el pasado de esta temporada — vuelve con [→] hasta la semana actual'
+        : 'primera semana de la temporada — no se puede ir más atrás', UI.textDim);
     }
+    if (this.friendlyResult) {
+      this.friendlyResult.frame++;
+      const txt = this.friendlyResult.won ? `AMISTOSO GANADO ante ${this.friendlyResult.opponent}` : `Amistoso perdido ante ${this.friendlyResult.opponent}`;
+      screen.textCenter(STATUS_Y, txt, this.friendlyResult.won ? TONE.good : '#ff8c5b');
+      if (this.friendlyResult.frame > 90) this.friendlyResult = null;
+    }
+
+    // botones: avanzar (o volver a hoy si se está mirando otra semana),
+    // amistoso de pretemporada y cuadro de Europa
+    let clickAdvance = false, clickFriendly = false, clickEuro = false, clickHome = false;
+    if (!this.schedule && !this.playing) {
+      const by = STATUS_Y + 2;
+      if (this.pageOffset === 0) clickAdvance = bigButton(this.game, 45, by, 50, 'AVANZAR DÍA A DÍA ▶▶  [ENTER]', { tone: TONE.good, selected: true });
+      else clickHome = bigButton(this.game, 45, by, 50, 'VOLVER A HOY', { tone: UI.accent });
+      if (canFriendly) clickFriendly = button(this.game, GX, by + 1, `AMISTOSO (quedan ${player.friendliesLeft})`, { hotkey: 'F', w: 36 });
+      if (player.euroCup) clickEuro = button(this.game, screen.cols - GX - 30, by + 1, 'CUADRO DE EUROPA', { hotkey: 'E', w: 30, tone: KIND.euro.col });
+    }
+    const navHelp = canPagePrev ? '←→ semanas pasadas/futuras' : '→ semanas futuras';
+    screen.textCenter(STATUS_Y + 6, `ENTER avanzar · ${navHelp} · clic en un día libre = agendar entreno · clic en un entreno = cancelarlo`, UI.textFaint);
 
     if (hover) this._drawDayTooltip(hover.d, hover.entry, input.mouse.cx, input.mouse.cy, hover.completed);
     // un día ya pasado (sellado en la agenda con el relleno ▓) no puede
@@ -236,19 +204,84 @@ export class AgendaScreen {
     if (!this.playing) {
       if (input.hit('ArrowLeft') || (input.mouse.clicked && canPagePrev && input.mouse.cx < bx && input.mouse.cx >= bx - 4)) this.pageOffset -= PAGE_STEP;
       if (input.hit('ArrowRight') || (input.mouse.clicked && canPageNext && input.mouse.cx >= bx + bookW && input.mouse.cx < bx + bookW + 4)) this.pageOffset += PAGE_STEP;
+      if (clickHome) this.pageOffset = 0;
     }
-    if (!this.playing && this.pageOffset === 0 && (input.hit('Enter') || input.hit(' '))) this.playing = { nextAt: frame, pendingEvent: null };
-    if (canFriendly && (input.hit('f') || input.hit('F'))) {
+    if (!this.playing && this.pageOffset === 0 && (clickAdvance || input.hit('Enter') || input.hit(' '))) this.playing = { nextAt: frame, pendingEvent: null };
+    if (canFriendly && (clickFriendly || input.hit('f') || input.hit('F'))) {
       const result = this.game.playFriendly();
       if (result) this.friendlyResult = { won: result.won, opponent: result.opponent.name, frame: 0 };
     }
-    if (player.euroCup && (input.hit('e') || input.hit('E'))) this.game.state = 'eurocup';
-    if (this.friendlyResult) {
-      this.friendlyResult.frame++;
-      const txt = this.friendlyResult.won ? `AMISTOSO GANADO ante ${this.friendlyResult.opponent}` : `Amistoso perdido ante ${this.friendlyResult.opponent}`;
-      screen.textCenter(AY + PAGE_H + 2, txt, this.friendlyResult.won ? '#7CFC00' : '#ff8c5b');
-      if (this.friendlyResult.frame > 90) this.friendlyResult = null;
+    if (player.euroCup && (clickEuro || input.hit('e') || input.hit('E'))) this.game.state = 'eurocup';
+  }
+
+  // una casilla del tablero: número grande, icono del evento, qué hay ese
+  // día, y el sello de "hecho" (con marcador si se jugó) o el borde de HOY
+  _drawTile(x, y, d, entry, isToday, completed, over, frame) {
+    const { screen } = this.game;
+    const kind = entry.kind === 'cup' ? (entry.european ? KIND.euro : KIND.cup) : KIND[entry.kind] || null;
+    const col = kind ? (completed ? desaturate(kind.col, 0.55) : kind.col) : UI.textDim;
+    const fill = completed ? '#0d1310' : over ? UI.panelHi : kind ? tint(kind.col, 0.13) : UI.panel;
+    const edge = isToday ? UI.accent : over ? UI.accentHi : completed ? '#243224' : kind ? tint(kind.col, 0.6) : UI.edgeDim;
+    const wd = WD_SHORT[d.weekdayName];
+    panel(screen, x, y, TILE_W, TILE_H, { title: wd, tone: edge, fill, style: isToday ? 'double' : 'single', titleColor: isToday ? UI.accentHi : completed ? '#5a7a5a' : d.isMatchDay ? UI.text : UI.textDim });
+    const numCol = isToday ? UI.accentHi : completed ? '#4a6a4a' : UI.text;
+    screen.layer('over', (c, R) => {
+      c.textBaseline = 'middle';
+      c.font = `bold ${R.ch * 1.9}px ${FONT}`; c.textAlign = 'left';
+      c.fillStyle = numCol;
+      if (isToday) { c.shadowColor = UI.accent; c.shadowBlur = R.ch * 0.6; }
+      c.fillText(String(d.day), R.cx(x + 2), R.cy(y + 2.6));
+      if (kind) {
+        c.font = `${R.ch * 2.1}px ${FONT}`; c.textAlign = 'center';
+        c.fillStyle = col; c.shadowColor = col; c.shadowBlur = completed ? 0 : R.ch * 0.5;
+        c.fillText(kind.icon, R.cx(x + TILE_W - 4), R.cy(y + 2.6));
+      }
+      c.shadowBlur = 0;
+      if (isToday) {
+        // borde de HOY que respira
+        c.strokeStyle = UI.accent; c.lineWidth = Math.max(1, R.cw * 0.15);
+        c.globalAlpha = 0.35 + 0.35 * Math.abs(Math.sin(frame * 0.08));
+        c.shadowColor = UI.accent; c.shadowBlur = R.ch * 0.8;
+        c.strokeRect(R.cx(x) - R.cw * 0.3, R.cy(y) - R.ch * 0.3, R.cw * (TILE_W + 0.6), R.ch * (TILE_H + 0.6));
+        c.globalAlpha = 1; c.shadowBlur = 0;
+      }
+    });
+    let ly = y + 5;
+    for (const [t, c] of this._tileLines(entry)) {
+      for (const l of wrapText(t, TILE_W - 4)) {
+        if (ly > y + TILE_H - 4) break;
+        screen.text(x + 2, ly++, l, completed ? desaturate(c, 0.5) : c);
+      }
     }
+    const by = y + TILE_H - 2;
+    if (entry.result) {
+      const r = entry.result;
+      screen.text(x + 2, by, `${r.won ? '✔ GANADO' : '✘ PERDIDO'}`, r.won ? '#7ec850' : '#ff8c5b');
+      screen.text(x + TILE_W - 2 - `${r.scoreP}-${r.scoreA}`.length, by, `${r.scoreP}-${r.scoreA}`, UI.text);
+    } else if (completed) screen.text(x + 2, by, '✔', '#3a5a3a');
+    else if (over && entry.kind === 'free' && !d.isMatchDay) screen.text(x + 2, by, '+ entreno', frame % 20 < 14 ? TONE.good : '#4a8a4a');
+    else if (over && entry.kind === 'training') screen.text(x + 2, by, '✕ cancelar', '#ff8c5b');
+    else if (!kind && d.isMatchDay) screen.text(x + 2, by, 'descanso', UI.textFaint);
+    if (isToday) badge(screen, x + TILE_W - 7, y + TILE_H - 1, 'HOY', frame % 20 < 14 ? UI.accentHi : UI.accent);
+  }
+
+  // qué se escribe dentro de la casilla, en líneas [texto, color]
+  _tileLines(entry) {
+    const r = entry.result;
+    if (r) {
+      if (r.kind === 'league') return [['LIGA', KIND.match.col], [`vs ${r.oppName}`, UI.text], ...(r.isDerby ? [['¡DERBI!', '#ff9c5b']] : [])];
+      const k = r.kind === 'eurocup' ? KIND.euro : KIND.cup;
+      return [[k.label, k.col], [r.roundName.toLowerCase(), UI.textDim], [`vs ${r.oppName}`, UI.text]];
+    }
+    if (entry.kind === 'match') {
+      return [[`LIGA · ${entry.home ? 'en casa' : 'fuera'}`, KIND.match.col], [`vs ${entry.opp ? entry.opp.name : '???'}`, UI.text], ...(entry.isDerby ? [['¡DERBI!', '#ff9c5b']] : [])];
+    }
+    if (entry.kind === 'cup') {
+      const k = entry.european ? KIND.euro : KIND.cup;
+      return [[k.label, k.col], [entry.roundName.toLowerCase(), UI.textDim], [`vs ${entry.opp ? entry.opp.name : '???'}${entry.tag || ''}`, UI.text]];
+    }
+    if (entry.kind === 'training') return [['ENTRENO', KIND.training.col], [entry.drill, UI.text], [truncate(this.game.displayName(entry.abueloId), TILE_W - 4), UI.textDim]];
+    return [];
   }
 
   _dayEntry(d) {
@@ -267,7 +300,7 @@ export class AgendaScreen {
     if (d.hasEuroCup && player.euroCup && !player.euroCup.finished) {
       const opp = player.euroCup.playerOpponent();
       const tag = opp ? countryTag(opp.country, player.homeCountry) : '';
-      return { kind: 'cup', text: `    EUROPA: ${player.euroCup.roundName.toLowerCase()} vs ${opp ? opp.name : '???'}${tag}`, opp, roundName: player.euroCup.roundName, european: true };
+      return { kind: 'cup', text: `    EUROPA: ${player.euroCup.roundName.toLowerCase()} vs ${opp ? opp.name : '???'}${tag}`, opp, tag, roundName: player.euroCup.roundName, european: true };
     }
     if (d.hasCup && player.cup && !player.cup.finished) {
       const opp = player.cup.playerOpponent();
@@ -344,18 +377,18 @@ export class AgendaScreen {
       lines.push(['Día libre.', '#8a8a7a']);
       lines.push(['[click] agendar un entreno aquí', '#7CFC00']);
     }
-    const tw = Math.min(50, Math.max(...lines.map((l) => l[0].length)) + 4);
-    const th = lines.length + 2;
-    const tx = Math.min(mx + 2, screen.cols - tw - 1);
-    const ty = Math.min(my + 1, screen.rows - th - 1);
-    this._fillBlack(tx, ty, tw, th);
-    screen.box(tx, ty, tw, th, '#ffe14d', 'double');
-    lines.forEach((l, i) => screen.text(tx + 2, ty + 1 + i, l[0], l[1]));
+    tooltip(screen, mx + 2, my + 1, lines.map(([t, c]) => [truncate(t, 60), c]), { tone: UI.accentHi });
   }
 
-  _fillBlack(x, y, w, h) {
-    const { screen } = this.game;
-    for (let r = 0; r < h; r++) for (let c = 0; c < w; c++) screen.put(x + c, y + r, '█', '#000');
+  // opción de un modal: fila(s) resaltables con ratón y teclado. Devuelve
+  // true si se ha hecho clic en ella (nunca en el mismo frame en que se abrió
+  // el modal, para que el clic que lo abre no elija ya una opción)
+  _option(x, y, w, h, sel, armed) {
+    const { screen, input } = this.game;
+    const over = hitRect(input.mouse.cx, input.mouse.cy, x, y, w, h);
+    screen.fill(x, y, w, h, sel || over ? tint(UI.accent, 0.2) : UI.panel);
+    screen.put(x, y, '▌', sel ? UI.accent : over ? UI.accentHi : UI.edgeDim);
+    return { over, clicked: armed && over && input.mouse.clicked };
   }
 
   // evento de decisión: 2-3 opciones, cada una con su efecto a la vista
@@ -363,79 +396,104 @@ export class AgendaScreen {
   _drawDecisionModal() {
     const { screen, input } = this.game;
     const { event, ctx } = this.game.decisionEvent;
-    const w = 76, h = 10 + event.options.length * 4;
-    const x = Math.floor((screen.cols - w) / 2), y = Math.floor((screen.rows - h) / 2);
-    this._fillBlack(x, y, w, h);
-    screen.box(x, y, w, h, '#c8a0e8', 'double');
-    screen.textCenter(y + 1, event.title, '#ffe680');
+    const armed = this._decisionArmed === event;
+    this._decisionArmed = event;
+    const w = 80;
     const bodyLines = wrapText(fillDecisionText(event.text, ctx, (id) => this.game.displayName(id)), w - 6);
-    bodyLines.forEach((l, i) => screen.text(x + 3, y + 3 + i, l, '#c9c2a8'));
-
-    const optY0 = y + 3 + bodyLines.length + 1;
-    this.decisionCursor = ((this.decisionCursor % event.options.length) + event.options.length) % event.options.length;
-    event.options.forEach((opt, i) => {
-      const sel = i === this.decisionCursor;
-      const oy = optY0 + i * 4;
+    const opts = event.options.map((opt) => {
       const label = fillDecisionText(opt.label, ctx, (id) => this.game.displayName(id));
-      screen.text(x + 3, oy, `${sel ? '▶' : ' '} ${label}`, sel ? '#fff' : '#c9c2a8');
       const effectDesc = opt.resolve ? fillDecisionText(opt.previewText, ctx, (id) => this.game.displayName(id)) : describeDecisionEffects(opt.effects);
-      const effectLines = wrapText(effectDesc, w - 10);
-      effectLines.forEach((l, k) => screen.text(x + 5, oy + 1 + k, l, sel ? '#a8e8c8' : '#6a8a7a'));
+      return { label, effects: wrapText(effectDesc, w - 12) };
+    });
+    const h = 6 + bodyLines.length + opts.reduce((n, o) => n + o.effects.length + 2, 0);
+    const x = Math.floor((screen.cols - w) / 2), y = Math.max(1, Math.floor((screen.rows - h) / 2));
+    panel(screen, x, y, w, h, { title: event.title, tone: '#c8a0e8', titleColor: UI.accentHi, fill: '#12101a', style: 'double', opaque: true });
+    bodyLines.forEach((l, i) => screen.text(x + 3, y + 2 + i, l, UI.text));
+
+    const n = opts.length;
+    this.decisionCursor = ((this.decisionCursor % n) + n) % n;
+    let oy = y + 3 + bodyLines.length;
+    let chosen = -1;
+    opts.forEach((o, i) => {
+      const oh = o.effects.length + 1;
+      const r = this._option(x + 3, oy, w - 6, oh, i === this.decisionCursor, armed);
+      if (r.over && input.mouse.clicked) this.decisionCursor = i;
+      if (r.clicked) chosen = i;
+      const sel = i === this.decisionCursor;
+      screen.text(x + 5, oy, `${i + 1}. ${o.label}`, sel ? '#ffffff' : UI.text);
+      o.effects.forEach((l, k) => screen.text(x + 8, oy + 1 + k, l, sel ? '#a8e8c8' : '#6a8a7a'));
+      oy += oh + 1;
     });
 
-    screen.textCenter(y + h - 2, '[↑/↓] elegir   [ENTER] confirmar', '#c9c2a8');
+    screen.textCenter(y + h - 2, '↑↓ o 1-' + n + ' elegir · ENTER / clic confirmar', UI.textDim);
 
-    if (input.hit('ArrowUp')) this.decisionCursor = (this.decisionCursor + event.options.length - 1) % event.options.length;
-    if (input.hit('ArrowDown')) this.decisionCursor = (this.decisionCursor + 1) % event.options.length;
-    if (input.hit('Enter') || input.hit(' ')) {
-      this.game.resolveDecision(this.decisionCursor);
+    if (input.hit('ArrowUp')) this.decisionCursor = (this.decisionCursor + n - 1) % n;
+    if (input.hit('ArrowDown')) this.decisionCursor = (this.decisionCursor + 1) % n;
+    for (let i = 0; i < n; i++) if (input.hit(String(i + 1))) this.decisionCursor = i;
+    if (chosen >= 0 || input.hit('Enter') || input.hit(' ')) {
+      this.game.resolveDecision(chosen >= 0 ? chosen : this.decisionCursor);
       this.decisionCursor = 0;
+      this._decisionArmed = null;
     }
   }
 
   _drawScheduleModal() {
     const { screen, input, player } = this.game;
-    const w = 60, h = 22;
+    const armed = !!this.schedule.armed;
+    this.schedule.armed = true;
+    const w = 64, h = 24;
     const x = Math.floor((screen.cols - w) / 2), y = Math.floor((screen.rows - h) / 2);
-    this._fillBlack(x, y, w, h);
-    screen.box(x, y, w, h, '#ffe14d', 'double');
 
     if (this.schedule.step === 'abuelo') {
       const cost = player.facilities.trainingCost();
       const eligible = player.roster.ids.filter((id) => player.roster.get(id).st >= cost && !this.game.trainingScheduledFor(id) && !player.roster.get(id).isInjured(player.seasonClock.day));
-      screen.textCenter(y + 1, `¿QUIÉN ENTRENA EL ${this.schedule.day}?`, '#ffe680');
+      panel(screen, x, y, w, h, { title: `ENTRENO · DÍA ${this.schedule.day}`, tone: KIND.training.col, titleColor: KIND.training.col, fill: '#0f1618', style: 'double', opaque: true });
+      screen.textCenter(y + 2, '¿QUIÉN ENTRENA?', UI.accentHi);
       if (!eligible.length) {
-        screen.textCenter(y + 4, 'Nadie tiene energía libre para entrenar ahora mismo.', '#8a8a7a');
-        screen.textCenter(y + h - 2, '[ESC] cerrar', '#c9c2a8');
-        if (input.hit('Escape') || input.hit('Enter')) this.schedule = null;
+        screen.textCenter(y + 5, 'Nadie tiene energía libre para entrenar ahora mismo.', UI.textDim);
+        screen.textCenter(y + h - 2, 'ESC / ENTER cerrar', UI.textDim);
+        if (input.hit('Escape') || input.hit('Enter') || (armed && input.mouse.clicked)) this.schedule = null;
         return;
       }
       this.schedule.cursor = ((this.schedule.cursor % eligible.length) + eligible.length) % eligible.length;
-      eligible.forEach((id, i) => {
-        const sel = i === this.schedule.cursor;
+      let chosen = -1;
+      eligible.slice(0, 9).forEach((id, i) => {
         const s = player.roster.get(id);
-        screen.text(x + 4, y + 3 + i * 2, `${sel ? '▶' : ' '} ${this.game.displayName(id)}`.padEnd(30) + `STA ${Math.round(s.st)}`, sel ? '#fff' : '#c9c2a8');
+        const r = this._option(x + 3, y + 4 + i * 2, w - 6, 1, i === this.schedule.cursor, armed);
+        if (r.clicked) chosen = i;
+        const sel = i === this.schedule.cursor;
+        screen.text(x + 5, y + 4 + i * 2, truncate(this.game.displayName(id), 28), sel ? '#ffffff' : UI.text);
+        const stCol = s.st > 60 ? TONE.good : s.st > 30 ? TONE.warn : TONE.bad;
+        screen.text(x + 36, y + 4 + i * 2, `STA ${String(Math.round(s.st)).padStart(3)}  (−${cost})`, stCol);
       });
-      screen.textCenter(y + h - 2, '[↑/↓] elegir   [ENTER] confirmar   [ESC] cancelar', '#c9c2a8');
+      screen.textCenter(y + h - 2, '↑↓ elegir · ENTER / clic confirmar · ESC cancelar', UI.textDim);
       if (input.hit('ArrowUp')) this.schedule.cursor = (this.schedule.cursor + eligible.length - 1) % eligible.length;
       if (input.hit('ArrowDown')) this.schedule.cursor = (this.schedule.cursor + 1) % eligible.length;
-      if (input.hit('Enter') || input.hit(' ')) {
-        this.schedule.abueloId = eligible[this.schedule.cursor];
+      if (chosen >= 0 || input.hit('Enter') || input.hit(' ')) {
+        this.schedule.abueloId = eligible[chosen >= 0 ? chosen : this.schedule.cursor];
         this.schedule.step = 'drill';
+        this.schedule.cursor = 0;
+        this.schedule.armed = false;
       }
     } else {
-      screen.textCenter(y + 1, `¿QUÉ ENTRENA ${this.game.displayName(this.schedule.abueloId)}?`, '#ffe680');
+      panel(screen, x, y, w, h, { title: `ENTRENO · DÍA ${this.schedule.day}`, tone: KIND.training.col, titleColor: KIND.training.col, fill: '#0f1618', style: 'double', opaque: true });
+      screen.textCenter(y + 2, `¿QUÉ ENTRENA ${this.game.displayName(this.schedule.abueloId).toUpperCase()}?`, UI.accentHi);
       this.schedule.cursor = ((this.schedule.cursor % TRAINING_DRILLS.length) + TRAINING_DRILLS.length) % TRAINING_DRILLS.length;
+      let chosen = -1;
       TRAINING_DRILLS.forEach((drill, i) => {
         const sel = i === this.schedule.cursor;
         const bonus = player.facilities.trainingStatBonus(drill.stat);
-        screen.text(x + 4, y + 4 + i * 3, `${sel ? '▶' : ' '} ${drill.label}  (+${bonus} ${STAT_LABEL[drill.stat]})`, sel ? '#fff' : '#c9c2a8');
+        const st = STAT[drill.stat];
+        const r = this._option(x + 3, y + 4 + i * 3, w - 6, 2, sel, armed);
+        if (r.clicked) chosen = i;
+        screen.text(x + 5, y + 4 + i * 3, drill.label, sel ? '#ffffff' : UI.text);
+        screen.text(x + 5, y + 5 + i * 3, `${st ? st.glyph : '+'} +${bonus} ${STAT_LABEL[drill.stat]}${st ? ` · ${st.does}` : ''}`, st ? st.color : UI.textDim);
       });
-      screen.textCenter(y + h - 2, '[↑/↓] elegir   [ENTER] agendar   [ESC] cancelar', '#c9c2a8');
+      screen.textCenter(y + h - 2, '↑↓ elegir · ENTER / clic agendar · ESC cancelar', UI.textDim);
       if (input.hit('ArrowUp')) this.schedule.cursor = (this.schedule.cursor + TRAINING_DRILLS.length - 1) % TRAINING_DRILLS.length;
       if (input.hit('ArrowDown')) this.schedule.cursor = (this.schedule.cursor + 1) % TRAINING_DRILLS.length;
-      if (input.hit('Enter') || input.hit(' ')) {
-        this.game.scheduleTrainingOnDay(this.schedule.day, this.schedule.abueloId, TRAINING_DRILLS[this.schedule.cursor].id);
+      if (chosen >= 0 || input.hit('Enter') || input.hit(' ')) {
+        this.game.scheduleTrainingOnDay(this.schedule.day, this.schedule.abueloId, TRAINING_DRILLS[chosen >= 0 ? chosen : this.schedule.cursor].id);
         this.schedule = null;
       }
     }

@@ -19,6 +19,10 @@ export class Screen {
     // se vacían en cada render (hay que volver a pedirlas cada frame)
     this.layersUnder = [];
     this.layersOver = [];
+    // rectángulos opacos (modales, tooltips): tapan las capas 'over' pedidas
+    // ANTES que ellos, para que un número o icono en píxeles de debajo no
+    // se transparente a través de la ventana. Ver CanvasRenderer.render
+    this.occluders = [];
     this.renderer = null;
   }
 
@@ -43,6 +47,18 @@ export class Screen {
     for (let r = Math.max(0, y | 0); r < Math.min(this.rows, (y | 0) + h); r++) {
       for (let c = Math.max(0, x | 0); c < Math.min(this.cols, (x | 0) + w); c++) this.bgs[r * this.cols + c] = bg;
     }
+  }
+
+  // vacía un rectángulo (texto, fondo y resplandor) y lo marca como opaco
+  // para las capas de píxeles ya pedidas: base de modales y tooltips
+  opaque(x, y, w, h) {
+    for (let r = Math.max(0, y | 0); r < Math.min(this.rows, (y | 0) + h); r++) {
+      for (let c = Math.max(0, x | 0); c < Math.min(this.cols, (x | 0) + w); c++) {
+        const i = r * this.cols + c;
+        this.chars[i] = ' '; this.glows[i] = null;
+      }
+    }
+    this.occluders.push({ x, y, w, h, at: this.layersOver.length });
   }
 
   // resplandor en un rectángulo de celdas (true = del color del texto)
@@ -170,6 +186,6 @@ export class Screen {
 
   render() {
     if (this.renderer) this.renderer.render();
-    else { this.layersUnder.length = 0; this.layersOver.length = 0; }
+    else { this.layersUnder.length = 0; this.layersOver.length = 0; this.occluders.length = 0; }
   }
 }

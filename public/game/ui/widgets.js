@@ -7,7 +7,10 @@ import { UI, TONE, STAT, statValueColor, tint, mix } from './theme.js';
 import { hitRect } from '../core/utils.js';
 
 // panel: relleno + borde + título incrustado en el borde superior
-export function panel(screen, x, y, w, h, { title = null, tone = UI.edge, fill = UI.panel, style = 'single', titleColor = UI.accent, glow = false } = {}) {
+// opaque: tapa por completo lo de debajo (texto y capas de píxeles), para
+// modales y tooltips
+export function panel(screen, x, y, w, h, { title = null, tone = UI.edge, fill = UI.panel, style = 'single', titleColor = UI.accent, glow = false, opaque = false } = {}) {
+  if (opaque && screen.opaque) screen.opaque(x, y, w, h);
   screen.fill(x, y, w, h, fill);
   screen.box(x, y, w, h, tone, style);
   if (title) {
@@ -112,7 +115,7 @@ export function tooltip(screen, x, y, lines, { tone = UI.accent, title = null, m
   const h = rows.length + 2;
   const bx = Math.max(0, Math.min(x, screen.cols - w - 1));
   const by = Math.max(0, Math.min(y, screen.rows - h - 1));
-  panel(screen, bx, by, w, h, { title, tone, fill: '#141a26', titleColor: tone });
+  panel(screen, bx, by, w, h, { title, tone, fill: '#141a26', titleColor: tone, opaque: true });
   rows.forEach(([t, c], i) => screen.text(bx + 2, by + 1 + i, t, c));
   return { x: bx, y: by, w, h };
 }

@@ -11,10 +11,11 @@
   rediseño; se fusiona cuando el usuario lo pida.
 - **Fase en curso:** Fase 4 — pantallas de gestión (la 3 está hecha salvo
   la repetición a cámara lenta, que queda como mejora opcional).
-- **SIGUIENTE PASO CONCRETO:** Agenda (`screens/AgendaScreen.js`, escena
-  `?scene=agenda`): calendario de la semana/mes como tablero de juego,
-  cada día con icono de su evento (liga, Copa, Europa, entreno, festivo),
-  el día de hoy resaltado y el próximo partido destacado.
+- **SIGUIENTE PASO CONCRETO:** Mi Peña (`screens/PenyaScreen.js`, ~1000
+  líneas, escena `?scene=penya`): plantilla como tarjetas con retrato,
+  chips de stats (theme.STAT) y barras de nivel/XP, reparto de puntos con
+  botones +, ficha grande del abuelo elegido. Leer entero antes de tocar:
+  tiene muchos submodos (fichajes, objetos, química...).
 - **Último commit relevante:** (se rellena en cada commit)
 
 ## Visión
@@ -274,7 +275,21 @@ dinámico sin perder profundidad**.
       RENOMBRE del club y botón CONTINUAR. Congelado/reducir movimiento =
       estado final directo. La escena `result` se inventa un marcador (al
       simular no se apunta).
-- [ ] Agenda ·
+- [x] Agenda (`screens/AgendaScreen.js`): de cuaderno de filas a TABLERO
+      de dos semanas (7 casillas por semana, lunes siempre en su columna),
+      número del día en grande, icono+color por tipo (◉ liga, ♛ Copa,
+      ✪ Europa, ✎ entreno; leyenda en la banda de título), HOY con borde
+      que respira e insignia, días pasados sellados con ✔ y marcador
+      GANADO/PERDIDO; botón grande AVANZAR DÍA A DÍA (o VOLVER A HOY si se
+      mira otra semana), botones AMISTOSO [F] y CUADRO DE EUROPA [E];
+      tooltip unificado; modales de decisión y de entreno con opciones
+      clicables (1-N / ↑↓ / ENTER siguen igual) y efecto del entreno con el
+      glifo/color de su stat. Toda la lógica de avance, paginación y
+      agendado se conserva. Escenas nuevas `agenda-decision`,
+      `agenda-train`.
+- [x] Motor: `screen.opaque()` / `panel({opaque:true})` — modales y
+      tooltips tapan de verdad lo de debajo (texto, resplandor y las capas
+      de píxeles pedidas antes; el renderer las recorta).
       [ ] Mi Peña · [ ] Ligas / Copa de Europa · [ ] El Club · [ ] El Bar ·
       [ ] Capítulos / Hemeroteca / Ayuda / Portada
 
@@ -298,7 +313,8 @@ dinámico sin perder profundidad**.
 | 2026-09-28 | 17dd160 | Fase 3: juice, visibilidad por clima, clima 3D, arcade por defecto |
 | 2026-09-28 | 724e5c1 | Fase 4: Inicio rediseñado |
 | 2026-09-28 | 0e182a2 | Fase 4: Alineación + Prensa rediseñadas, escena `press` |
-| 2026-09-28 | (este) | Fase 4: Resultado rediseñado |
+| 2026-09-28 | 631b121 | Fase 4: Resultado rediseñado |
+| 2026-09-28 | (este) | Fase 4: Agenda como tablero + paneles opacos |
 
 ## Problemas conocidos / notas
 

@@ -159,7 +159,20 @@ export class CanvasRenderer {
     this._updateTextLayer();
     ctx.drawImage(this._textLayer, this.ox, this.oy);
     this._drawGlows();
-    for (const fn of screen.layersOver) fn(ctx, this);
+    screen.layersOver.forEach((fn, i) => {
+      // una capa pedida antes que un modal/tooltip no pinta dentro de él
+      const occ = screen.occluders.filter((o) => o.at > i);
+      if (!occ.length) { fn(ctx, this); return; }
+      ctx.save();
+      for (const o of occ) {
+        ctx.beginPath();
+        ctx.rect(-this.W, -this.H, this.W * 3, this.H * 3);
+        ctx.rect(this.cx(o.x), this.cy(o.y), o.w * this.cw, o.h * this.ch);
+        ctx.clip('evenodd');
+      }
+      fn(ctx, this);
+      ctx.restore();
+    });
     if (this.fx) this.fx.draw(ctx, this);
     ctx.restore();
 
@@ -170,6 +183,7 @@ export class CanvasRenderer {
 
     screen.layersUnder.length = 0;
     screen.layersOver.length = 0;
+    screen.occluders.length = 0;
     this._autoQuality(performance.now() - tStart);
   }
 

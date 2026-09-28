@@ -6,6 +6,7 @@
 // docs/REDISENO.md). En modo escena NUNCA se guarda la partida, para no
 // pisar la del usuario si abre una de estas URLs en su navegador.
 import { EuropeanCup } from '../domain/EuropeanCup.js';
+import { DECISION_EVENTS } from '../data/decisionEvents.js';
 import { Settings } from './Settings.js';
 
 // pantallas que solo necesitan cambiar de estado (id de escena = estado)
@@ -13,7 +14,7 @@ const PLAIN = ['title', 'hub', 'agenda', 'penya', 'club', 'leaguemap', 'bar', 'c
 
 // ids de escena disponibles (tools/shots.mjs los recorre todos)
 export const SCENE_IDS = [
-  ...PLAIN, 'eurocup', 'lineup', 'press', 'result',
+  ...PLAIN, 'agenda-decision', 'agenda-train', 'eurocup', 'lineup', 'press', 'result',
   'match-aim', 'match-power', 'match-flight', 'match-settled', 'match-measure',
   'train-arrime', 'fx-demo',
 ];
@@ -83,6 +84,13 @@ export function applySceneFromUrl(game) {
 
   if (PLAIN.includes(id)) {
     game.state = id;
+  } else if (id === 'agenda-decision') {
+    game.decisionEvent = { event: DECISION_EVENTS[0], ctx: { abueloId: game.player.roster.ids[0] } };
+    game.state = 'agenda';
+  } else if (id === 'agenda-train') {
+    const clock = game.player.seasonClock;
+    game.screens.agenda.schedule = { day: clock.day + 1, step: 'drill', abueloId: game.player.roster.ids[0], cursor: 0 };
+    game.state = 'agenda';
   } else if (id === 'eurocup') {
     if (!game.player.euroCup) game.player.euroCup = demoEuroCup(game.player);
     game.state = 'eurocup';

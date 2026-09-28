@@ -328,7 +328,7 @@ export class LineupScreen {
     if (px + pw > screen.cols) px = tip.x - pw - 1;
     if (px < 0) return;
     const py = Math.max(1, Math.min(screen.rows - ph - 1, tip.y));
-    panel(screen, px, py, pw, ph, { tone: UI.accent, fill: '#0a0d12' });
+    panel(screen, px, py, pw, ph, { tone: UI.accent, fill: '#0a0d12', opaque: true });
     screen.drawAnyPortrait(art, px + 1, py + 1);
   }
 
@@ -343,7 +343,7 @@ export class LineupScreen {
     if (px + pw > screen.cols) px = tip.x - pw - 1;
     if (px < 0) return;
     const py = Math.max(1, Math.min(screen.rows - ph - 1, tip.y));
-    panel(screen, px, py, pw, ph, { tone: TONE.rival, fill: '#0a0d12' });
+    panel(screen, px, py, pw, ph, { tone: TONE.rival, fill: '#0a0d12', opaque: true });
     screen.drawAnyPortrait(art, px + 1, py + 1);
   }
 
