@@ -103,6 +103,8 @@ export class Player {
     // aviso de "primera vez, mira Ayuda" en Inicio: se apaga solo al
     // visitar Ayuda una vez, o pasada la primera semana si no se visita
     this.helpHintSeen = false;
+    // tutorial de los controles del partido arcade (ver match/view/ArcadeView.js)
+    this.arcadeTutorialDone = false;
     this.friendliesLeft = 3; // amistosos de pretemporada disponibles esta temporada
     this.cupTitles = 0;
     this.euroCupTitles = 0;
@@ -372,7 +374,7 @@ export class Player {
       boardConfidence: this.boardConfidence, boardUltimatums: this.boardUltimatums, boardCrisis: this.boardCrisis,
       negativeWeeksStreak: this.negativeWeeksStreak, gameOver: this.gameOver,
       difficulty: this.difficulty, difficultyChosen: this.difficultyChosen, debugMode: this.debugMode, pressPromise: this.pressPromise,
-      systemsRevealed: this.systemsRevealed, helpHintSeen: this.helpHintSeen,
+      systemsRevealed: this.systemsRevealed, helpHintSeen: this.helpHintSeen, arcadeTutorialDone: this.arcadeTutorialDone,
       friendliesLeft: this.friendliesLeft, cup: this.cup ? this.cup.toJSON() : null, cupTitles: this.cupTitles,
       euroCupTitles: this.euroCupTitles,
       bestMarginWin: this.bestMarginWin, chemistry: this.chemistry, seasonsPlayed: this.seasonsPlayed,
@@ -451,6 +453,9 @@ export class Player {
     // solo una partida NUEVA (Player recién construido) arranca oculta
     p.systemsRevealed = json.systemsRevealed || { mercado: true, ojeadores: true, patrocinios: true, junta: true };
     p.helpHintSeen = json.helpHintSeen ?? true;
+    // los controles arcade son nuevos para todo el mundo: también quien ya
+    // tenía partida los ve una vez
+    p.arcadeTutorialDone = json.arcadeTutorialDone ?? false;
     p.friendliesLeft = json.friendliesLeft ?? 3;
     p.cup = json.cup ? Cup.fromJSON(json.cup) : null;
     p.cupTitles = json.cupTitles || 0;

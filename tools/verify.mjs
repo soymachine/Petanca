@@ -589,6 +589,41 @@ check('partido arcade: gesto (mantener y soltar) y teclado lanzan; TAB cambia el
   if (g.M.phase !== 'jackSim') throw new Error(`soltar debería lanzar el boliche, fase: ${g.M.phase}`);
 });
 
+// tutorial de los controles arcade (Fase 5): avanza solo al hacer lo que
+// pide y, al terminar, queda apuntado en el perfil para no repetirse
+check('partido arcade: el tutorial de controles avanza con cada acción y se recuerda', () => {
+  const { ArcadeView } = arcadeMod;
+  const p = new Player();
+  p.save = () => {};
+  const opp = p.league.clubs.find((c) => !c.isPlayer);
+  const M = new Match({ tournament: new WeeklyMatchContext(p.league, opp, p.money, null, null), roster: p.roster, team: [0] });
+  M.setNameProvider((id) => `a${id}`);
+  const keys = new Set();
+  const mouse = { cx: 70, cy: 20, fx: 70.5, fy: 20.5, inside: true, down: false, clicked: false };
+  const input = { hit: (k) => keys.has(k), held: () => false, mouse, wheel: 0 };
+  const game = { match: M, input, renderer: null, player: p };
+  const view = new ArcadeView(game);
+  const step = () => { M.update(1 / 60, view.input(1 / 60)); keys.clear(); };
+  for (let i = 0; i < 900 && M.phase !== 'aim'; i++) {
+    if (['roundStart', 'jackAim'].includes(M.phase) || (M.phase === 'jackPower' && M.power > 0.5)) keys.add('Enter');
+    step();
+  }
+  if (M.phase !== 'aim') throw new Error(`no se llegó a apuntar (${M.phase})`);
+  const say = () => { const l = view._coachUpdate(M, { hit: () => false }); return l ? l[0] : null; };
+  if (!/APUNTA/.test(say())) throw new Error(`paso 1 debería ser APUNTA, es ${say()}`);
+  M.aimAngle += 0.1;
+  if (!/TIPO DE TIRO/.test(say())) throw new Error(`tras apuntar debería pedir el tipo de tiro, es ${say()}`);
+  keys.add('Tab'); step();
+  if (!/POTENCIA/.test(say())) throw new Error(`tras cambiar de tiro debería pedir la potencia, es ${say()}`);
+  keys.add('Enter'); step();
+  if (!/SUELTA/.test(say())) throw new Error(`en potencia debería pedir soltar, es ${say()}`);
+  keys.add('Enter'); step();
+  if (say() !== null || !p.arcadeTutorialDone) throw new Error('tras lanzar el tutorial debería acabar y quedar apuntado');
+  const again = new ArcadeView(game);
+  if (again._coachUpdate(M, { hit: () => false }) !== null) throw new Error('un perfil que ya lo vio no debería volver a verlo');
+  if (!Player.fromJSON(JSON.parse(JSON.stringify(p.toJSON()))).arcadeTutorialDone) throw new Error('arcadeTutorialDone debería guardarse');
+});
+
 // --- runner ---
 let failed = 0;
 for (const { name, fn } of checks) {

@@ -248,7 +248,54 @@ export class ArcadeView {
     this._drawTopHud(M);
     this._drawViewTexts(M, frame);
     this._drawDeck(M, frame);
+    this._drawCoach(M, frame);
     this._juice(M);
+  }
+
+  // tutorial de los controles, una sola vez por perfil
+  // (player.arcadeTutorialDone): cuatro pasos que avanzan solos al hacer lo
+  // que piden — apuntar, elegir tiro, cargar potencia, soltar. [H] lo salta.
+  // lógica del tutorial (sin dibujo, se prueba en tools/verify.mjs):
+  // avanza el paso según lo que haga el jugador y devuelve las dos líneas
+  // del cartel, o null si no hay que enseñar nada
+  _coachUpdate(M, input) {
+    const { player } = this.game;
+    if (!player || player.arcadeTutorialDone || M.turn !== 'P') return null;
+    const ph = M.phase;
+    const c = this._coach || (this._coach = { step: 0, aim0: null, shot0: this.shot, t0: this._t });
+    // cada paso guarda cómo estaba todo al empezar, para notar el cambio
+    const next = () => { c.step++; c.t0 = this._t; c.aim0 = null; c.shot0 = this.shot; };
+    if (c.step === 0 && ph === 'aim') {
+      if (c.aim0 === null) c.aim0 = M.aimAngle;
+      if (Math.abs(M.aimAngle - c.aim0) > 0.04) next();
+    } else if (c.step === 1 && ph === 'aim') {
+      if (this.shot !== c.shot0 || this._t - c.t0 > 7) next();
+    } else if (c.step === 3 && ph !== 'power' && ph !== 'aim') next();
+    // quien se adelanta y ya carga la potencia pasa directo al "¡suelta!"
+    if (c.step < 3 && ph === 'power') { c.step = 3; c.t0 = this._t; }
+    if (c.step >= 4 || (input && (input.hit('h') || input.hit('H')))) { player.arcadeTutorialDone = true; if (player.save) player.save(); return null; }
+
+    if (ph === 'jackAim' || ph === 'jackPower') return ['PRIMERO, EL BOLICHE', 'mantén pulsado sobre la pista (o ENTER) y suelta para lanzarlo'];
+    if (ph === 'aim' && c.step === 0) return ['① APUNTA', 'mueve el ratón sobre la pista: la retícula va donde señalas (o ↑ ↓)'];
+    if (ph === 'aim' && c.step === 1) return ['② ELIGE EL TIPO DE TIRO', 'clic en las fichas de abajo o TAB: arrimar, media volea, bombeo, tirar'];
+    if (ph === 'aim' && c.step === 2) return ['③ CARGA LA POTENCIA', 'mantén pulsado sobre la pista (o ENTER) — el efecto va con ← → o la rueda'];
+    if (ph === 'power' && c.step >= 2) return ['④ ¡SUELTA!', 'suelta el botón (o ENTER) cuando la barra pase por el tramo dorado ▾'];
+    return null;
+  }
+
+  _drawCoach(M, frame) {
+    const { screen } = this.game;
+    const lines = this._coachUpdate(M, this.game.input);
+    if (!lines) return;
+    const w = Math.max(...lines.map((l) => l.length)) + 8, h = 5;
+    // centrado en la zona libre a la izquierda del minimapa
+    const x = Math.max(2, Math.floor((96 - w) / 2)), y = VIEW_TOP + 4;
+    const pulse = frame % 30 < 20;
+    panel(screen, x, y, w, h, { title: 'CÓMO SE JUEGA', tone: pulse ? UI.accent : UI.edge, titleColor: UI.accentHi, style: 'double', fill: '#12161f' });
+    screen.text(x + 4, y + 1, lines[0], UI.accentHi);
+    screen.glow(x + 4, y + 1, lines[0].length, 1);
+    screen.text(x + 4, y + 2, lines[1], UI.text);
+    screen.text(x + w - 18, y + h - 1, ' [H] no mostrar ', UI.textDim);
   }
 
   _drawTopHud(M) {

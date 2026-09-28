@@ -11,12 +11,11 @@
   rediseño; se fusiona cuando el usuario lo pida.
 - **Fase en curso:** Fase 5 — pulido (Fases 0-4 hechas; en la 3 queda
   como mejora opcional la repetición a cámara lenta).
-- **SIGUIENTE PASO CONCRETO:** Fase 5 — tutorial del primer partido con
-  los controles nuevos: en la primera mano de un partido de liga (o en el
-  onboarding de HubScreen) carteles cortos sobre la vista arcade: "mueve el
-  ratón para apuntar", "mantén pulsado", "suelta en el tramo dorado",
-  "TAB / fichas = tipo de tiro"; que se recuerde en Player (visto una vez).
-  Después: audio, rendimiento de la escena 3D y builds demo/full.
+- **SIGUIENTE PASO CONCRETO:** Fase 5 — audio (sin archivos: sonidos
+  sintetizados con WebAudio en `core/Audio.js`: choque de bolas, caída en
+  albero, clic de UI, fanfarria de victoria; volumen y silencio en
+  AJUSTES; respetar que el navegador exige un gesto antes de sonar).
+  Después: rendimiento de la escena 3D y revisión de builds demo/full.
 - **Último commit relevante:** (se rellena en cada commit)
 
 ## Visión
@@ -344,7 +343,13 @@ dinámico sin perder profundidad**.
       propia cabecera de periódico en bloques.
 
 ### Fase 5 — Pulido
-- [ ] Tutorial del primer partido con controles nuevos · [ ] Audio ·
+- [x] Tutorial de los controles arcade (`ArcadeView._coachUpdate` /
+      `_drawCoach`): cartel "CÓMO SE JUEGA" en la vista del partido que
+      avanza solo al hacer lo que pide (boliche → ① apunta → ② tipo de tiro
+      → ③ carga la potencia → ④ ¡suelta!), [H] lo salta; se recuerda en el
+      perfil (`Player.arcadeTutorialDone`, también lo ven una vez las
+      partidas guardadas de antes). Check nuevo en `npm run verify` (21).
+- [ ] Audio ·
       [ ] Rendimiento · [ ] Accesibilidad · [ ] Builds demo/full revisadas
 - [x] Pantalla de AJUSTES (`screens/AjustesScreen.js`, estado `ajustes`,
       escena `?scene=ajustes`): vista del partido ARCADE/CLÁSICA,
@@ -377,7 +382,8 @@ dinámico sin perder profundidad**.
 | 2026-09-28 | 9c69e85 | Fase 4: Ligas y Copa de Europa |
 | 2026-09-28 | e2fda22 | Fase 4: El Club y El Bar |
 | 2026-09-28 | 8414e29 | Fase 4: Portada animada, Ayuda con código visual, Capítulos |
-| 2026-09-28 | (este) | Fase 5: pantalla de Ajustes (F9) |
+| 2026-09-28 | cf0fe9f | Fase 5: pantalla de Ajustes (F9) |
+| 2026-09-28 | (este) | Fase 5: tutorial de controles del partido arcade |
 
 ## Problemas conocidos / notas
 
