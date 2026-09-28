@@ -11,9 +11,10 @@
   rediseño; se fusiona cuando el usuario lo pida.
 - **Fase en curso:** Fase 4 — pantallas de gestión (la 3 está hecha salvo
   la repetición a cámara lenta, que queda como mejora opcional).
-- **SIGUIENTE PASO CONCRETO:** rediseñar el Hub (Inicio) con los widgets de
-  Fase 2: tarjetas grandes, "próximo evento" como botón grande de acción,
-  y el botón de AVANZAR DÍA protagonista.
+- **SIGUIENTE PASO CONCRETO:** Alineación (`screens/LineupScreen.js`) +
+  Prensa (`screens/PressScreen.js`) como "vestuario" pre-partido: rival y
+  pista en cartel, abuelos como tarjetas con chips de stats (theme.STAT),
+  stamina/moral con medidores, afinidad de clima con ✚/▼.
 - **Último commit relevante:** (se rellena en cada commit)
 
 ## Visión
@@ -236,7 +237,19 @@ dinámico sin perder profundidad**.
       Tramo del punto dulce muy visible (blanco dorado con brillo y ▾).
 
 ### Fase 4 — Pantallas de gestión
-- [ ] Hub · [ ] Alineación + Prensa · [ ] Resultado · [ ] Agenda ·
+- [x] Hub (`screens/HubScreen.js`): cabecera con el club en grande
+      (píxeles) + escudo mini + fecha/temporada; fila fija de avisos
+      (números rojos > junta al límite > bienvenida); CARTEL del próximo
+      partido (escudos 13×13 enfrentados, "VS" grande que late, casa/fuera,
+      posición del rival, insignias de Copa/Europa; clic → Agenda);
+      clasificación ENTERA con zonas de ascenso/descenso (clic → Ligas);
+      tarjetas LA PEÑA (forma, moral, caja → Mi Peña), LA JUNTA (objetivos
+      + medidor de confianza → El Club › La Junta), ÚLTIMA NOTICIA (→
+      Hemeroteca); oferta de traspaso con botones VENDER/RECHAZAR; botón
+      grande AVANZAR DÍA que dice qué viene (`_nextEvent`: mañana/el jueves
+      + entreno/Copa/Europa/jornada); panel Debugger con botones. Mismos
+      atajos (ENTER/ESPACIO, D, E, S/X, V/C).
+- [ ] Alineación + Prensa · [ ] Resultado · [ ] Agenda ·
       [ ] Mi Peña · [ ] Ligas / Copa de Europa · [ ] El Club · [ ] El Bar ·
       [ ] Capítulos / Hemeroteca / Ayuda / Portada
 
@@ -257,7 +270,8 @@ dinámico sin perder profundidad**.
 | 2026-09-28 | 0cbfee0 | Fase 2: nueva barra de navegación |
 | 2026-09-28 | 08fb1d5 | Fase 3: Match.release/beginPower + tools/replay-match.mjs |
 | 2026-09-28 | dc23f9f | Fase 3: vista arcade en perspectiva + controles de gesto (tras ?nuevo=1 / F7) |
-| 2026-09-28 | (este) | Fase 3: juice, visibilidad por clima, clima 3D, arcade por defecto |
+| 2026-09-28 | 17dd160 | Fase 3: juice, visibilidad por clima, clima 3D, arcade por defecto |
+| 2026-09-28 | (este) | Fase 4: Inicio rediseñado |
 
 ## Problemas conocidos / notas
 
