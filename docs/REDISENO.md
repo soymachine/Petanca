@@ -10,8 +10,9 @@
   desde `main` en `46bc963`). `main` queda estable mientras dura el
   rediseño; se fusiona cuando el usuario lo pida.
 - **Fase en curso:** Fase 1 — motor de render Neo-ASCII.
-- **SIGUIENTE PASO CONCRETO:** `core/Screen.js` → `<canvas>` con la misma
-  API (ver Fase 1, primera casilla).
+- **SIGUIENTE PASO CONCRETO:** `core/Fx.js` (partículas, sacudida,
+  destellos, texto flotante, transiciones entre pantallas) enganchado a
+  `renderer.fx` — ver Fase 1, casilla 5.
 - **Último commit relevante:** (se rellena en cada commit)
 
 ## Visión
@@ -100,20 +101,48 @@ dinámico sin perder profundidad**.
       Para revisar: `Read` de las PNG.
 - [x] Capturas "antes" en `docs/capturas/antes/` (19 escenas × 1920×1080 y
       1280×720).
+- [x] Detección de errores de JS: en modo escena la página apunta la
+      primera excepción en `document.title` (`JSERROR: …`) y shots.mjs la
+      lee con `--dump-dom` (una vez por escena) → "✘ escena" + lista y
+      código de salida 1. Probado inyectando un error a propósito.
+- [x] `--bench`: ms/frame por escena y tamaño, desglosado (draw, sin
+      resplandor, sin resplandor ni CRT).
 
 ### Fase 1 — Motor de render Neo-ASCII
-- [ ] `core/Screen.js` → `<canvas>` con la MISMA API (las 19 pantallas
-      funcionan sin tocarlas). Fuente monoespaciada medida en runtime.
-- [ ] Extensiones retrocompatibles: fondo por celda (`put(...,bg)`,
-      `fill(x,y,w,h,bg)`), `glow`, capa de píxeles libre `screen.fx`.
-- [ ] Pantalla completa adaptable: escalar la rejilla al viewport con
-      `devicePixelRatio`, fondo ambiental animado en el margen, `F` →
-      fullscreen, `resize`.
-- [ ] `core/Input.js`: pointer events (ratón + táctil), celda + píxel,
-      cursor en capa FX.
+- [x] `core/CanvasRenderer.js`: pinta el buffer de `Screen` en un
+      `<canvas id="screen">` a pantalla completa (`index.astro`,
+      `style.css`). `Screen.render()` delega en `screen.renderer` (sin
+      renderer — tests headless — no dibuja). Celdas de tamaño ENTERO
+      (proporción 0.56), rejilla centrada; fuente ajustada para que su
+      avance llene ~94% de la celda. Bloques `█▀▄▌▐▖…▁▇▏▕` y cajas
+      `─│┌…═║╔╠╬` dibujados por código (encajan sin huecos); `░▒▓` como
+      trama de puntos; emoji (pareja UTF-16 en 2 celdas) unidos.
+      Rendimiento: caché de glifos (`_glyph`, clave carácter+color+brillo)
+      + capa de texto persistente que solo repinta celdas cambiadas
+      (`_updateTextLayer`). Medido en Chromium headless SIN GPU (peor caso)
+      a 1920×1080: pantalla quieta ~1 ms/frame, hub/partido ~8 ms; el
+      resplandor cuesta ~15 ms sin GPU → `_autoQuality` lo apaga solo en
+      esa sesión si el render medio pasa de 14 ms.
+- [x] Extensiones de `Screen` (retrocompatibles): `put(x,y,ch,fg,bg)`,
+      `fill(x,y,w,h,bg)`, `glow(x,y,w,h,color|true)`,
+      `layer('under'|'over', fn(ctx, renderer))` (píxeles libres por
+      debajo/encima del texto; se piden cada frame). Utilidades del
+      renderer para capas: `cx(celda)`, `cy(celda)` (admiten fracciones),
+      `cw`, `ch`, `ox`, `oy`, `dpr`.
+- [x] Pantalla completa adaptable: escala al viewport con
+      `devicePixelRatio` (máx. 2.5), fondo ambiental (degradado + polvo de
+      tiza en el margen), `resize`. **F11** → pantalla completa (propia,
+      también en Electron/Tauri). **F8** → efectos CRT on/off.
+- [x] `core/Input.js`: pointer events (ratón + táctil) sobre `window`,
+      `mouse.fx/fy` fraccionarios (celdas) además de `cx/cy`,
+      `mouse.downFx/downFy` y `mouse.released` (para el gesto de Fase 3),
+      cursor propio dibujado en píxeles por el renderer.
 - [ ] `core/Fx.js`: partículas, sacudida, destellos, texto flotante,
       transiciones entre pantallas, bloom/scanlines opcionales.
-- [ ] Ajustes (efectos, reducir movimiento) en localStorage.
+- [~] Ajustes: `core/Settings.js` (`petanka-ajustes` en localStorage:
+      bloom, scanlines, shake, transitions, reduceMotion; `Settings.motion(k)`
+      respeta reducir movimiento). Falta una pantalla/panel de ajustes
+      (de momento solo F8).
 
 ### Fase 2 — Sistema visual y código visual de mecánicas
 - [ ] `ui/theme.js`: tokens semánticos; color + glifo fijo por stat
@@ -151,7 +180,8 @@ dinámico sin perder profundidad**.
 | Fecha | Commit | Qué |
 |---|---|---|
 | 2026-09-28 | b72c332 | Fase 0: documento vivo + CLAUDE.md |
-| 2026-09-28 | (este) | Fase 0: escenas `?scene=`, `tools/shots.mjs`, capturas "antes" |
+| 2026-09-28 | a89ddba | Fase 0: escenas `?scene=`, `tools/shots.mjs`, capturas "antes" |
+| 2026-09-28 | (este) | Fase 1: renderer canvas a pantalla completa, Input pointer, Settings, harness con errores JS y bench |
 
 ## Problemas conocidos / notas
 
@@ -163,5 +193,9 @@ dinámico sin perder profundidad**.
 - `match-measure` casi nunca alcanza la fase `measuring` (es rara: solo
   con bolas casi empatadas); de momento la escena acaba donde acabe el
   autoplay. Si hace falta, forzar un empate colocando bolas a mano.
+- El scratchpad de sesiones anteriores se pierde al recrearse el
+  contenedor: los tests útiles deben vivir en `tools/` (verify, shots).
+- Headless Chromium va SIN GPU: las cifras de `--bench` son el peor caso;
+  en un navegador normal el canvas va acelerado.
 - Detalle heredado visto en `result`: "+-5€" cuando el premio es negativo
   (cosmético, ResultScreen) — arreglar en Fase 4.

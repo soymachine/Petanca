@@ -10,7 +10,7 @@
 // Por defecto: todas las escenas, 4 resoluciones, salida en
 // <tmp>/petanka-shots (no se sube al repo salvo que se pida con --out).
 
-import { spawn, execFileSync } from 'node:child_process';
+import { spawn, execFileSync, spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, readdirSync } from 'node:fs';
 import { join, dirname, resolve } from 'node:path';
 import { tmpdir } from 'node:os';
@@ -50,7 +50,26 @@ await new Promise((r) => setTimeout(r, 600));
 
 const chrome = findChrome();
 let done = 0;
+const jsErrors = [];
 try {
+  if (args.bench) {
+    // ms por frame (draw + render) de cada escena y tamaño — ver DebugScenes
+    for (const scene of scenes) {
+      const row = [];
+      for (const size of sizes) {
+        const [w, h] = size.split('x');
+        const dom = execFileSync(chrome, [
+          '--headless=new', '--no-sandbox', `--window-size=${w},${h}`, '--virtual-time-budget=4000', '--dump-dom',
+          `http://127.0.0.1:${PORT}/?scene=${scene}&freeze=1&bench=1`,
+        ], { encoding: 'utf8', timeout: 90000, stdio: ['ignore', 'pipe', 'ignore'] });
+        const m = dom.match(/<title>bench:([^<]+)<\/title>/);
+        row.push(`${size}: ${m ? m[1] : '?'}`);
+      }
+      console.log(`${scene.padEnd(14)} ${row.join('\n               ')}`);
+    }
+    server.kill();
+    process.exit(0);
+  }
   for (const scene of scenes) {
     for (const size of sizes) {
       const [w, h] = size.split('x');
@@ -61,11 +80,26 @@ try {
         `--screenshot=${file}`,
         `http://127.0.0.1:${PORT}/?scene=${scene}&freeze=1`,
       ], { stdio: 'ignore', timeout: 60000 });
+      // errores de JS: en modo escena la página los deja en document.title
+      // (ver core/DebugScenes.js); se comprueba una vez por escena
+      if (size === sizes[0]) {
+        const dom = spawnSync(chrome, [
+          '--headless=new', '--no-sandbox', '--disable-gpu', `--window-size=${w},${h}`, '--virtual-time-budget=2500', '--dump-dom',
+          `http://127.0.0.1:${PORT}/?scene=${scene}`,
+        ], { encoding: 'utf8', timeout: 60000 }).stdout || '';
+        const m = dom.match(/<title>JSERROR: ([^<]*)<\/title>/);
+        if (m) jsErrors.push(`${scene}: ${m[1]}`);
+      }
       done++;
     }
-    process.stdout.write(`✔ ${scene}\n`);
+    process.stdout.write(`${jsErrors.some((e) => e.startsWith(scene + ' ')) ? '✘' : '✔'} ${scene}\n`);
   }
 } finally {
   server.kill();
 }
 console.log(`\n${done} capturas en ${outDir}`);
+if (jsErrors.length) {
+  console.log(`\n${jsErrors.length} ERRORES DE JS:`);
+  for (const e of jsErrors) console.log(`  ${e}`);
+  process.exitCode = 1;
+}

@@ -1,31 +1,20 @@
+/* El juego ocupa toda la ventana en un único canvas; el cursor del
+   sistema se oculta porque el juego dibuja el suyo (CanvasRenderer). */
 html, body {
   margin: 0;
   padding: 0;
-  background: #0b0e14;
-  min-height: 100vh;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-#wrap {
-  max-width: 1200px;
   width: 100%;
-  display: flex;
-  justify-content: center;
-  padding: 12px 0;
+  height: 100%;
+  overflow: hidden;
+  background: #0b0e14;
 }
 
 #screen {
-  margin: 0;
-  font-family: "Menlo", "Consolas", "DejaVu Sans Mono", monospace;
-  font-size: 13px;
-  line-height: 15px;
-  letter-spacing: 0;
-  white-space: pre;
-  user-select: none;
+  display: block;
+  position: fixed;
+  inset: 0;
   cursor: none;
-  text-shadow: 0 0 6px rgba(255,255,255,0.06);
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
 }
-
-#screen span { display: inline; }

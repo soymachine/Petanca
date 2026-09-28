@@ -6,6 +6,7 @@
 // docs/REDISENO.md). En modo escena NUNCA se guarda la partida, para no
 // pisar la del usuario si abre una de estas URLs en su navegador.
 import { EuropeanCup } from '../domain/EuropeanCup.js';
+import { Settings } from './Settings.js';
 
 // pantallas que solo necesitan cambiar de estado (id de escena = estado)
 const PLAIN = ['title', 'hub', 'agenda', 'penya', 'club', 'leaguemap', 'bar', 'capitulos', 'hemeroteca', 'ayuda'];
@@ -74,6 +75,11 @@ export function applySceneFromUrl(game) {
   if (!id) return;
   game.sceneMode = id;
   game.player.save = () => {};
+  // errores de JS visibles para tools/shots.mjs (lee document.title con
+  // --dump-dom): la primera excepción sin capturar queda ahí apuntada
+  const report = (msg) => { if (!document.title.startsWith('JSERROR')) document.title = `JSERROR: ${msg}`; };
+  window.addEventListener('error', (e) => report(`${e.message} @ ${(e.filename || '').split('/').pop()}:${e.lineno}`));
+  window.addEventListener('unhandledrejection', (e) => report(String(e.reason)));
 
   if (PLAIN.includes(id)) {
     game.state = id;
@@ -109,4 +115,22 @@ export function applySceneFromUrl(game) {
   }
 
   if (params.get('freeze')) game.frozen = true;
+
+  // &bench=1: mide cuánto tarda un frame completo (draw de la pantalla +
+  // render del canvas) y lo deja en document.title — tools/shots.mjs
+  // --bench lo lee con --dump-dom
+  if (params.get('bench') && game.renderer) {
+    const scr = game.screens[game.state];
+    const N = 40;
+    const time = (fn) => { for (let i = 0; i < 3; i++) fn(); const t0 = performance.now(); for (let i = 0; i < N; i++) { game.frame++; fn(); } return (performance.now() - t0) / N; };
+    const drawMs = time(() => scr.draw());
+    const full = time(() => { scr.draw(); game.screen.render(); });
+    const saved = { ...Settings.values };
+    Settings.values.bloom = false;
+    const noBloom = time(() => { scr.draw(); game.screen.render(); });
+    Settings.values.scanlines = false;
+    const bare = time(() => { scr.draw(); game.screen.render(); });
+    Settings.values = saved;
+    document.title = `bench:${full.toFixed(1)} (draw ${drawMs.toFixed(1)} · sin bloom ${noBloom.toFixed(1)} · sin bloom ni CRT ${bare.toFixed(1)})`;
+  }
 }

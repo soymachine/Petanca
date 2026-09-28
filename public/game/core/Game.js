@@ -1,5 +1,7 @@
 import { Screen } from './Screen.js';
 import { Input } from './Input.js';
+import { CanvasRenderer } from './CanvasRenderer.js';
+import { Settings } from './Settings.js';
 import { TARGET } from '../physics/constants.js';
 import { Geography } from '../data/geography.js';
 import { PHOTO_BANNER } from '../data/art/photoBanner.js';
@@ -60,6 +62,12 @@ export class Game {
   constructor(screenEl) {
     this.screen = new Screen(screenEl, COLS, ROWS);
     this.input = new Input(screenEl, COLS, ROWS);
+    // renderer Neo-ASCII a pantalla completa (docs/REDISENO.md, Fase 1);
+    // sin canvas (tests headless) Screen.render() no dibuja nada
+    if (screenEl && screenEl.getContext) {
+      this.renderer = new CanvasRenderer(screenEl, this.screen);
+      this.input.setMapper((x, y) => this.renderer.clientToCell(x, y));
+    }
     this.geography = new Geography(286, 92);
     this.faces = FACES;
     this.rivalFaces = RIVAL_FACES;
@@ -1015,6 +1023,12 @@ export class Game {
     this.frame++;
 
     if (this.input.hit('F3')) this.showFps = !this.showFps;
+    // F8: efectos CRT (resplandor + líneas de barrido) · F11: pantalla completa
+    if (this.input.hit('F8')) { const on = !Settings.get('bloom'); Settings.set('bloom', on); Settings.set('scanlines', on); }
+    if (this.input.hit('F11') && typeof document !== 'undefined') {
+      if (document.fullscreenElement) document.exitFullscreen();
+      else if (document.documentElement.requestFullscreen) document.documentElement.requestFullscreen().catch(() => {});
+    }
     // FPS real (no el dt clampeado de la física): frames por segundo,
     // recalculado 2 veces por segundo para que el número no tiemble frame
     // a frame y aun así se note enseguida si el juego va renqueando

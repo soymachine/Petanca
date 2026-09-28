@@ -1,5 +1,7 @@
-// Buffer de caracteres + colores y primitivas de dibujo ASCII.
-// Responsabilidad única: convertir (x,y,char,color) en el <pre> del DOM.
+// Buffer de caracteres + colores (+ fondo y brillo por celda) y
+// primitivas de dibujo ASCII. No dibuja nada por sí mismo: render() lo
+// delega en el renderer enganchado (core/CanvasRenderer.js en el
+// navegador; en los tests headless no hay ninguno y render() no hace nada).
 import { clamp } from './utils.js';
 
 export class Screen {
@@ -9,20 +11,47 @@ export class Screen {
     this.rows = rows;
     this.chars = new Array(rows * cols);
     this.colors = new Array(rows * cols);
+    this.bgs = new Array(rows * cols).fill(null);   // fondo por celda (null = transparente)
+    this.glows = new Array(rows * cols).fill(null); // true | color de resplandor
+    // dibujo libre en píxeles por debajo/encima del texto: fn(ctx, renderer),
+    // se vacían en cada render (hay que volver a pedirlas cada frame)
+    this.layersUnder = [];
+    this.layersOver = [];
+    this.renderer = null;
   }
 
-  clear(bg) {
+  clear(fg) {
     const n = this.rows * this.cols;
-    for (let i = 0; i < n; i++) { this.chars[i] = ' '; this.colors[i] = bg || '#556'; }
+    for (let i = 0; i < n; i++) { this.chars[i] = ' '; this.colors[i] = fg || '#556'; this.bgs[i] = null; this.glows[i] = null; }
   }
 
-  put(x, y, ch, color) {
+  // bg (opcional): fondo de la celda; sin él, el fondo que hubiera se
+  // conserva (texto encima de un panel ya rellenado con fill)
+  put(x, y, ch, color, bg) {
     x |= 0; y |= 0;
     if (x < 0 || x >= this.cols || y < 0 || y >= this.rows) return;
     const i = y * this.cols + x;
     this.chars[i] = ch;
     this.colors[i] = color;
+    if (bg !== undefined) this.bgs[i] = bg;
   }
+
+  // rellena el fondo de un rectángulo de celdas (sin tocar el texto)
+  fill(x, y, w, h, bg) {
+    for (let r = Math.max(0, y | 0); r < Math.min(this.rows, (y | 0) + h); r++) {
+      for (let c = Math.max(0, x | 0); c < Math.min(this.cols, (x | 0) + w); c++) this.bgs[r * this.cols + c] = bg;
+    }
+  }
+
+  // resplandor en un rectángulo de celdas (true = del color del texto)
+  glow(x, y, w, h, color = true) {
+    for (let r = Math.max(0, y | 0); r < Math.min(this.rows, (y | 0) + h); r++) {
+      for (let c = Math.max(0, x | 0); c < Math.min(this.cols, (x | 0) + w); c++) this.glows[r * this.cols + c] = color;
+    }
+  }
+
+  // capa de píxeles libre, por debajo ('under') o encima ('over') del texto
+  layer(kind, fn) { (kind === 'under' ? this.layersUnder : this.layersOver).push(fn); }
 
   text(x, y, str, color) {
     for (let i = 0; i < str.length; i++) this.put(x + i, y, str[i], color);
@@ -135,25 +164,7 @@ export class Screen {
   }
 
   render() {
-    let html = '';
-    for (let y = 0; y < this.rows; y++) {
-      let runColor = null, run = '';
-      for (let x = 0; x < this.cols; x++) {
-        const i = y * this.cols + x;
-        const col = this.colors[i];
-        if (col !== runColor) {
-          if (run) html += `<span style="color:${runColor}">${escapeHtml(run)}</span>`;
-          run = ''; runColor = col;
-        }
-        run += this.chars[i];
-      }
-      if (run) html += `<span style="color:${runColor}">${escapeHtml(run)}</span>`;
-      html += '\n';
-    }
-    this.el.innerHTML = html;
+    if (this.renderer) this.renderer.render();
+    else { this.layersUnder.length = 0; this.layersOver.length = 0; }
   }
-}
-
-function escapeHtml(s) {
-  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }

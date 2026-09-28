@@ -1,19 +1,19 @@
 ---
-// Página única: el juego vive entero en public/game (ASCII, JS vanilla,
-// sin bundling). Astro aquí solo hace de servidor de desarrollo/build.
+// Página única: el juego vive entero en public/game (JS vanilla, sin
+// bundling). Astro aquí solo hace de servidor de desarrollo/build.
+// El juego se pinta en un único <canvas> a pantalla completa (renderer
+// Neo-ASCII, ver public/game/core/CanvasRenderer.js y docs/REDISENO.md).
 ---
 <!doctype html>
 <html lang="es">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
   <title>PETANKA — El juego de petanca ASCII</title>
   <link rel="stylesheet" href="/game/style.css" />
 </head>
 <body>
-  <div id="wrap">
-    <pre id="screen"></pre>
-  </div>
+  <canvas id="screen"></canvas>
   <script type="module" src="/game/main.js"></script>
 </body>
 </html>
