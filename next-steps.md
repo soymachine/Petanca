@@ -1,5 +1,8 @@
 # Next steps
 
+> **En curso:** rediseño visual completo "Neo-ASCII" — plan por fases y
+> estado en `docs/REDISENO.md`.
+
 Overhaul completo del sistema de entrenamiento, ya implementado:
 
 1. **3 minijuegos nuevos** — EFECTO (maña: rodear con efecto una bola que

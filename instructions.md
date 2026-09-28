@@ -1,5 +1,9 @@
 # PETANKA — Instrucciones de desarrollo
 
+> **Rediseño visual en curso ("Neo-ASCII"):** ver `docs/REDISENO.md` para
+> el estado, las fases y el siguiente paso. Algunas notas de render de
+> este archivo quedarán desfasadas a medida que avance.
+
 Juego de petanca 100% ASCII para navegador. Gestión de una peña de abuelos que
 recorre España compitiendo en torneos, con físicas simuladas, meteorología
 dinámica y narrativa emergente. Sin dependencias, sin build: HTML + CSS + JS
