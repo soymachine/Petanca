@@ -10,9 +10,9 @@
   desde `main` en `46bc963`). `main` queda estable mientras dura el
   rediseño; se fusiona cuando el usuario lo pida.
 - **Fase en curso:** Fase 3 — partido arcade.
-- **SIGUIENTE PASO CONCRETO:** extraer `Match.release(power)` del caso
-  `'power'` de `Match.update` (falta de pie, sweet spot, ruido) para que
-  teclado y gesto lancen igual; después `match/view/Camera.js`.
+- **SIGUIENTE PASO CONCRETO:** `match/view/Camera.js` (proyección
+  pseudo-3D) + `match/view/PerspectiveCourt.js`, dibujados en la capa
+  `screen.layer('under', …)` de MatchScreen detrás de `?nuevo=1`.
 - **Último commit relevante:** (se rellena en cada commit)
 
 ## Visión
@@ -176,8 +176,13 @@ dinámico sin perder profundidad**.
       [F] rótulo, [B] chispas, [S] sacudida).
 
 ### Fase 3 — Partido arcade
-- [ ] Extraer `Match.release(power)` (falta de pie, sweet spot, ruido) —
-      mismo resultado por teclado y gesto; test headless.
+- [x] `Match.beginPower()` (arranca potencia y fija el punto dulce),
+      `Match.isSweet(power)`, `Match.release(power)` (falta de pie, lesión,
+      punto dulce, ruido de temblor → `throwBall`; deja
+      `lastReleaseSweet`). La barra de teclado ya lanza por `release`.
+      Demostrado idéntico al motor anterior con `tools/replay-match.mjs`
+      (partida determinista: semilla + `Date.now` fijo — ojo, RivalPlayer/
+      FreeAgent siembran con la hora) en varias semillas.
 - [ ] `match/view/Camera.js` (proyección pseudo-3D, planos por fase).
 - [ ] `match/view/PerspectiveCourt.js` (perspectiva tipográfica, bolas
       sombreadas, polvo, estela, pistas con personalidad, clima).
@@ -207,7 +212,8 @@ dinámico sin perder profundidad**.
 | 2026-09-28 | 194a2b1 | Fase 1: core/Fx.js + transiciones entre pantallas |
 | 2026-09-28 | 4336869 | Fase 2: theme.js, widgets.js, hoja de estilo |
 | 2026-09-28 | 0613c06 | Fase 2: box() con relleno de panel |
-| 2026-09-28 | (este) | Fase 2: nueva barra de navegación |
+| 2026-09-28 | 0cbfee0 | Fase 2: nueva barra de navegación |
+| 2026-09-28 | (este) | Fase 3: Match.release/beginPower + tools/replay-match.mjs |
 
 ## Problemas conocidos / notas
 

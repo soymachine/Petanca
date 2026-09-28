@@ -459,6 +459,58 @@ export class Match {
   _nameOf(id) { return this._nameProvider ? this._nameProvider(id) : `abuelo ${id}`; }
   setNameProvider(fn) { this._nameProvider = fn; }
 
+  // arranca la potencia (barra de teclado o gesto de tirachinas): fija la
+  // ventana del "punto dulce" de esta tirada
+  beginPower() {
+    this.phase = 'power'; this.phaseT = 0; this.power = 0; this.powerDir = 1;
+    this.sweetSpot = this.training ? null : rnd(0.5, 0.92);
+    this.sweetWidth = 0.045 + (this._sweetBonus || 0);
+  }
+
+  // ¿cae `power` dentro del punto dulce de esta tirada?
+  isSweet(power) {
+    return this.sweetSpot !== null && Math.abs(power - this.sweetSpot) < this.sweetWidth;
+  }
+
+  // suelta la bola del jugador con la potencia dada (0..1). Único punto de
+  // lanzamiento: lo usan igual la barra de teclado (ENTER en 'power') y el
+  // gesto de tirachinas de la vista (ver screens/MatchScreen.js), así que
+  // falta de pie, lesión, punto dulce y temblor son idénticos por ambas vías.
+  release(power) {
+    const prof = this.throwProfile();
+    const abueloState = this.roster.get(this.abuelo);
+    const st = abueloState.st;
+    const faultChance = this.training ? 0 : Math.max(0, (25 - st) / 25) * 0.12;
+    if (Math.random() < faultChance) {
+      // un tropiezo de cansancio puede quedarse en susto (bola nula) o ir
+      // a más si el abuelo ya viene muy fatigado o mayor: una lesión de
+      // verdad, que le pasa factura el resto del partido y le deja de baja
+      // unos días (se resuelve al terminar la partida). Continuo en vez de
+      // dos escalones fijos: cuanto menos STA le queda y cuantos más años
+      // tiene, más suave pero más real crece el riesgo
+      const injuryChance = Math.max(0, (25 - st) / 250) + Math.max(0, abueloState.age - 70) * 0.01;
+      if (!this.training && !this.injuryEvent && Math.random() < injuryChance) {
+        this.injuryEvent = { id: this.abuelo, name: this._nameOf(this.abuelo) };
+        abueloState.st = Math.max(0, abueloState.st - 20);
+        this.narr = `¡SE HA RESENTIDO! ${this._nameOf(this.abuelo)} se dobla al pisar el círculo, cansado. Sigue cojeando, pero sigue en pie.`;
+        this.chronicle.push({ t: 'lesion', data: { name: this._nameOf(this.abuelo) } });
+      } else {
+        this.narr = `¡FALTA DE PIE! ${this._nameOf(this.abuelo)} pisa el círculo del cansancio que lleva. Bola nula.`;
+      }
+      this.ballsLeftP--; this.teamPTurn++;
+      this.phase = 'throwDone'; this.phaseT = 0;
+      this.lastCollision = false; this.lastWasFault = true;
+      this.lastReleaseSweet = false;
+      return;
+    }
+    const sweet = this.isSweet(power);
+    this.lastReleaseSweet = sweet;
+    const residual = sweet ? 0.35 : 0.55;
+    this.throwBall('P', this.aimAngle + (this.jitterA || 0) + gauss() * prof.shake * residual,
+      clamp(power + (this.jitterP || 0) * 0.01 + gauss() * prof.shake * residual, 0.03, 1),
+      this.spin, this.loft);
+  }
+
   update(dt, input) {
     this.phaseT += dt;
     this.weather.step(this._frame || 0);
@@ -544,11 +596,7 @@ export class Match {
         if (input.held('ArrowUp')) this.loft += 1.1 * dt;
         if (input.held('ArrowDown')) this.loft -= 1.1 * dt;
         this.loft = clamp(this.loft, 0.17, 1.05);
-        if (input.hit('Enter') || input.hit(' ')) {
-          this.phase = 'power'; this.phaseT = 0; this.power = 0; this.powerDir = 1;
-          this.sweetSpot = this.training ? null : rnd(0.5, 0.92);
-          this.sweetWidth = 0.045 + (this._sweetBonus || 0);
-        }
+        if (input.hit('Enter') || input.hit(' ')) this.beginPower();
         if (input.hit('Escape') || input.hit('Backspace')) { this.phase = 'spin'; this.phaseT = 0; }
         break;
 
@@ -557,40 +605,7 @@ export class Match {
         this.power += this.powerDir * prof.barSpeed * dt;
         if (this.power >= 1) { this.power = 1; this.powerDir = -1; }
         if (this.power <= 0) { this.power = 0; this.powerDir = 1; }
-        if (input.hit('Enter') || input.hit(' ')) {
-          const abueloState = this.roster.get(this.abuelo);
-          const st = abueloState.st;
-          const faultChance = this.training ? 0 : Math.max(0, (25 - st) / 25) * 0.12;
-          if (Math.random() < faultChance) {
-            // un tropiezo de cansancio puede quedarse en susto (bola nula) o
-            // ir a más si el abuelo ya viene muy fatigado o mayor: una
-            // lesión de verdad, que le pasa factura el resto del partido y
-            // le deja de baja unos días (se resuelve al terminar la partida)
-            // continuo en vez de dos escalones fijos: cuanto menos STA le
-            // queda y cuantos más años tiene, más suave pero más real crece
-            // el riesgo (antes era +0.10 de golpe bajo 15 STA y +0.08 de
-            // golpe a partir de 75 años, con un salto seco en ambos casos)
-            const injuryChance = Math.max(0, (25 - st) / 250) + Math.max(0, abueloState.age - 70) * 0.01;
-            if (!this.training && !this.injuryEvent && Math.random() < injuryChance) {
-              this.injuryEvent = { id: this.abuelo, name: this._nameOf(this.abuelo) };
-              abueloState.st = Math.max(0, abueloState.st - 20);
-              this.narr = `¡SE HA RESENTIDO! ${this._nameOf(this.abuelo)} se dobla al pisar el círculo, cansado. Sigue cojeando, pero sigue en pie.`;
-              this.chronicle.push({ t: 'lesion', data: { name: this._nameOf(this.abuelo) } });
-            } else {
-              this.narr = `¡FALTA DE PIE! ${this._nameOf(this.abuelo)} pisa el círculo del cansancio que lleva. Bola nula.`;
-            }
-            this.ballsLeftP--; this.teamPTurn++;
-            this.phase = 'throwDone'; this.phaseT = 0;
-            this.lastCollision = false; this.lastWasFault = true;
-            break;
-          }
-          const sweet = this.sweetSpot !== null && Math.abs(this.power - this.sweetSpot) < this.sweetWidth;
-          const residual = sweet ? 0.35 : 0.55;
-          this.throwBall('P', this.aimAngle + (this.jitterA || 0) + gauss() * prof.shake * residual,
-            clamp(this.power + (this.jitterP || 0) * 0.01 + gauss() * prof.shake * residual, 0.03, 1),
-            this.spin, this.loft);
-          break;
-        }
+        if (input.hit('Enter') || input.hit(' ')) { this.release(this.power); break; }
         if (input.hit('Escape') || input.hit('Backspace')) { this.phase = 'loft'; this.phaseT = 0; }
         break;
       }
