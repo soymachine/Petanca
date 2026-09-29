@@ -73,23 +73,19 @@ export class AyudaScreen {
     row(y + 2, 'mover sobre la pista', 'apuntas: la retícula va donde señalas');
     row(y + 3, 'mantener pulsado', 'arranca la barra de potencia');
     row(y + 4, 'soltar', 'lanzas — suelta dentro del tramo dorado para el tiro perfecto');
-    row(y + 5, 'rueda', 'efecto a izquierda / derecha');
-    row(y + 6, 'clic en las fichas', 'eliges el tipo de tiro (abajo en la pantalla del partido)');
+    row(y + 5, 'rueda', 'altura del tiro: de tenso y rodado a globo (lo ves en la parábola)');
     this._section(x, y + 8, 'CON TECLADO');
     row(y + 10, '↑ ↓', 'apuntar');
-    row(y + 11, '← →', 'efecto');
-    row(y + 12, 'TAB', 'cambiar el tipo de tiro');
-    row(y + 13, 'ENTER / ESPACIO', 'empezar la potencia y, otra vez, lanzar');
-    row(y + 14, 'ESC', 'cancelar la potencia y volver a apuntar');
-    this._section(x, y + 16, 'TIPOS DE TIRO');
-    let yy = y + 18;
-    for (const k of Object.keys(SHOT)) {
-      const s = SHOT[k];
-      screen.text(x + 2, yy, s.glyph, s.color);
-      screen.text(x + 5, yy, s.label, s.color);
-      screen.text(x + 26, yy, s.hint, UI.text);
-      yy++;
-    }
+    row(y + 11, 'W / S', 'subir / bajar la altura');
+    row(y + 12, 'ENTER / ESPACIO', 'empezar la potencia y, otra vez, lanzar');
+    row(y + 13, 'ESC', 'cancelar la potencia y volver a apuntar');
+    this._section(x, y + 16, 'LA ALTURA');
+    const tiers = [['TENSO', SHOT.tirar, 'tenso y fuerte: saca la bola rival (más fuerza, más temblor)'], ['RASO', SHOT.arrimar, SHOT.arrimar.hint], ['MEDIA VOLEA', SHOT.media, SHOT.media.hint], ['GLOBO', SHOT.bombeo, SHOT.bombeo.hint]];
+    tiers.forEach(([label, sh, hint], i) => {
+      screen.text(x + 2, y + 18 + i, sh.glyph, sh.color);
+      screen.text(x + 5, y + 18 + i, label, sh.color);
+      screen.text(x + 26, y + 18 + i, hint, UI.text);
+    });
     this._section(x, y + 23, 'SIEMPRE');
     row(y + 25, 'F7', 'vista del partido: ASCII 3D (perspectiva) o clásica (cenital)', TONE.info);
     row(y + 26, 'F8', 'efectos CRT (resplandor y líneas)', TONE.info);

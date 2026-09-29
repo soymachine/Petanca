@@ -28,8 +28,17 @@ import { AsciiScene } from './AsciiScene.js';
 
 const FONT = '"Menlo", "Consolas", "DejaVu Sans Mono", monospace';
 const VIEW_TOP = 4, VIEW_BOTTOM = 37; // filas de la vista 3D (incluidas)
-const SHOT_ORDER = ['arrimar', 'media', 'bombeo', 'tirar', 'bloquear'];
-const SHOTS = { ...SHOT, bloquear: { glyph: '▮', color: '#c8a0e8', label: 'BLOQUEAR', role: 'bloquear', loft: 0.45, hint: 'corto y preciso: estorba al rival' } };
+// altura del tiro (Fase 6b): continua con la rueda del ratón o W/S, en el
+// mismo rango que la fase 'loft' de Match; el rol sale de ella (tenso =
+// tirar: más fuerza y más temblor, ver ThrowProfile.js)
+const LOFT_MIN = 0.17, LOFT_MAX = 1.05, LOFT_TENSO = 0.3;
+// qué hace la bola según la altura (textos de los antiguos tipos de tiro)
+export function loftInfo(loft) {
+  if (loft < LOFT_TENSO) return { label: 'TENSO', color: SHOT.tirar.color, hint: 'tenso y fuerte: saca la bola rival (más temblor)' };
+  if (loft < 0.45) return { label: 'RASO', color: SHOT.arrimar.color, hint: SHOT.arrimar.hint };
+  if (loft < 0.78) return { label: 'MEDIA VOLEA', color: SHOT.media.color, hint: SHOT.media.hint };
+  return { label: 'GLOBO', color: SHOT.bombeo.color, hint: SHOT.bombeo.hint };
+}
 const AIM_PHASES = ['aim', 'spin', 'loft', 'power'];
 const LABEL_BG = '#0b0e14';
 
@@ -39,7 +48,7 @@ export class ArcadeView {
     this.cam = new Camera();
     this.court = new PerspectiveCourt();
     this.ascii = new AsciiScene(this.court); // Fase 6: la 3D es la capa lógica, se ve en ASCII
-    this.shot = 'media';
+    this.loft = 0.55; // se mantiene entre tiros y partidos
     this._match = null;
     this._lastMouse = { fx: -1, fy: -1 };
     this._t = 0;
@@ -76,17 +85,18 @@ export class ArcadeView {
   // --- estado por partido ---
   _reset(M) {
     this._match = M;
-    this.shot = 'media';
-    this._applyShot(M);
+    this._applyLoft(M);
     this.cam.direct(M); this.cam.snap();
     this._prev = { phase: M.phase, landed: false, coll: false, round: M.round, sweet: false };
     this._holding = false;
   }
 
-  _applyShot(M) {
-    const s = SHOTS[this.shot];
-    M.loft = s.loft;
-    M.role = s.role;
+  // lo que la vista arcade manda a Match antes de cada tiro: la altura
+  // elegida, sin efecto, y el rol que corresponde a esa altura
+  _applyLoft(M) {
+    M.loft = this.loft;
+    M.spin = 0;
+    M.role = this.loft < LOFT_TENSO ? 'tirar' : 'apuntar';
   }
 
   // Traduce ratón/teclado a lo que entiende Match. Devuelve la entrada que
@@ -120,16 +130,16 @@ export class ArcadeView {
     }
 
     if (M.phase === 'aim' && M.turn === 'P') {
-      // efecto con ←/→ o rueda, tipo de tiro con TAB o clic en las fichas
-      const spinMax = prof ? prof.spinMax : 0.6;
-      if (input.held('ArrowLeft')) M.spin -= 1.6 * dt;
-      if (input.held('ArrowRight')) M.spin += 1.6 * dt;
-      if (input.wheel) M.spin += input.wheel * 0.08;
-      M.spin = clamp(M.spin, -spinMax, spinMax);
-      if (input.hit('Tab')) { this.shot = SHOT_ORDER[(SHOT_ORDER.indexOf(this.shot) + 1) % SHOT_ORDER.length]; this._applyShot(M); }
-      if (this._clickedShot) { this.shot = this._clickedShot; this._applyShot(M); this._clickedShot = null; }
+      // altura con la rueda (arriba = más alta) o W/S; sin efecto
+      if (input.wheel) this.loft -= input.wheel * 0.04;
+      if (input.held('w') || input.held('W')) this.loft += 0.9 * dt;
+      if (input.held('s') || input.held('S')) this.loft -= 0.9 * dt;
+      this.loft = clamp(this.loft, LOFT_MIN, LOFT_MAX);
+      this._applyLoft(M);
+      block.add('ArrowLeft'); block.add('ArrowRight');
       // empezar la potencia: ENTER/ESPACIO, o mantener pulsado en la vista
       block.add('Enter'); block.add(' '); block.add('r'); block.add('R');
+      block.add('w'); block.add('W'); block.add('s'); block.add('S');
       if (input.hit('Enter') || input.hit(' ')) M.beginPower();
       else if (inView && mouse.down && !this._holding && this._pressStartedInView) { M.beginPower(); this._holding = true; }
     } else if (M.phase === 'power' && M.turn === 'P') {
@@ -266,14 +276,14 @@ export class ArcadeView {
     const { player } = this.game;
     if (!player || player.arcadeTutorialDone || M.turn !== 'P') return null;
     const ph = M.phase;
-    const c = this._coach || (this._coach = { step: 0, aim0: null, shot0: this.shot, t0: this._t });
+    const c = this._coach || (this._coach = { step: 0, aim0: null, loft0: this.loft, t0: this._t });
     // cada paso guarda cómo estaba todo al empezar, para notar el cambio
-    const next = () => { c.step++; c.t0 = this._t; c.aim0 = null; c.shot0 = this.shot; };
+    const next = () => { c.step++; c.t0 = this._t; c.aim0 = null; c.loft0 = this.loft; };
     if (c.step === 0 && ph === 'aim') {
       if (c.aim0 === null) c.aim0 = M.aimAngle;
       if (Math.abs(M.aimAngle - c.aim0) > 0.04) next();
     } else if (c.step === 1 && ph === 'aim') {
-      if (this.shot !== c.shot0 || this._t - c.t0 > 7) next();
+      if (Math.abs(this.loft - c.loft0) > 0.05 || this._t - c.t0 > 8) next();
     } else if (c.step === 3 && ph !== 'power' && ph !== 'aim') next();
     // quien se adelanta y ya carga la potencia pasa directo al "¡suelta!"
     if (c.step < 3 && ph === 'power') { c.step = 3; c.t0 = this._t; }
@@ -281,8 +291,8 @@ export class ArcadeView {
 
     if (ph === 'jackAim' || ph === 'jackPower') return ['PRIMERO, EL BOLICHE', 'mantén pulsado sobre la pista (o ENTER) y suelta para lanzarlo'];
     if (ph === 'aim' && c.step === 0) return ['① APUNTA', 'mueve el ratón sobre la pista: la retícula va donde señalas (o ↑ ↓)'];
-    if (ph === 'aim' && c.step === 1) return ['② ELIGE EL TIPO DE TIRO', 'clic en las fichas de abajo o TAB: arrimar, media volea, bombeo, tirar'];
-    if (ph === 'aim' && c.step === 2) return ['③ CARGA LA POTENCIA', 'mantén pulsado sobre la pista (o ENTER) — el efecto va con ← → o la rueda'];
+    if (ph === 'aim' && c.step === 1) return ['② AJUSTA LA ALTURA', 'gira la rueda del ratón (o W/S): de tiro tenso y rodado a globo — mira la parábola'];
+    if (ph === 'aim' && c.step === 2) return ['③ CARGA LA POTENCIA', 'mantén pulsado sobre la pista (o ENTER)'];
     if (ph === 'power' && c.step >= 2) return ['④ ¡SUELTA!', 'suelta el botón (o ENTER) cuando la barra pase por el tramo dorado ▾'];
     return null;
   }
@@ -411,37 +421,24 @@ export class ArcadeView {
     const myTurn = M.turn === 'P';
     const aiming = myTurn && AIM_PHASES.includes(ph);
 
-    // tipos de tiro (fichas clicables)
-    let x = 2;
-    screen.text(x, y0 + 1, 'TIRO', UI.textDim);
-    x += 5;
-    for (const id of SHOT_ORDER) {
-      const s = SHOTS[id];
-      const on = this.shot === id;
-      const label = ` ${s.glyph} ${s.label} `;
-      const over = aiming && input.mouse.cy === y0 + 1 && input.mouse.cx >= x && input.mouse.cx < x + label.length;
-      screen.fill(x, y0 + 1, label.length, 1, on ? tint(s.color, 0.4) : over ? tint(s.color, 0.2) : '#151b27');
-      screen.text(x, y0 + 1, label, on ? '#ffffff' : aiming ? s.color : UI.textFaint);
-      if (on) screen.glow(x + 1, y0 + 1, label.length - 2, 1);
-      if (over && input.mouse.clicked) this._clickedShot = id;
-      x += label.length + 1;
+    // ALTURA (Fase 6b): medidor continuo, qué hace la bola a esa altura y
+    // el perfil lateral de la parábola prevista
+    const li = loftInfo(this.loft);
+    screen.text(2, y0 + 1, 'ALTURA', UI.textDim);
+    screen.text(9, y0 + 1, li.label, aiming ? li.color : UI.textFaint);
+    if (aiming) screen.glow(9, y0 + 1, li.label.length, 1);
+    screen.text(9 + li.label.length + 1, y0 + 1, `${Math.round(this.loft * 57.3)}°`, UI.text);
+    const mw = 34, mx = 2;
+    const k = (this.loft - LOFT_MIN) / (LOFT_MAX - LOFT_MIN);
+    screen.fill(mx, y0 + 2, mw, 1, '#1c2230');
+    for (let i = 0; i < mw; i++) {
+      const lf = LOFT_MIN + ((i + 0.5) / mw) * (LOFT_MAX - LOFT_MIN);
+      screen.put(mx + i, y0 + 2, i <= k * mw ? '█' : '·', i <= k * mw ? loftInfo(lf).color : UI.edgeDim);
     }
-    screen.text(x + 1, y0 + 1, '[TAB]', UI.textFaint);
-    const sh = SHOTS[this.shot];
-    screen.text(2, y0 + 2, `${sh.hint}`, aiming ? sh.color : UI.textFaint);
-
-    // efecto
-    const prof = M.throwProfile();
-    const spinMax = prof.spinMax || 0.6;
-    screen.text(2, y0 + 4, 'EFECTO', UI.textDim);
-    const w = 31, sx = 10;
-    for (let i = 0; i < w; i++) screen.put(sx + i, y0 + 4, i === 15 ? '┼' : '─', UI.edgeDim);
-    const pos = sx + 15 + Math.round((M.spin / spinMax) * 15);
-    screen.put(pos, y0 + 4, '◆', STAT.mana.color);
-    screen.glow(pos, y0 + 4, 1, 1);
-    screen.text(sx + w + 1, y0 + 4, aiming ? '←/→·rueda' : '', UI.textFaint);
-    const retro = !M.training && M.role === 'tirar' && Math.abs(M.spin) > spinMax * 0.5;
-    if (retro) screen.text(2, y0 + 5, '¡efecto fuerte al TIRAR: si golpeas puede quedarse clavada (RETRO)!', UI.accent);
+    screen.put(mx + Math.min(mw - 1, Math.round(k * mw)), y0 + 3, '▲', aiming ? '#ffffff' : UI.textFaint);
+    screen.text(mx + mw + 1, y0 + 2, aiming ? 'rueda · W/S' : '', UI.textFaint);
+    screen.text(2, y0 + 4, li.hint.slice(0, 50), aiming ? li.color : UI.textFaint);
+    this._drawProfile(M, 52, y0 + 1, 58, aiming);
 
     // potencia (con ventana del punto dulce)
     const px = 64, pw = 44;
@@ -467,7 +464,7 @@ export class ArcadeView {
     else if (ph === 'power' || ph === 'jackPower') screen.text(px + pw + 2, y0 + 4, `${Math.round(M.power * 100)}%`, UI.text);
 
     // controles según fase
-    const help = ph === 'aim' ? 'SEÑALA en la pista · MANTÉN pulsado y SUELTA en el punto dulce   ·   teclado: ↑↓ apuntar · ENTER potencia · ENTER soltar'
+    const help = ph === 'aim' ? 'SEÑALA en la pista · RUEDA altura · MANTÉN pulsado y SUELTA en el punto dulce   ·   teclado: ↑↓ apuntar · W/S altura · ENTER'
       : ph === 'power' ? '¡SUELTA! (o ENTER) cuando la barra pase por el tramo dorado   ·   [ESC] volver a apuntar'
       : ph === 'jackAim' ? 'BOLICHE: señala hacia dónde · MANTÉN y SUELTA para la distancia   ·   teclado: ↑↓ + ENTER'
       : ph === 'jackPower' ? 'BOLICHE: ¡suelta! (o ENTER) — corto ⟷ largo'
@@ -489,6 +486,39 @@ export class ArcadeView {
       }
       screen.text(cx, cy, `quedan ${MAX_CONSUMABLES_PER_MATCH - M.consumablesUsedThisMatch} uso(s)`, UI.textFaint);
     }
+  }
+
+  // perfil lateral de la parábola prevista (visto de lado): 3 filas con
+  // glifos de sub-celda _ - ¯ (9 alturas), el círculo o a la izquierda,
+  // la caída x y el tramo que la Maña no deja ver, apagado
+  _drawProfile(M, x, y, w, aiming) {
+    const { screen } = this.game;
+    screen.fill(x, y, w, 3, '#10151f');
+    for (let i = 0; i < w; i++) screen.put(x + i, y + 2, '_', '#3a3428');
+    if (!aiming) { screen.text(x + 1, y, 'PARÁBOLA', UI.textFaint); return; }
+    const power = M.phase === 'power' ? M.power : 0.55;
+    const pr = PerspectiveCourt.predict(M, power);
+    // escala fija: la altura máxima es la del globo con esta misma fuerza
+    const zRef = Math.max(4, (pr.speed * Math.sin(LOFT_MAX)) ** 2 / (2 * 26));
+    const xRef = 130;
+    const levels = ['_', '-', '¯'];
+    let apex = { i: -1, z: -1 };
+    for (let i = 0; i < w; i++) {
+      const dist = ((i + 0.5) / w) * xRef;
+      const tt = dist / Math.max(0.01, pr.vh);
+      if (tt > pr.T) break;
+      const z = pr.vz * tt - 13 * tt * tt;
+      const lv = Math.max(0, Math.min(8, Math.round((z / zRef) * 8)));
+      const seen = dist <= pr.guideDist;
+      const col = seen ? (lv >= 6 ? '#ffe680' : '#bff4ff') : '#3e4a58';
+      screen.put(x + i, y + 2 - Math.floor(lv / 3), levels[lv % 3], col);
+      if (z > apex.z) apex = { i, z, lv, seen };
+    }
+    screen.put(x, y + 2, 'o', TONE.player);
+    const li = Math.min(w - 1, Math.round((pr.carry / xRef) * w));
+    if (li > 0) screen.put(x + li, y + 2, 'x', M.phase === 'power' ? (M.isSweet(M.power) ? TONE.gold : '#ff7a5a') : '#bff4ff');
+    if (apex.i > 0 && apex.seen) screen.glow(x + apex.i, y + 2 - Math.floor(apex.lv / 3), 1, 1);
+    screen.text(x + w - 12, y, `cae a ${Math.round(pr.carry)}`.padStart(12), UI.textDim); // mismas marcas que la pista
   }
 
   // minimapa cenital en caracteres (arriba a la derecha de la vista): la

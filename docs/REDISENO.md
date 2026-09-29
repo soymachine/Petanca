@@ -467,8 +467,14 @@ coordenadas de pantalla (apuntar con el ratón no cambia).
 ### Fase 6b — Ajustes del partido ASCII
 - [x] 1. Cámara fija (`Camera.fixed = true`: `direct()` devuelve siempre
       el plano de tiro; el director de planos queda en el código, apagado).
-- [ ] 2. Altura con la rueda (W/S), sin efecto ni tipos de tiro; deck con
-      medidor ALTURA y perfil lateral de la parábola; tutorial ② = altura.
+- [x] 2. Altura con la rueda (W/S) en `ArcadeView`: `this.loft` continuo
+      (0.17–1.05, se mantiene entre tiros), `_applyLoft` manda `M.loft`,
+      `M.spin = 0` y `M.role` = 'tirar' si loft < 0.3 (si no 'apuntar');
+      fuera fichas/TAB/efecto; ←→ bloqueadas. Deck: ALTURA con tramo
+      (`loftInfo`: TENSO/RASO/MEDIA VOLEA/GLOBO + texto), medidor, grados y
+      `_drawProfile` (perfil lateral de la parábola en 3 filas con _ - ¯,
+      escala fija, tramo fuera de la guía apagado, "cae a N"). Tutorial ②
+      = "AJUSTA LA ALTURA". Ayuda › Controles al día. verify adaptado.
 - [ ] 3. Parábola muy visible (trazo continuo con fondo propio, sombra en
       el suelo, vértice, punto de caída siempre visible).
 - [ ] 4. Paleta de contraste: cielo / skyline / terreno exterior / pista.

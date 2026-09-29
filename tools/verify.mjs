@@ -528,7 +528,7 @@ check('edición demo: nunca desbloquea países ni genera Copa de Europa, aunque 
 // ENTER-ENTER lanzan, TAB cambia el tipo de tiro, y el boliche también
 // se lanza con el gesto. Sin renderer (headless) no se apunta señalando,
 // pero todo lo demás es igual que en el navegador.
-check('partido arcade: gesto (mantener y soltar) y teclado lanzan; TAB cambia el tipo de tiro', () => {
+check('partido arcade: gesto (mantener y soltar) y teclado lanzan; la rueda cambia la altura', () => {
   const { ArcadeView } = arcadeMod;
   const mkGame = () => {
     const p = new Player();
@@ -570,14 +570,18 @@ check('partido arcade: gesto (mantener y soltar) y teclado lanzan; TAB cambia el
   g.keys.add('Enter'); step(g, view);
   if (g.M.phase !== 'sim' && g.M.phase !== 'throwDone') throw new Error(`ENTER en potencia debería lanzar, fase: ${g.M.phase}`);
 
-  // 3) TAB cambia tipo de tiro → cambia elevación y rol
+  // 3) rueda del ratón = altura continua (Fase 6b): sube/baja M.loft, el
+  // tiro tenso pasa a rol TIRAR y nunca hay efecto
   g = mkGame(); view = new ArcadeView(g.game);
   toPhase(g, view, 'aim');
   const loft0 = g.M.loft;
-  g.keys.add('Tab'); step(g, view);
-  if (g.M.loft === loft0) throw new Error('TAB debería cambiar la elevación (tipo de tiro)');
-  g.keys.add('Tab'); step(g, view);
-  if (g.M.role !== 'tirar') throw new Error(`dos TAB desde MEDIA VOLEA deberían dejar TIRAR, rol: ${g.M.role}`);
+  g.game.input.wheel = -3; step(g, view); g.game.input.wheel = 0;
+  if (!(g.M.loft > loft0)) throw new Error(`rueda hacia arriba debería subir la altura (${loft0} → ${g.M.loft})`);
+  if (g.M.spin !== 0) throw new Error('la vista ASCII no debería dar efecto');
+  g.game.input.wheel = 40; step(g, view); g.game.input.wheel = 0;
+  if (!(g.M.loft < 0.3) || g.M.role !== 'tirar') throw new Error(`un tiro muy bajo debería ser tenso y de rol TIRAR (loft ${g.M.loft}, rol ${g.M.role})`);
+  g.game.input.wheel = -8; step(g, view); g.game.input.wheel = 0;
+  if (g.M.role !== 'apuntar') throw new Error(`subiendo la altura vuelve a ser APUNTAR, rol: ${g.M.role}`);
 
   // 4) boliche con el gesto: pulsar → potencia del boliche, soltar → rueda
   g = mkGame(); view = new ArcadeView(g.game);
@@ -613,9 +617,9 @@ check('partido arcade: el tutorial de controles avanza con cada acción y se rec
   const say = () => { const l = view._coachUpdate(M, { hit: () => false }); return l ? l[0] : null; };
   if (!/APUNTA/.test(say())) throw new Error(`paso 1 debería ser APUNTA, es ${say()}`);
   M.aimAngle += 0.1;
-  if (!/TIPO DE TIRO/.test(say())) throw new Error(`tras apuntar debería pedir el tipo de tiro, es ${say()}`);
-  keys.add('Tab'); step();
-  if (!/POTENCIA/.test(say())) throw new Error(`tras cambiar de tiro debería pedir la potencia, es ${say()}`);
+  if (!/ALTURA/.test(say())) throw new Error(`paso 2 debería ser la altura, es ${say()}`);
+  input.wheel = -3; step(); input.wheel = 0;
+  if (!/POTENCIA/.test(say())) throw new Error(`tras cambiar la altura debería pedir la potencia, es ${say()}`);
   keys.add('Enter'); step();
   if (!/SUELTA/.test(say())) throw new Error(`en potencia debería pedir soltar, es ${say()}`);
   keys.add('Enter'); step();
