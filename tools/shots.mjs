@@ -18,8 +18,9 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
 const args = Object.fromEntries(process.argv.slice(2).map((a) => {
-  const [k, v] = a.replace(/^--/, '').split('=');
-  return [k, v === undefined ? true : v];
+  // solo el primer "=" separa: --query=nuevo=0 → query: "nuevo=0"
+  const [k, ...rest] = a.replace(/^--/, '').split('=');
+  return [k, rest.length ? rest.join('=') : true];
 }));
 
 const { SCENE_IDS } = await import(pathToFileURL(join(ROOT, 'public/game/core/DebugScenes.js')).href);

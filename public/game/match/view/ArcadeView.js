@@ -1,5 +1,7 @@
-// Vista ARCADE del partido (docs/REDISENO.md, Fase 3): pista en perspectiva
-// detrás del lanzador + minimapa cenital + HUD de videojuego, y una forma
+// Vista ARCADE del partido (docs/REDISENO.md, Fases 3 y 6): pista en
+// perspectiva detrás del lanzador — la escena 3D es solo la capa lógica y
+// se ve convertida a caracteres (AsciiScene) — + minimapa cenital + HUD de
+// videojuego, y una forma
 // nueva de tirar — señalas en el suelo dónde quieres que vaya, mantienes
 // pulsado (la barra de potencia oscila como siempre: Temple y cansancio
 // deciden su velocidad) y sueltas en el momento justo. El teclado sigue

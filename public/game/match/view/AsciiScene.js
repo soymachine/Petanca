@@ -52,7 +52,9 @@ export class AsciiScene {
       this.base = new AsciiBuffer(lay.cols, lay.rows);
       this._bgKey = null;
     }
+    const T0 = performance.now();
     this._background(R, cam, M, t, vis);
+    const T1 = performance.now();
     const buf = this.buf;
     buf.copyFrom(this.base);
     this._lines(cam, M);
@@ -68,7 +70,12 @@ export class AsciiScene {
       buf.darken(c, buf.rows - 2, 0.55);
       if (lay.density > 1) buf.darken(c, buf.rows - 3, 0.75);
     }
+    const T2 = performance.now();
     this.out.blit(ctx, buf);
+    const T3 = performance.now();
+    // tiempos por parte (media móvil), para tools/shots.mjs --bench
+    const st = this.stats || (this.stats = { bg: 0, over: 0, blit: 0 });
+    st.bg = st.bg * 0.9 + (T1 - T0) * 0.1; st.over = st.over * 0.9 + (T2 - T1) * 0.1; st.blit = st.blit * 0.9 + (T3 - T2) * 0.1;
   }
 
   // fondo: la 3D en el lienzo lógico → ASCII. Se reconvierte al moverse la
@@ -86,16 +93,26 @@ export class AsciiScene {
     const animated = (M.court.puddles && M.court.puddles.length) || M.court.tree || M.court.slope;
     const key = [cam.x, cam.l, cam.z, cam.hz, cam.zoom, M.weather.type, M.court === this._court, M.phase, lay.key].join('|');
     this._frame++;
-    if (key === this._bgKey && !(animated && this._frame % 6 === 0) && this._frame % 45 !== 0) return;
+    if (!this.forceBg && key === this._bgKey && !(animated && this._frame % 6 === 0) && this._frame % 45 !== 0) return;
+    // con la cámara en marcha, el fondo a medio ritmo (30 fps): los sprites
+    // y la estela siguen a 60, y en ASCII no se nota
+    if (!this.forceBg && key !== this._bgKey && this._lastBg === this._frame - 1) return;
+    this._lastBg = this._frame;
     this._bgKey = key; this._court = M.court;
     const c = this._lctx;
     c.setTransform(1, 0, 0, 1, 0, 0);
     c.fillStyle = '#000'; c.fillRect(0, 0, LW, LH);
     const kx = LW / lay.w, ky = LH / lay.h;
     c.setTransform(kx, 0, 0, ky, -lay.x * kx, -lay.y * ky);
+    const a = performance.now();
     this.court.draw(c, cam, M, t, vis, { background: true });
+    const b = performance.now();
     const img = c.getImageData(0, 0, LW, LH);
+    const d = performance.now();
     convert(img, this.base, this.out.glyphSet(R.fontFamily));
+    const e = performance.now();
+    const st = this.stats || (this.stats = { bg: 0, over: 0, blit: 0 });
+    st.draw3d = (st.draw3d || 0) * 0.9 + (b - a) * 0.1; st.read = (st.read || 0) * 0.9 + (d - b) * 0.1; st.conv = (st.conv || 0) * 0.9 + (e - d) * 0.1;
   }
 
   // líneas de cal, marcas de distancia y círculo de lanzamiento

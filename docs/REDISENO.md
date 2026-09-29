@@ -9,11 +9,11 @@
 - **Rama de trabajo:** `claude/petanca-rules-comparison-jb587u` (reiniciada
   desde `main` en `46bc963`). `main` queda estable mientras dura el
   rediseño; se fusiona cuando el usuario lo pida.
-- **Fase en curso:** Fase 6 — el partido renderizado en ASCII (petición
-  nueva del usuario tras probar las Fases 0-5).
-- **SIGUIENTE PASO CONCRETO:** Fase 6, paso 6 — rendimiento (bench),
-  etiquetas F7/AJUSTES/Ayuda ("ASCII" en vez de "ARCADE"), capturas de
-  lluvia/niebla/helada/tormenta, build demo (ver sección "Fase 6").
+- **Fase en curso:** Fase 6 (partido en ASCII) terminada; a la espera de
+  impresiones del usuario.
+- **SIGUIENTE PASO CONCRETO:** Fase 6 hecha. Enseñársela al usuario y
+  recoger impresiones (¿densidad, color, contraste de las bolas?). Mejoras
+  opcionales anotadas en Fase 6 y en las anteriores.
 - **Último commit relevante:** (se rellena en cada commit)
 
 ## Visión
@@ -437,8 +437,18 @@ coordenadas de pantalla (apuntar con el ratón no cambia).
       las zonas oscuras, tope de densidad en zonas planas claras (helada),
       juego de formas sin letras sueltas, densidad adaptativa (MIN_CH 9:
       1080p → 2×, 720p → 1.5×).
-- [ ] 6. Rendimiento (caché con cámara quieta, densidad adaptativa),
-      etiquetas F7/AJUSTES/Ayuda, verify + bench + demo.
+- [x] 6. Rendimiento: `convert()` con luminancia entera, rampa plana
+      precalculada por luminancia (LUT por juego de glifos), color
+      cuantizado sin Math.round, máscaras de forma empaquetadas en un
+      Float32Array y juego de formas recortado a 32 glifos; fondo a medio
+      ritmo (30 fps) mientras la cámara se mueve. Bench headless sin GPU,
+      peor caso (`--bench --query=asciibg=1`, reconvierte cada frame):
+      1080p fondo ≈14-16 ms (3D 0.6 · leer 6 · convertir 7-8), 720p ≈3-5
+      ms; con la cámara quieta el ASCII cuesta 0.1-3.5 ms. `--bench`
+      muestra ahora el desglose (fondo/capas/salida). `shots.mjs --query`
+      acepta valores con "=" (antes se cortaban). Escenas con
+      `&clima=LLUVIA|NIEBLA|HELADA|TORMENTA|VIENTO|CALOR|SOL`. Etiquetas:
+      AJUSTES y Ayuda dicen "ASCII 3D" / "CLÁSICA". Build demo sin errores.
 
 ## Registro de commits
 
@@ -468,6 +478,8 @@ coordenadas de pantalla (apuntar con el ratón no cambia).
 | 2026-09-28 | f1b7134 | Fase 5: fondo 3D cacheado con la cámara quieta |
 | 2026-09-28 | 569e2c6 | Fase 5: contraste, build demo revisada, shots con puerto al azar |
 | 2026-09-28 | (este) | Fase 5: fin de temporada y Game Over |
+| 2026-09-29 | eb4afe3 | Fase 6: el partido se ve en ASCII |
+| 2026-09-29 | (este) | Fase 6: rendimiento del ASCII, etiquetas, escenas de clima |
 
 ## Problemas conocidos / notas
 

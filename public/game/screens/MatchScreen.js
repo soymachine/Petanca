@@ -12,7 +12,8 @@ import { Settings } from '../core/Settings.js';
 export class MatchScreen {
   constructor(game) {
     this.game = game;
-    // vista arcade en perspectiva (docs/REDISENO.md, Fase 3); la clásica
+    // vista arcade en perspectiva, dibujada en ASCII (docs/REDISENO.md,
+    // Fases 3 y 6); la clásica
     // cenital sigue aquí mismo y se alterna con F7 (ver Game.arcadeMatch)
     this.arcade = new ArcadeView(game);
   }

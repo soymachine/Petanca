@@ -91,7 +91,7 @@ export class AyudaScreen {
       yy++;
     }
     this._section(x, y + 23, 'SIEMPRE');
-    row(y + 25, 'F7', 'vista del partido: arcade (perspectiva) o clásica (cenital)', TONE.info);
+    row(y + 25, 'F7', 'vista del partido: ASCII 3D (perspectiva) o clásica (cenital)', TONE.info);
     row(y + 26, 'F8', 'efectos CRT (resplandor y líneas)', TONE.info);
     row(y + 27, 'F11', 'pantalla completa', TONE.info);
     row(y + 28, '1 … 9', 'saltar entre pantallas de gestión', TONE.info);

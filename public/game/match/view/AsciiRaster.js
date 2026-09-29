@@ -23,7 +23,7 @@ export const SX = 3, SY = 6; // subpíxeles por celda ASCII en el lienzo lógico
 // juego de glifos para emparejar forma: gráficos (bordes, líneas, curvas)
 // y unas pocas letras con forma clara; nada de letras sueltas tipo q p d b
 // que en una textura solo se leen como ruido
-export const GLYPHS = ' .`\',-_:;~^"¯=+<>!/\\|()[]{}*#%@oO0xXvVTLJY7iIl1';
+export const GLYPHS = ' .`\',-_:;~^¯=+<>!/\\|()*oO0xXvTLJ7';
 // rampa "plana" (zonas sin contraste): cada nivel de densidad tiene varias
 // variantes y cada celda elige una con un ruido fijo — la textura se lee
 // como grano ASCII orgánico y no como papel pintado
@@ -31,6 +31,14 @@ const FLAT = [' ', '.`,', "·:'", ":;'", '~;i', '+rx', 'ovc', '*ae', 'O0&', '#%8
 // cobertura aproximada de cada nivel (para Node, sin medir la fuente)
 const FLAT_COV = [0, 0.04, 0.07, 0.1, 0.13, 0.18, 0.23, 0.28, 0.4, 0.5, 0.6];
 
+// luminancia (0..255 entera) → cobertura objetivo: los tonos oscuros y
+// planos quedan callados (punteado), los claros se llenan; tope 0.66 para
+// que una zona plana muy clara (la helada) no se llene de @ — lo más denso
+// queda para bordes y formas
+const T_LUT = Float32Array.from({ length: 256 }, (_, l) => Math.min(0.66, Math.pow(l / 255, 1.45) * 1.3));
+
+// brillo del glifo según la luminancia de la celda
+const KF_LUT = Float32Array.from({ length: 256 }, (_, l) => (0.42 + 0.6 * Math.sqrt(l / 255)) * 255);
 const BAYER = [0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5];
 
 export const rgb = (r, g, b) => ((r & 255) << 16) | ((g & 255) << 8) | (b & 255);
@@ -38,7 +46,6 @@ export const hexToInt = (hex) => parseInt(hex.replace('#', ''), 16);
 export const intToCss = (v) => `#${(v >>> 0).toString(16).padStart(6, '0').slice(-6)}`;
 const R_ = (v) => (v >> 16) & 255, G_ = (v) => (v >> 8) & 255, B_ = (v) => v & 255;
 // 6 niveles por canal → 216 tonos: la "paleta retro" de los glifos
-const q6 = (v) => Math.round(Math.max(0, Math.min(255, v)) / 51) * 51;
 
 export function mixInt(a, b, k) {
   return rgb(Math.round(R_(a) + (R_(b) - R_(a)) * k), Math.round(G_(a) + (G_(b) - G_(a)) * k), Math.round(B_(a) + (B_(b) - B_(a)) * k));
@@ -100,7 +107,24 @@ export function makeGlyphSet(measure) {
   });
   const maxCov = Math.max(...flat.map((f) => f.cov)) || 1;
   const shaped = list.filter((g) => g.nrm > 0.05);
-  return { list, flat, maxCov, shaped, measured: !!measure };
+  // todo empaquetado para el bucle caliente de convert(): máscaras centradas
+  // y ya normalizadas, una tras otra en un solo Float32Array
+  const n = SX * SY;
+  const W = new Float32Array(shaped.length * n);
+  shaped.forEach((g, j) => { for (let i = 0; i < n; i++) W[j * n + i] = g.cen[i] / g.nrm; });
+  const covN = Float32Array.from(shaped, (g) => g.cov / maxCov);
+  // rampa plana precalculada por luminancia (0..255): nivel de abajo y
+  // fracción hacia el siguiente (el dithering decide cuál de los dos)
+  const lvl = new Uint8Array(256), frac = new Float32Array(256);
+  for (let l = 0; l < 256; l++) {
+    const want = T_LUT[l] * maxCov;
+    let k = 0;
+    while (k < flat.length - 1 && flat[k + 1].cov <= want) k++;
+    lvl[l] = k;
+    if (k < flat.length - 1) { const a = flat[k].cov, b = flat[k + 1].cov; frac[l] = b > a ? (want - a) / (b - a) : 0; } else frac[l] = 0;
+  }
+  const codes = flat.map((f) => Uint16Array.from(f.vars, (vv) => vv.code));
+  return { list, flat, maxCov, shaped, W, covN, lvl, frac, codes, measured: !!measure };
 }
 
 export const FALLBACK_GLYPHS = makeGlyphSet(null);
@@ -112,21 +136,6 @@ function hash2(c, r) {
   return ((h ^ (h >>> 16)) >>> 0) / 4294967296;
 }
 
-// glifo plano para una cobertura objetivo t (0..1): el umbral de dithering
-// decide entre los dos niveles vecinos y el ruido elige la variante
-function flatFor(gs, t, dither, noise) {
-  const f = gs.flat;
-  const want = t * gs.maxCov;
-  let k = 0;
-  while (k < f.length - 1 && f[k + 1].cov <= want) k++;
-  if (k < f.length - 1) {
-    const a = f[k].cov, b = f[k + 1].cov;
-    const frac = b > a ? (want - a) / (b - a) : 0;
-    if (frac > dither) k++;
-  }
-  const vars = f[k].vars;
-  return vars[Math.floor(noise * vars.length) % vars.length];
-}
 
 // Convierte la imagen del lienzo lógico (cols*SX × rows*SY) en el buffer.
 // opts.bgK: cuánto se oscurece el fondo; opts.contrast: umbral de forma.
@@ -134,58 +143,67 @@ export function convert(img, buf, gs = FALLBACK_GLYPHS, opts = {}) {
   const { data, width } = img;
   const cols = buf.cols, rows = buf.rows;
   const bgK = opts.bgK ?? 0.3;
-  const minContrast = opts.contrast ?? 0.14;
+  const minContrast = (opts.contrast ?? 0.18) * 255;
   const n = SX * SY;
   const v = new Float32Array(n);
+  const lum = new Uint8Array(n);
+  const chars = buf.chars, fgA = buf.fg, bgA = buf.bg;
+  const shaped = gs.measured;
+  const W = gs.W, covN = gs.covN, nG = covN ? covN.length : 0;
+  const rowStride = width * 4;
   for (let r = 0; r < rows; r++) {
     for (let c = 0; c < cols; c++) {
-      let sr = 0, sg = 0, sb = 0, lo = 1, hi = 0, L = 0;
+      let sr = 0, sg = 0, sb = 0, lo = 255, hi = 0, Ls = 0;
       let k = 0;
-      for (let y = 0; y < SY; y++) {
-        let p = ((r * SY + y) * width + c * SX) * 4;
+      let p0 = (r * SY * width + c * SX) * 4;
+      for (let y = 0; y < SY; y++, p0 += rowStride) {
+        let p = p0;
         for (let x = 0; x < SX; x++, p += 4, k++) {
           const R = data[p], G = data[p + 1], B = data[p + 2];
           sr += R; sg += G; sb += B;
-          const l = (0.299 * R + 0.587 * G + 0.114 * B) / 255;
-          v[k] = l; L += l;
+          const l = (R * 77 + G * 150 + B * 29) >> 8;
+          lum[k] = l; Ls += l;
           if (l < lo) lo = l; if (l > hi) hi = l;
         }
       }
-      sr /= n; sg /= n; sb /= n; L /= n;
+      const Li = (Ls / n) | 0;
+      const t = T_LUT[Li];
       const noise = hash2(c, r);
-      // Bayer + un poco de ruido: sin bandas y sin patrón repetido
-      const dither = Math.min(0.97, Math.max(0.03, (BAYER[(r & 3) * 4 + (c & 3)] + 0.5) / 16 * 0.7 + noise * 0.3));
-      // luminancia → cobertura: los tonos oscuros y planos quedan callados
-      // (punteado), los claros se llenan
-      // (tope 0.66: una zona plana muy clara, como la helada, no se llena
-      // de @; lo más denso queda para bordes y formas)
-      const t = Math.min(0.66, Math.pow(L, 1.45) * 1.3);
-      let g = flatFor(gs, t, dither, noise);
+      // Bayer + un poco de ruido: sin bandas y sin patrón repetido; el ruido
+      // también elige la variante del nivel
+      const dither = (BAYER[(r & 3) * 4 + (c & 3)] + 0.5) * 0.04375 + noise * 0.3;
+      const lv = gs.frac[Li] > dither ? gs.lvl[Li] + 1 : gs.lvl[Li];
+      const vars = gs.codes[lv];
+      let code = vars[(noise * 997 | 0) % vars.length];
       // forma: con contraste, el glifo cuya máscara más se parece al bloque
-      if (gs.measured && hi - lo > minContrast) {
+      if (shaped && hi - lo > minContrast) {
+        const L = Ls / n;
         let vn = 0;
-        for (let i = 0; i < n; i++) { v[i] -= L; vn += v[i] * v[i]; }
-        vn = Math.sqrt(vn);
+        for (let i = 0; i < n; i++) { const d = lum[i] - L; v[i] = d; vn += d * d; }
+        const inv = 1 / (Math.sqrt(vn) + 1e-6);
         // puntuación = parecido de forma (correlación) − lo que se aleja de
         // la densidad que pide la luz; se prueban todos los glifos con forma
-        let best = null, bestS = 0.5;
-        for (const cand of gs.shaped) {
+        let best = -1, bestS = 0.5;
+        for (let j = 0, o = 0; j < nG; j++, o += n) {
           let s = 0;
-          const cen = cand.cen;
-          for (let i = 0; i < n; i++) s += cen[i] * v[i];
-          s = s / (cand.nrm * vn + 1e-6) - 0.35 * Math.abs(cand.cov / gs.maxCov - t);
-          if (s > bestS) { bestS = s; best = cand; }
+          for (let i = 0; i < n; i++) s += W[o + i] * v[i];
+          s = s * inv - 0.35 * Math.abs(covN[j] - t);
+          if (s > bestS) { bestS = s; best = j; }
         }
-        if (best) g = best;
+        if (best >= 0) code = gs.shaped[best].code;
       }
-      // colores: el glifo con el tono de la celda aclarado (y cuantizado),
-      // el fondo con el mismo tono muy oscurecido
-      const M = Math.max(sr, sg, sb, 1);
-      const kf = Math.min(3, ((0.42 + 0.6 * Math.sqrt(L)) * 255) / M);
+      // colores: el glifo con el tono de la celda aclarado (y cuantizado a
+      // 6 niveles por canal), el fondo con el mismo tono muy oscurecido
+      sr /= n; sg /= n; sb /= n;
+      const M = sr > sg ? (sr > sb ? sr : sb) : (sg > sb ? sg : sb);
+      let kf = KF_LUT[Li] / (M < 1 ? 1 : M);
+      if (kf > 3) kf = 3;
+      let qr = ((sr * kf) / 51 + 0.5) | 0, qg = ((sg * kf) / 51 + 0.5) | 0, qb = ((sb * kf) / 51 + 0.5) | 0;
+      if (qr > 5) qr = 5; if (qg > 5) qg = 5; if (qb > 5) qb = 5;
       const i = r * cols + c;
-      buf.chars[i] = g.code;
-      buf.fg[i] = rgb(q6(sr * kf), q6(sg * kf), q6(sb * kf));
-      buf.bg[i] = rgb(sr * bgK, sg * bgK, sb * bgK);
+      fgA[i] = (qr * 51 << 16) | (qg * 51 << 8) | (qb * 51);
+      bgA[i] = ((sr * bgK) << 16) | ((sg * bgK) << 8) | (sb * bgK);
+      chars[i] = code;
     }
   }
 }

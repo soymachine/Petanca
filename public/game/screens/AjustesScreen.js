@@ -10,8 +10,8 @@ import { panel, titleBand, button } from '../ui/widgets.js';
 // pantalla de la que se vino. Todo se aplica al momento y se guarda en el
 // navegador (core/Settings.js), no en la partida.
 const OPTIONS = [
-  { key: 'matchView', label: 'Vista del partido', kind: 'choice', values: [['arcade', 'ARCADE'], ['clasica', 'CLÁSICA']],
-    desc: 'arcade: en perspectiva, detrás del lanzador · clásica: desde arriba (F7)' },
+  { key: 'matchView', label: 'Vista del partido', kind: 'choice', values: [['arcade', 'ASCII 3D'], ['clasica', 'CLÁSICA']],
+    desc: 'ASCII 3D: la pista en perspectiva hecha de caracteres · clásica: desde arriba (F7)' },
   { key: 'sound', label: 'Sonido', desc: 'choques de bolas, albero, clics y fanfarrias (sintetizados, sin archivos)' },
   { key: 'volume', label: 'Volumen', kind: 'choice', values: [[0.25, '25%'], [0.5, '50%'], [0.75, '75%'], [1, '100%']],
     desc: 'volumen general de los sonidos' },

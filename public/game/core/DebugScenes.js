@@ -7,6 +7,7 @@
 // pisar la del usuario si abre una de estas URLs en su navegador.
 import { EuropeanCup } from '../domain/EuropeanCup.js';
 import { DECISION_EVENTS } from '../data/decisionEvents.js';
+import { Weather } from '../physics/Weather.js';
 import { Settings } from './Settings.js';
 
 // pantallas que solo necesitan cambiar de estado (id de escena = estado)
@@ -138,6 +139,10 @@ export function applySceneFromUrl(game) {
   } else if (id.startsWith('match-')) {
     startLeagueMatch(game);
     const M = game.match;
+    // &clima=LLUVIA|NIEBLA|HELADA|TORMENTA|VIENTO|CALOR|SOL: fuerza el tiempo
+    // del partido (capturas del clima en la vista ASCII)
+    const clima = params.get('clima');
+    if (clima) M.weather = new Weather(clima, M.city.diff, M.feature);
     if (id === 'match-aim') autoplay(game, (m) => m.phase === 'aim');
     else if (id === 'match-power') {
       autoplay(game, (m) => m.phase === 'aim');
@@ -175,6 +180,9 @@ export function applySceneFromUrl(game) {
   // --bench lo lee con --dump-dom
   if (params.get('bench') && game.renderer) {
     const scr = game.screens[game.state];
+    // &asciibg=1: fuerza a reconvertir el fondo ASCII cada frame (el peor
+    // caso: la cámara en movimiento)
+    if (params.get('asciibg') && scr.arcade) scr.arcade.ascii.forceBg = true;
     const N = 40;
     const time = (fn) => { for (let i = 0; i < 3; i++) fn(); const t0 = performance.now(); for (let i = 0; i < N; i++) { game.frame++; fn(); } return (performance.now() - t0) / N; };
     const drawMs = time(() => scr.draw());
@@ -185,6 +193,8 @@ export function applySceneFromUrl(game) {
     Settings.values.scanlines = false;
     const bare = time(() => { scr.draw(); game.screen.render(); });
     Settings.values = saved;
-    document.title = `bench:${full.toFixed(1)} (draw ${drawMs.toFixed(1)} · sin bloom ${noBloom.toFixed(1)} · sin bloom ni CRT ${bare.toFixed(1)})`;
+    const as = scr.arcade && scr.arcade.ascii && scr.arcade.ascii.stats;
+    const asTxt = as ? ` · ascii fondo ${as.bg.toFixed(1)} capas ${as.over.toFixed(1)} salida ${as.blit.toFixed(1)}${as.conv !== undefined ? ` [3d ${as.draw3d.toFixed(1)} leer ${as.read.toFixed(1)} convertir ${as.conv.toFixed(1)}]` : ''}` : '';
+    document.title = `bench:${full.toFixed(1)} (draw ${drawMs.toFixed(1)} · sin bloom ${noBloom.toFixed(1)} · sin bloom ni CRT ${bare.toFixed(1)}${asTxt})`;
   }
 }
