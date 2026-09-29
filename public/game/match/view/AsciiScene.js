@@ -19,7 +19,8 @@ import { PerspectiveCourt, BALL_COLORS } from './PerspectiveCourt.js';
 const AIM_PHASES = ['aim', 'spin', 'loft', 'power'];
 const COL = {
   line: hexToInt('#efe4c4'), lineDim: hexToInt('#b8ab86'), mark: hexToInt('#d8cca8'),
-  reticle: hexToInt('#ffffff'), guide: hexToInt('#9df09d'), guideHi: hexToInt('#d8ffb0'),
+  reticle: hexToInt('#ffffff'), guide: hexToInt('#aef2ff'), guideHi: hexToInt('#ffe680'),
+  guideBg: hexToInt('#0a1622'), guideShadow: hexToInt('#2c3a44'),
   sweet: hexToInt('#ffd24a'), bad: hexToInt('#ff7a5a'), jackLine: hexToInt('#ffe14d'),
   rain: hexToInt('#9cc8ea'), snow: hexToInt('#eef6ff'), heat: hexToInt('#ffcf8a'), wind: hexToInt('#d8d0a8'),
   dust: hexToInt('#d8c49a'), spark: hexToInt('#fff3c4'), ring: hexToInt('#ffd24a'),
@@ -197,32 +198,59 @@ export class AsciiScene {
       return;
     }
     // guía: con la potencia actual (o media al apuntar), solo el tramo que
-    // alcanza la Maña del abuelo
+    // alcanza la Maña del abuelo. Fase 6b: trazo CONTINUO, grueso y claro
+    // con fondo oscuro propio (se lee sobre cualquier grava), su sombra en
+    // el suelo para leer la altura, el vértice marcado y la caída siempre
+    // a la vista
     const power = ph === 'power' ? M.power : 0.55;
     const pr = PerspectiveCourt.predict(M, power);
     const jitter = M.jitterA || 0;
-    const steps = 40;
+    const steps = 64;
     const zMax = Math.max(1, (pr.vz * pr.vz) / (2 * 26));
-    for (let i = 1; i <= steps; i++) {
+    const pts = [], ground = [];
+    for (let i = 0; i <= steps; i++) {
       const tt = (i / steps) * pr.T;
       const pt = pr.at(tt);
       const horiz = pt.x - THROW_X;
       if (horiz > pr.guideDist) break;
-      const q = this._pw(cam, pt.x, pt.y + Math.sin(jitter) * horiz * 0.5, Math.max(0, pt.z) + 0.3);
-      if (!q) continue;
-      const hi = pt.z / zMax;
-      const fade = 1 - i / steps;
-      const ch = hi > 0.85 ? '°' : hi > 0.4 ? '•' : '·';
-      buf.set(Math.floor(q.c), Math.floor(q.r), ch, mixInt(mixInt(COL.guide, COL.guideHi, hi), 0x203020, (1 - fade) * 0.5));
+      const yy = pt.y + Math.sin(jitter) * horiz * 0.5;
+      const q = this._pw(cam, pt.x, yy, Math.max(0, pt.z) + 0.3);
+      const g = this._pw(cam, pt.x, yy, 0);
+      if (q) pts.push({ ...q, hi: pt.z / zMax });
+      if (g) ground.push(g);
     }
-    if (ph === 'power') {
-      const l = this._pw(cam, pr.land.x, pr.land.y);
-      if (l) {
+    // sombra del recorrido en el suelo: puntos tenues
+    for (let i = 0; i < ground.length; i += 2) {
+      const g = ground[i];
+      buf.set(Math.floor(g.c), Math.floor(g.r), '.', COL.guideShadow);
+    }
+    // el arco: segmentos entre puntos consecutivos con el glifo de su
+    // pendiente; cian-blanco abajo, dorado en lo alto
+    let apex = null;
+    for (let i = 1; i < pts.length; i++) {
+      const a = pts[i - 1], b = pts[i];
+      const col = mixInt(COL.guide, COL.guideHi, Math.min(1, b.hi * 1.1));
+      // banda de fondo del color del arco (se ve aunque el glifo sea fino)
+      // + el trazo, y una segunda pasada al lado para darle cuerpo
+      const band = mixInt(0x06121c, col, 0.42);
+      drawLine(buf, a.c + 1, a.r, b.c + 1, b.r, mixInt(col, 0, 0.35), { aspect: asp, bg: mixInt(0x06121c, col, 0.22) });
+      drawLine(buf, a.c, a.r, b.c, b.r, 0xffffff, { aspect: asp, bg: band });
+      if (!apex || b.hi > apex.hi) apex = b;
+    }
+    if (apex && apex.hi > 0.15 && pts.length > 4 && apex !== pts[pts.length - 1]) {
+      buf.set(Math.floor(apex.c), Math.floor(apex.r), '^', COL.guideHi, COL.guideBg);
+    }
+    // caída: ( o ) al apuntar; >X< dorado (punto dulce) o rojo con la barra
+    const l = this._pw(cam, pr.land.x, pr.land.y);
+    if (l) {
+      const c = Math.floor(l.c), r = Math.floor(l.r);
+      if (ph === 'power') {
         const col = M.isSweet(M.power) ? COL.sweet : COL.bad;
         const on = Math.sin(t * 14) > -0.3;
-        const c = Math.floor(l.c), r = Math.floor(l.r);
         buf.set(c, r, on ? 'X' : 'x', col, mixInt(col, 0, 0.7));
-        buf.set(c - 1, r, '>', col); buf.set(c + 1, r, '<', col);
+        buf.set(c - 1, r, '>', col, COL.guideBg); buf.set(c + 1, r, '<', col, COL.guideBg);
+      } else if (pr.land.x - THROW_X <= pr.guideDist) {
+        buf.set(c - 1, r, '(', COL.guide, COL.guideBg); buf.set(c, r, 'o', COL.guideHi, COL.guideBg); buf.set(c + 1, r, ')', COL.guide, COL.guideBg);
       }
     }
   }

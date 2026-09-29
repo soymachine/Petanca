@@ -475,8 +475,12 @@ coordenadas de pantalla (apuntar con el ratón no cambia).
       `_drawProfile` (perfil lateral de la parábola en 3 filas con _ - ¯,
       escala fija, tramo fuera de la guía apagado, "cae a N"). Tutorial ②
       = "AJUSTA LA ALTURA". Ayuda › Controles al día. verify adaptado.
-- [ ] 3. Parábola muy visible (trazo continuo con fondo propio, sombra en
-      el suelo, vértice, punto de caída siempre visible).
+- [x] 3. Parábola muy visible (`AsciiScene._aim`): 64 muestras de
+      `predict` unidas con `drawLine` (glifo de pendiente) en blanco sobre
+      una BANDA de fondo del color del arco (cian abajo → dorado arriba) y
+      una segunda pasada al lado para darle cuerpo; sombra del recorrido en
+      el suelo `.`; vértice `^`; caída `(o)` siempre visible al apuntar y
+      `>X<` dorado/rojo con la barra. Sigue cortada por la guía (Maña).
 - [ ] 4. Paleta de contraste: cielo / skyline / terreno exterior / pista.
 
 ## Registro de commits
