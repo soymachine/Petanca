@@ -485,6 +485,7 @@ coordenadas de pantalla (apuntar con el ratón no cambia).
 | 2026-09-28 | 06558ac | Fase 5: fin de temporada y Game Over |
 | 2026-09-29 | eb4afe3 | Fase 6: el partido se ve en ASCII |
 | 2026-09-29 | 9ff5d54 | Fase 6: rendimiento del ASCII, etiquetas, escenas de clima |
+| 2026-09-29 | be858f3 | Fase 6: grano ASCII más limpio en el suelo |
 
 ## Problemas conocidos / notas
 
