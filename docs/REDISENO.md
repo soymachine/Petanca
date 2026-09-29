@@ -521,6 +521,10 @@ coordenadas de pantalla (apuntar con el ratón no cambia).
 | 2026-09-29 | eb4afe3 | Fase 6: el partido se ve en ASCII |
 | 2026-09-29 | 9ff5d54 | Fase 6: rendimiento del ASCII, etiquetas, escenas de clima |
 | 2026-09-29 | be858f3 | Fase 6: grano ASCII más limpio en el suelo |
+| 2026-09-29 | 7c0989e | Fase 6b: cámara fija en el partido |
+| 2026-09-29 | daa2049 | Fase 6b: la rueda del ratón decide la altura del tiro |
+| 2026-09-29 | efe994d | Fase 6b: parábola del tiro bien visible |
+| 2026-09-29 | 91f1c75 | Fase 6b: paleta con contraste entre cielo, pueblo, exterior y pista |
 
 ## Problemas conocidos / notas
 
