@@ -30,6 +30,7 @@ import { DIFFICULTIES } from '../public/game/data/difficulty.js';
 import { LeagueWorld } from '../public/game/domain/LeagueWorld.js';
 import { Match } from '../public/game/match/Match.js';
 import * as arcadeMod from '../public/game/match/view/ArcadeView.js';
+import * as asciiMod from '../public/game/match/view/AsciiRaster.js';
 import { TARGET } from '../public/game/physics/constants.js';
 import { ForeignLeagueWorld } from '../public/game/domain/ForeignLeagueWorld.js';
 import { awayCountriesFor, levelBoundsFor } from '../public/game/data/countries.js';
@@ -622,6 +623,54 @@ check('partido arcade: el tutorial de controles avanza con cada acción y se rec
   const again = new ArcadeView(game);
   if (again._coachUpdate(M, { hit: () => false }) !== null) throw new Error('un perfil que ya lo vio no debería volver a verlo');
   if (!Player.fromJSON(JSON.parse(JSON.stringify(p.toJSON()))).arcadeTutorialDone) throw new Error('arcadeTutorialDone debería guardarse');
+});
+
+// partido en ASCII (Fase 6): el rasterizador convierte luminancia en
+// densidad de glifo, empareja la forma cuando hay contraste, los trazos
+// llevan el glifo de su pendiente y las bolas salen como discos sombreados
+check('partido en ASCII: densidad por luz, forma por contraste, trazos y bolas', () => {
+  const { AsciiBuffer, convert, lineGlyph, drawBall, makeGlyphSet, FALLBACK_GLYPHS, SX, SY } = asciiMod;
+  // 1) degradado de negro a blanco → glifos cada vez más densos
+  const cols = 12, rows = 2, W = cols * SX, H = rows * SY;
+  const data = new Uint8ClampedArray(W * H * 4);
+  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+    const v = Math.round((Math.floor(x / SX) / (cols - 1)) * 255), p = (y * W + x) * 4;
+    data[p] = data[p + 1] = data[p + 2] = v; data[p + 3] = 255;
+  }
+  const buf = new AsciiBuffer(cols, rows);
+  convert({ data, width: W, height: H }, buf, FALLBACK_GLYPHS);
+  const ramp = FALLBACK_GLYPHS.flat.map((f) => f.ch);
+  const lvl = (c) => ramp.indexOf(buf.char(c, 0));
+  if (lvl(0) > 1) throw new Error(`el negro debería quedar casi vacío, es "${buf.char(0, 0)}"`);
+  if (lvl(cols - 1) < ramp.length - 3) throw new Error(`el blanco debería ser denso, es "${buf.char(cols - 1, 0)}"`);
+  if (lvl(cols - 1) <= lvl(cols >> 1)) throw new Error('más luz debería dar más densidad');
+  // 2) emparejamiento de forma: con máscaras, un bloque en diagonal elige /
+  const pat = { '/': (x, y) => Math.abs(x - (SX - 1) * (1 - y / (SY - 1))) < 0.7, '\\': (x, y) => Math.abs(x - (SX - 1) * (y / (SY - 1))) < 0.7, '-': (x, y) => y === 2 || y === 3, '|': (x) => x === 1 };
+  const gs = makeGlyphSet((ch) => {
+    const m = new Float32Array(SX * SY);
+    const f = pat[ch];
+    for (let y = 0; y < SY; y++) for (let x = 0; x < SX; x++) m[y * SX + x] = f ? (f(x, y) ? 1 : 0) : (ch === ' ' ? 0 : ((x + y) % 3 === 0 ? 0.6 : 0.1));
+    return m;
+  });
+  const d2 = new Uint8ClampedArray(SX * SY * 4);
+  for (let y = 0; y < SY; y++) for (let x = 0; x < SX; x++) { const on = pat['/'](x, y), p = (y * SX + x) * 4; d2[p] = d2[p + 1] = d2[p + 2] = on ? 255 : 0; d2[p + 3] = 255; }
+  const b2 = new AsciiBuffer(1, 1);
+  convert({ data: d2, width: SX, height: SY }, b2, gs);
+  if (b2.char(0, 0) !== '/') throw new Error(`un borde en diagonal debería dar "/", dio "${b2.char(0, 0)}"`);
+  // 3) glifo de trazo según pendiente (y sub-celda en los horizontales)
+  if (lineGlyph(1, 0, 0.5) !== '-' || lineGlyph(1, 0, 0.9) !== '_' || lineGlyph(1, 0, 0.1) !== '¯') throw new Error('horizontales: ¯ - _ según altura');
+  if (lineGlyph(0, 1) !== '|' || lineGlyph(1, -1) !== '/' || lineGlyph(1, 1) !== '\\') throw new Error('pendientes: | / \\');
+  // 4) bola grande: contorno ( ), brillo ° y color del dueño
+  const bb = new AsciiBuffer(20, 12);
+  const blue = [0xe8f6ff, 0x5ab4dc, 0x163a52];
+  drawBall(bb, 10, 6, 4, 3, blue);
+  let txt = '';
+  for (let r = 0; r < 12; r++) for (let c = 0; c < 20; c++) txt += bb.char(c, r);
+  if (!txt.includes('(') || !txt.includes(')') || !txt.includes('°')) throw new Error(`la bola debería tener contorno ( ) y brillo °: ${txt.replace(/ +/g, ' ')}`);
+  if (bb.fg[6 * 20 + 10] === 0) throw new Error('el centro de la bola debería tener color');
+  // 5) bola lejana: un solo glifo
+  const bs = new AsciiBuffer(3, 3);
+  if (drawBall(bs, 1.5, 1.5, 0.4, 0.2, blue) !== 1 || bs.char(1, 1) === ' ') throw new Error('una bola lejana debería ser un único glifo');
 });
 
 // --- runner ---

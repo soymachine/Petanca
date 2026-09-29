@@ -11,8 +11,8 @@
   rediseño; se fusiona cuando el usuario lo pida.
 - **Fase en curso:** Fase 6 — el partido renderizado en ASCII (petición
   nueva del usuario tras probar las Fases 0-5).
-- **SIGUIENTE PASO CONCRETO:** Fase 6, paso 1 — núcleo
-  `match/view/AsciiRaster.js` (ver sección "Fase 6" más abajo).
+- **SIGUIENTE PASO CONCRETO:** Fase 6, paso 2 — tubería en
+  `ArcadeView.draw` (ver sección "Fase 6" más abajo).
 - **Último commit relevante:** (se rellena en cada commit)
 
 ## Visión
@@ -394,9 +394,19 @@ encima capas vectoriales (líneas, círculo, marcas, retícula, guía), sprites
 ASCII analíticos (bolas, boliche, sombras, estela, chispas) y clima ASCII →
 se pinta en la capa 'under' solo en celdas cambiadas. La cámara sigue en
 coordenadas de pantalla (apuntar con el ratón no cambia).
-- [ ] 1. Núcleo `match/view/AsciiRaster.js` (puro, probado en verify):
-      glifos + máscaras de forma, Sobel, Bayer 4×4, paleta, AsciiBuffer,
-      primitivas line/ellipse/text/disc; salida con caché de glifos.
+- [x] 1. Núcleo `match/view/AsciiRaster.js` (puro, probado en verify):
+      `convert()` elige por celda (bloque SX×SY=3×6 del lienzo lógico) la
+      densidad por luminancia con Bayer 4×4 sobre la rampa ` .·:;=+*#%@`
+      y, si hay contraste, el glifo cuya máscara mejor correlaciona con el
+      bloque (todos los de `GLYPHS`, penalizando alejarse de la densidad);
+      glifo = tono de la celda aclarado y cuantizado a 216 colores, fondo =
+      tono ×0.3. Primitivas: `lineGlyph` (pendiente visual + sub-celda
+      ¯ - _), `drawLine`, `drawText`, `drawBall` (disco sombreado con
+      contorno ( ) / \ ¯ _, brillo °, estrías =), `shadeEllipse`.
+      `AsciiOut.js` (navegador): mide las máscaras con la fuente real,
+      fondos en un lienzo de 1 px por celda escalado sin suavizado, glifos
+      cacheados y solo en celdas cambiadas; densidad 2× (1.5×/1× si la
+      letra bajara de 7 px). Check nuevo en verify (22).
 - [ ] 2. Tubería en `ArcadeView.draw` (fondo → ASCII), fuera `_drawThrower`
       y la 3D visible.
 - [ ] 3. Vectores ASCII: líneas de cal, círculo, marcas, retícula, guía.
