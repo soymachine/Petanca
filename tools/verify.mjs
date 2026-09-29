@@ -642,8 +642,9 @@ check('partido en ASCII: densidad por luz, forma por contraste, trazos y bolas',
   const ramp = FALLBACK_GLYPHS.flat;
   const lvl = (c) => ramp.findIndex((f) => f.vars.some((v) => v.ch === buf.char(c, 0)));
   if (lvl(0) > 1) throw new Error(`el negro debería quedar casi vacío, es "${buf.char(0, 0)}"`);
-  if (lvl(cols - 1) < ramp.length - 3) throw new Error(`el blanco debería ser denso, es "${buf.char(cols - 1, 0)}"`);
-  if (lvl(cols - 1) <= lvl(cols >> 1)) throw new Error('más luz debería dar más densidad');
+  // (con tope: una zona plana nunca llega a lo más denso, eso queda para bordes)
+  if (lvl(cols - 1) < 4) throw new Error(`el blanco debería ser denso, es "${buf.char(cols - 1, 0)}"`);
+  if (lvl(cols - 1) <= lvl(2)) throw new Error('más luz debería dar más densidad');
   // 2) emparejamiento de forma: con máscaras, un bloque en diagonal elige /
   const pat = { '/': (x, y) => Math.abs(x - (SX - 1) * (1 - y / (SY - 1))) < 0.7, '\\': (x, y) => Math.abs(x - (SX - 1) * (y / (SY - 1))) < 0.7, '-': (x, y) => y === 2 || y === 3, '|': (x) => x === 1 };
   const gs = makeGlyphSet((ch) => {

@@ -213,7 +213,10 @@ export class PerspectiveCourt {
       ctx.fillStyle = blend(shade(col, (0.62 + (this._ascii ? 0.015 : (i % 2) * 0.03)) * sky[3]), sky[2], fog * 0.55);
       ctx.beginPath();
       ctx.moveTo(pa[0].sx, pa[0].sy); ctx.lineTo(pa[1].sx, pa[1].sy);
-      ctx.lineTo(pb[1].sx, pb[1].sy + 0.5); ctx.lineTo(pb[0].sx, pb[0].sy + 0.5);
+      // solape entre franjas; en ASCII el lienzo es pequeño y medio píxel
+      // deja costuras oscuras que el conversor lee como rayas
+      const ov = this._ascii ? 4 : 0.5;
+      ctx.lineTo(pb[1].sx, pb[1].sy + ov); ctx.lineTo(pb[0].sx, pb[0].sy + ov);
       ctx.closePath(); ctx.fill();
     }
   }

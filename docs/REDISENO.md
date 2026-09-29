@@ -449,6 +449,11 @@ coordenadas de pantalla (apuntar con el ratón no cambia).
       acepta valores con "=" (antes se cortaban). Escenas con
       `&clima=LLUVIA|NIEBLA|HELADA|TORMENTA|VIENTO|CALOR|SOL`. Etiquetas:
       AJUSTES y Ayuda dicen "ASCII 3D" / "CLÁSICA". Build demo sin errores.
+- [x] 7. Afinado tras mirar recortes ampliados: la rampa plana tiene tope
+      por NIVEL (`FLAT_MAX` = 6: una zona plana clara se queda en `* + x`
+      y la luz la lleva el color; `o0&@` solo salen por forma), rampa media
+      más gráfica, y las franjas del suelo se solapan en modo ASCII (las
+      costuras de medio píxel salían como rayas).
 
 ## Registro de commits
 

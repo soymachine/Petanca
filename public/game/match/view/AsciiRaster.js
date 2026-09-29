@@ -27,15 +27,16 @@ export const GLYPHS = ' .`\',-_:;~^¯=+<>!/\\|()*oO0xXvTLJ7';
 // rampa "plana" (zonas sin contraste): cada nivel de densidad tiene varias
 // variantes y cada celda elige una con un ruido fijo — la textura se lee
 // como grano ASCII orgánico y no como papel pintado
-const FLAT = [' ', '.`,', "·:'", ":;'", '~;i', '+rx', 'ovc', '*ae', 'O0&', '#%8', '@MW'];
+const FLAT = [' ', '.`,', "·:'", ":;'", '~;-', '+rx', '*+x', 'ovc', 'eaO', '#%8', '@MW'];
 // cobertura aproximada de cada nivel (para Node, sin medir la fuente)
+const FLAT_MAX = 6;
 const FLAT_COV = [0, 0.04, 0.07, 0.1, 0.13, 0.18, 0.23, 0.28, 0.4, 0.5, 0.6];
 
 // luminancia (0..255 entera) → cobertura objetivo: los tonos oscuros y
-// planos quedan callados (punteado), los claros se llenan; tope 0.66 para
-// que una zona plana muy clara (la helada) no se llene de @ — lo más denso
-// queda para bordes y formas
-const T_LUT = Float32Array.from({ length: 256 }, (_, l) => Math.min(0.66, Math.pow(l / 255, 1.45) * 1.3));
+// planos quedan callados (punteado), los claros se llenan — hasta el nivel
+// FLAT_MAX: una zona plana muy clara (albero al sol, helada) se queda en
+// + x *, con la luz en el color; lo más denso queda para bordes y formas
+const T_LUT = Float32Array.from({ length: 256 }, (_, l) => Math.min(1, Math.pow(l / 255, 1.45) * 1.05));
 
 // brillo del glifo según la luminancia de la celda
 const KF_LUT = Float32Array.from({ length: 256 }, (_, l) => (0.42 + 0.6 * Math.sqrt(l / 255)) * 255);
@@ -120,8 +121,10 @@ export function makeGlyphSet(measure) {
     const want = T_LUT[l] * maxCov;
     let k = 0;
     while (k < flat.length - 1 && flat[k + 1].cov <= want) k++;
+    if (k >= FLAT_MAX) { lvl[l] = FLAT_MAX; frac[l] = 0; continue; }
     lvl[l] = k;
-    if (k < flat.length - 1) { const a = flat[k].cov, b = flat[k + 1].cov; frac[l] = b > a ? (want - a) / (b - a) : 0; } else frac[l] = 0;
+    const a = flat[k].cov, b = flat[k + 1].cov;
+    frac[l] = b > a ? (want - a) / (b - a) : 0;
   }
   const codes = flat.map((f) => Uint16Array.from(f.vars, (vv) => vv.code));
   return { list, flat, maxCov, shaped, W, covN, lvl, frac, codes, measured: !!measure };
