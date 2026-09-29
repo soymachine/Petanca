@@ -20,12 +20,16 @@
 
 export const SX = 3, SY = 6; // subpíxeles por celda ASCII en el lienzo lógico
 
-// juego de glifos para emparejar forma: de los más vacíos a los más llenos
-export const GLYPHS = ' .`\',-_:;~^"¯·=+<>!/\\|()[]{}ilIt1fjrxvczunoeaXYUJCLQ0OZmwqpdbkh#MW&8%B@';
-// rampa "plana" (zonas sin contraste): pocos glifos, bien escalonados
-const FLAT = ' .·:;=+*#%@';
-// cobertura aproximada de la rampa plana (para Node, sin medir la fuente)
-const FLAT_COV = [0, 0.05, 0.08, 0.12, 0.17, 0.22, 0.3, 0.36, 0.48, 0.55, 0.64];
+// juego de glifos para emparejar forma: gráficos (bordes, líneas, curvas)
+// y unas pocas letras con forma clara; nada de letras sueltas tipo q p d b
+// que en una textura solo se leen como ruido
+export const GLYPHS = ' .`\',-_:;~^"¯=+<>!/\\|()[]{}*#%@oO0xXvVTLJY7iIl1';
+// rampa "plana" (zonas sin contraste): cada nivel de densidad tiene varias
+// variantes y cada celda elige una con un ruido fijo — la textura se lee
+// como grano ASCII orgánico y no como papel pintado
+const FLAT = [' ', '.`,', "·:'", ":;'", '~;i', '+rx', 'ovc', '*ae', 'O0&', '#%8', '@MW'];
+// cobertura aproximada de cada nivel (para Node, sin medir la fuente)
+const FLAT_COV = [0, 0.04, 0.07, 0.1, 0.13, 0.18, 0.23, 0.28, 0.4, 0.5, 0.6];
 
 const BAYER = [0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5];
 
@@ -88,10 +92,11 @@ export function makeGlyphSet(measure) {
       list.push({ ch, code: ch.charCodeAt(0), cov, cen, nrm: Math.sqrt(nrm) });
     }
   }
-  // rampa plana con coberturas medidas (o las aproximadas)
-  const flat = [...FLAT].map((ch, i) => {
-    const m = list.find((g) => g.ch === ch);
-    return { ch, code: ch.charCodeAt(0), cov: m ? m.cov : FLAT_COV[i] };
+  // rampa plana: cobertura media medida de las variantes de cada nivel
+  const flat = FLAT.map((vars, i) => {
+    const ms = [...vars].map((ch) => list.find((g) => g.ch === ch)).filter(Boolean);
+    const cov = ms.length ? ms.reduce((a, g) => a + g.cov, 0) / ms.length : FLAT_COV[i];
+    return { vars: [...vars].map((ch) => ({ ch, code: ch.charCodeAt(0) })), cov };
   });
   const maxCov = Math.max(...flat.map((f) => f.cov)) || 1;
   const shaped = list.filter((g) => g.nrm > 0.05);
@@ -100,11 +105,18 @@ export function makeGlyphSet(measure) {
 
 export const FALLBACK_GLYPHS = makeGlyphSet(null);
 
-// glifo plano para una cobertura objetivo t (0..1) con dithering
-function flatFor(gs, t, dither) {
+// ruido fijo por celda (hash entero): misma celda → mismo valor, sin parpadeo
+function hash2(c, r) {
+  let h = Math.imul(c, 374761393) + Math.imul(r, 668265263);
+  h = Math.imul(h ^ (h >>> 13), 1274126177);
+  return ((h ^ (h >>> 16)) >>> 0) / 4294967296;
+}
+
+// glifo plano para una cobertura objetivo t (0..1): el umbral de dithering
+// decide entre los dos niveles vecinos y el ruido elige la variante
+function flatFor(gs, t, dither, noise) {
   const f = gs.flat;
   const want = t * gs.maxCov;
-  // el más cercano por cobertura, y el umbral Bayer decide entre los dos vecinos
   let k = 0;
   while (k < f.length - 1 && f[k + 1].cov <= want) k++;
   if (k < f.length - 1) {
@@ -112,7 +124,8 @@ function flatFor(gs, t, dither) {
     const frac = b > a ? (want - a) / (b - a) : 0;
     if (frac > dither) k++;
   }
-  return f[k];
+  const vars = f[k].vars;
+  return vars[Math.floor(noise * vars.length) % vars.length];
 }
 
 // Convierte la imagen del lienzo lógico (cols*SX × rows*SY) en el buffer.
@@ -121,7 +134,7 @@ export function convert(img, buf, gs = FALLBACK_GLYPHS, opts = {}) {
   const { data, width } = img;
   const cols = buf.cols, rows = buf.rows;
   const bgK = opts.bgK ?? 0.3;
-  const minContrast = opts.contrast ?? 0.1;
+  const minContrast = opts.contrast ?? 0.14;
   const n = SX * SY;
   const v = new Float32Array(n);
   for (let r = 0; r < rows; r++) {
@@ -139,11 +152,15 @@ export function convert(img, buf, gs = FALLBACK_GLYPHS, opts = {}) {
         }
       }
       sr /= n; sg /= n; sb /= n; L /= n;
-      const dither = (BAYER[(r & 3) * 4 + (c & 3)] + 0.5) / 16;
-      // luminancia → cobertura: curva suave para que los medios tonos
-      // tengan textura y los oscuros no se llenen de ruido
-      const t = Math.min(1, Math.pow(L, 1.1) * 1.15);
-      let g = flatFor(gs, t, dither);
+      const noise = hash2(c, r);
+      // Bayer + un poco de ruido: sin bandas y sin patrón repetido
+      const dither = Math.min(0.97, Math.max(0.03, (BAYER[(r & 3) * 4 + (c & 3)] + 0.5) / 16 * 0.7 + noise * 0.3));
+      // luminancia → cobertura: los tonos oscuros y planos quedan callados
+      // (punteado), los claros se llenan
+      // (tope 0.66: una zona plana muy clara, como la helada, no se llena
+      // de @; lo más denso queda para bordes y formas)
+      const t = Math.min(0.66, Math.pow(L, 1.45) * 1.3);
+      let g = flatFor(gs, t, dither, noise);
       // forma: con contraste, el glifo cuya máscara más se parece al bloque
       if (gs.measured && hi - lo > minContrast) {
         let vn = 0;
@@ -151,12 +168,12 @@ export function convert(img, buf, gs = FALLBACK_GLYPHS, opts = {}) {
         vn = Math.sqrt(vn);
         // puntuación = parecido de forma (correlación) − lo que se aleja de
         // la densidad que pide la luz; se prueban todos los glifos con forma
-        let best = null, bestS = 0.45;
+        let best = null, bestS = 0.5;
         for (const cand of gs.shaped) {
           let s = 0;
           const cen = cand.cen;
           for (let i = 0; i < n; i++) s += cen[i] * v[i];
-          s = s / (cand.nrm * vn + 1e-6) - 0.5 * Math.abs(cand.cov / gs.maxCov - t);
+          s = s / (cand.nrm * vn + 1e-6) - 0.35 * Math.abs(cand.cov / gs.maxCov - t);
           if (s > bestS) { bestS = s; best = cand; }
         }
         if (best) g = best;
@@ -218,7 +235,8 @@ export function drawBall(buf, cx, cy, rx, ry, cols, { grooves = false, ring = nu
   const [light, mid, dark] = cols;
   if (rx < 0.75) {
     const ch = rx < 0.3 ? '·' : rx < 0.5 ? '•' : 'o';
-    buf.set(Math.floor(cx), Math.floor(cy), rx < 0.5 ? ch : '●', rx < 0.3 ? mid : light, mixInt(dark, 0, 0.3));
+    // fondo oscuro detrás: una bola lejana tiene que destacar sobre la grava
+    buf.set(Math.floor(cx), Math.floor(cy), rx < 0.5 ? ch : '●', light, mixInt(dark, 0, 0.55));
     return 1;
   }
   let n = 0;

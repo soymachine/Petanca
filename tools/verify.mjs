@@ -639,8 +639,8 @@ check('partido en ASCII: densidad por luz, forma por contraste, trazos y bolas',
   }
   const buf = new AsciiBuffer(cols, rows);
   convert({ data, width: W, height: H }, buf, FALLBACK_GLYPHS);
-  const ramp = FALLBACK_GLYPHS.flat.map((f) => f.ch);
-  const lvl = (c) => ramp.indexOf(buf.char(c, 0));
+  const ramp = FALLBACK_GLYPHS.flat;
+  const lvl = (c) => ramp.findIndex((f) => f.vars.some((v) => v.ch === buf.char(c, 0)));
   if (lvl(0) > 1) throw new Error(`el negro debería quedar casi vacío, es "${buf.char(0, 0)}"`);
   if (lvl(cols - 1) < ramp.length - 3) throw new Error(`el blanco debería ser denso, es "${buf.char(cols - 1, 0)}"`);
   if (lvl(cols - 1) <= lvl(cols >> 1)) throw new Error('más luz debería dar más densidad');

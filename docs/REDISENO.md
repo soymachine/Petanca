@@ -11,8 +11,9 @@
   rediseño; se fusiona cuando el usuario lo pida.
 - **Fase en curso:** Fase 6 — el partido renderizado en ASCII (petición
   nueva del usuario tras probar las Fases 0-5).
-- **SIGUIENTE PASO CONCRETO:** Fase 6, paso 2 — tubería en
-  `ArcadeView.draw` (ver sección "Fase 6" más abajo).
+- **SIGUIENTE PASO CONCRETO:** Fase 6, paso 6 — rendimiento (bench),
+  etiquetas F7/AJUSTES/Ayuda ("ASCII" en vez de "ARCADE"), capturas de
+  lluvia/niebla/helada/tormenta, build demo (ver sección "Fase 6").
 - **Último commit relevante:** (se rellena en cada commit)
 
 ## Visión
@@ -407,12 +408,35 @@ coordenadas de pantalla (apuntar con el ratón no cambia).
       fondos en un lienzo de 1 px por celda escalado sin suavizado, glifos
       cacheados y solo en celdas cambiadas; densidad 2× (1.5×/1× si la
       letra bajara de 7 px). Check nuevo en verify (22).
-- [ ] 2. Tubería en `ArcadeView.draw` (fondo → ASCII), fuera `_drawThrower`
-      y la 3D visible.
-- [ ] 3. Vectores ASCII: líneas de cal, círculo, marcas, retícula, guía.
-- [ ] 4. Sprites ASCII: bolas/boliche sombreados, sombras, altura, estela,
-      chispas.
-- [ ] 5. Clima, minimapa y viento en ASCII.
+- [x] 2. Tubería (`match/view/AsciiScene.js`, llamada desde
+      `ArcadeView.draw` en la capa 'under'): `PerspectiveCourt.draw(...,
+      { background: true })` pinta cielo, pueblo, suelo, rasgos, árbol y
+      niebla (sin piedras píxel ni franjas alternas, que en ASCII serían
+      ruido/rayas) en un lienzo lógico cols*3 × rows*6 con
+      `willReadFrequently`; se convierte con `convert()` y se reutiliza
+      mientras no cambien cámara/fase/clima (y cada 6 frames si hay charcos
+      o árbol animados, cada 45 en todo caso). La cámara recibe como vista
+      el rectángulo de la rejilla ASCII (apuntar con el ratón no cambia).
+      **Fuera `_drawThrower`** (sin figura humana) y fuera la 3D visible.
+- [x] 3. Vectores ASCII: líneas de cal, `+` y números cada 10, círculo de
+      tiro (polígono con glifos de pendiente), dianas de entreno, retícula
+      `( + )`, línea de dirección del boliche `·`, guía `· • °` según
+      altura (misma lógica de `PerspectiveCourt.predict` y la Maña), punto
+      de caída `>X<` dorado en el punto dulce / rojo fuera.
+- [x] 4. Sprites ASCII: sombras (`shadeEllipse`, se separan de la bola
+      en vuelo), bolas y boliche con `drawBall` ordenados de lejos a cerca,
+      aro `[ ]` dorado en la bola que manda, estela `. · •`, partículas
+      ASCII de polvo `.,'\`` al caer y chispas `*+x'` al chocar
+      (`AsciiScene.burstAtScreen`, desde `_juice`).
+- [x] 5. Clima ASCII (lluvia `/ | \` con salpicadura, helada `* ·`,
+      calima `~`, rachas `--~`); minimapa CENITAL y veleta como texto de la
+      interfaz (`_drawMinimap`, `_drawWind`); los textos de la interfaz
+      encima de la pista llevan fondo propio (`_label`). Ajustes de
+      calidad tras ver capturas: rampa plana con variantes por nivel y
+      ruido fijo por celda (sin "papel pintado"), curva de luz que calla
+      las zonas oscuras, tope de densidad en zonas planas claras (helada),
+      juego de formas sin letras sueltas, densidad adaptativa (MIN_CH 9:
+      1080p → 2×, 720p → 1.5×).
 - [ ] 6. Rendimiento (caché con cámara quieta, densidad adaptativa),
       etiquetas F7/AJUSTES/Ayuda, verify + bench + demo.
 

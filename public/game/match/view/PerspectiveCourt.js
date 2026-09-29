@@ -9,7 +9,7 @@ import { isRainy } from '../../data/climas.js';
 const FONT = '"Menlo", "Consolas", "DejaVu Sans Mono", monospace';
 
 // cielo por clima: [arriba, horizonte], color de la niebla del fondo y luz
-const SKY = {
+export const SKY = {
   SOL: ['#2a4a78', '#e8b872', '#d9b47a', 1],
   LLUVIA: ['#1c2632', '#5a6a78', '#5f6c76', 0.72],
   VIENTO: ['#2a4460', '#b8c8c8', '#a8b4b0', 0.92],
@@ -19,7 +19,7 @@ const SKY = {
   TORMENTA: ['#1a1428', '#4a3a5a', '#4a4458', 0.6],
 };
 
-const BALL_COLORS = {
+export const BALL_COLORS = {
   P: ['#e8f6ff', '#5ab4dc', '#163a52'],
   A: ['#ffe8e8', '#d86060', '#4a1414'],
   T: ['#f0ece0', '#9a968a', '#3a3830'],
@@ -76,13 +76,30 @@ export class PerspectiveCourt {
     return c;
   }
 
-  draw(ctx, cam, M, t, visible = () => true) {
+  // opts.background (Fase 6, partido en ASCII): solo el fondo — cielo,
+  // pueblo, suelo, grava, rasgos de la pista, árbol y niebla —, sin líneas,
+  // bolas, arco ni clima (esos los dibuja AsciiScene como ASCII nítido) y
+  // sin la caché de píxeles (la caché va en el ASCII ya convertido)
+  draw(ctx, cam, M, t, visible = () => true, opts = {}) {
     this._visible = visible;
     this._ensureTexture(M);
     const v = cam.view;
     ctx.save();
     ctx.beginPath(); ctx.rect(v.x, v.y, v.w, v.h); ctx.clip();
     const sky = SKY[M.weather.type] || SKY.SOL;
+    if (opts.background) {
+      // sin las piedras en píxeles: en ASCII la grava ya es el grano de
+      // caracteres
+      this._ascii = true;
+      this._drawSky(ctx, cam, sky, M, t);
+      this._drawGround(ctx, cam, sky, M);
+      this._ascii = false;
+      this._drawFeatures(ctx, cam, M, t);
+      if (M.court.tree) this._drawTreeCanopy(ctx, cam, M.court.tree, t);
+      this._drawFog(ctx, cam, sky, M);
+      ctx.restore();
+      return;
+    }
     this._drawStatic(ctx, cam, sky, M, t);
     this._drawFeatures(ctx, cam, M, t);
     if (M.training) this._drawTrainingMarks(ctx, cam, M, t);
@@ -191,7 +208,9 @@ export class PerspectiveCourt {
       const mid = Math.min(CW - 1, Math.floor((a + b) / 2));
       const col = M.court.colorAt(mid, Math.floor(CH / 2));
       const fog = Math.min(1, ((a + b) / 2 - cam.x) / 180);
-      ctx.fillStyle = blend(shade(col, (0.62 + (i % 2) * 0.03) * sky[3]), sky[2], fog * 0.55);
+      // franjas alternas (se nota la profundidad en píxeles); en ASCII no,
+      // que el conversor las convierte en rayas
+      ctx.fillStyle = blend(shade(col, (0.62 + (this._ascii ? 0.015 : (i % 2) * 0.03)) * sky[3]), sky[2], fog * 0.55);
       ctx.beginPath();
       ctx.moveTo(pa[0].sx, pa[0].sy); ctx.lineTo(pa[1].sx, pa[1].sy);
       ctx.lineTo(pb[1].sx, pb[1].sy + 0.5); ctx.lineTo(pb[0].sx, pb[0].sy + 0.5);

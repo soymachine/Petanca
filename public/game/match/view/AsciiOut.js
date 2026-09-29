@@ -11,9 +11,9 @@
 import { makeGlyphSet, SX, SY, intToCss } from './AsciiRaster.js';
 
 // ASCII a doble densidad; si la letra quedara diminuta (< MIN_CH px de
-// alto), baja a 1.5× o a la densidad de la interfaz
+// alto, ~1280×720), baja a 1.5× o a la densidad de la interfaz
 const DENSITIES = [2, 1.5, 1];
-const MIN_CH = 7;
+const MIN_CH = 9;
 
 export class AsciiOut {
   constructor() {
