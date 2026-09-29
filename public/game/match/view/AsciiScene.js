@@ -18,7 +18,7 @@ import { PerspectiveCourt, BALL_COLORS } from './PerspectiveCourt.js';
 
 const AIM_PHASES = ['aim', 'spin', 'loft', 'power'];
 const COL = {
-  line: hexToInt('#efe4c4'), lineDim: hexToInt('#b8ab86'), mark: hexToInt('#d8cca8'),
+  line: hexToInt('#ffffff'), lineDim: hexToInt('#d8d0b8'), mark: hexToInt('#f0e8d0'),
   reticle: hexToInt('#ffffff'), guide: hexToInt('#aef2ff'), guideHi: hexToInt('#ffe680'),
   guideBg: hexToInt('#0a1622'), guideShadow: hexToInt('#2c3a44'),
   sweet: hexToInt('#ffd24a'), bad: hexToInt('#ff7a5a'), jackLine: hexToInt('#ffe14d'),

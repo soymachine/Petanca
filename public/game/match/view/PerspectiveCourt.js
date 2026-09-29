@@ -19,6 +19,22 @@ export const SKY = {
   TORMENTA: ['#1a1428', '#4a3a5a', '#4a4458', 0.6],
 };
 
+// Paleta del modo ASCII (Fase 6b): cuatro zonas con tono Y luminancia bien
+// distintos para que en caracteres no se confundan — cielo, silueta del
+// pueblo (oscura, con ventanas), terreno exterior (verde oscuro frío) y
+// la pista (albero cálido y claro). [cielo arriba, cielo horizonte,
+// pueblo delante, pueblo detrás, exterior lejos, exterior cerca, pista
+// cerca, pista lejos, niebla]
+export const ASCII_PAL = {
+  SOL:      ['#0c1838', '#6a3c80', '#170c22', '#2e1c44', '#1c4031', '#2e7643', '#e8b868', '#b98848', '#5a4a6a'],
+  LLUVIA:   ['#08101e', '#2c3c56', '#0c121e', '#1a2436', '#163429', '#245c39', '#bea070', '#8e7650', '#3a4656'],
+  VIENTO:   ['#0e2244', '#4a6c90', '#0e1628', '#1e2e46', '#1c4031', '#2e7643', '#e6bc72', '#b48c50', '#4a5a70'],
+  CALOR:    ['#24102e', '#b0482c', '#1c0a14', '#3a1a24', '#384c29', '#537330', '#f4c878', '#c4944c', '#8a4a38'],
+  NIEBLA:   ['#262c34', '#687278', '#30363e', '#444c54', '#263931', '#395946', '#caa878', '#9a8460', '#7c868a'],
+  HELADA:   ['#0c1e3a', '#5a7c9e', '#101c32', '#1e2e48', '#203649', '#305370', '#e6f0f6', '#aac0ce', '#6a8098'],
+  TORMENTA: ['#06040c', '#2c1a3e', '#08040e', '#160e22', '#13261c', '#204029', '#a88a5e', '#7a6444', '#2a2436'],
+};
+
 export const BALL_COLORS = {
   P: ['#e8f6ff', '#5ab4dc', '#163a52'],
   A: ['#ffe8e8', '#d86060', '#4a1414'],
@@ -93,10 +109,10 @@ export class PerspectiveCourt {
       this._ascii = true;
       this._drawSky(ctx, cam, sky, M, t);
       this._drawGround(ctx, cam, sky, M);
-      this._ascii = false;
       this._drawFeatures(ctx, cam, M, t);
       if (M.court.tree) this._drawTreeCanopy(ctx, cam, M.court.tree, t);
       this._drawFog(ctx, cam, sky, M);
+      this._ascii = false;
       ctx.restore();
       return;
     }
@@ -145,8 +161,9 @@ export class PerspectiveCourt {
   _drawSky(ctx, cam, sky, M, t) {
     const v = cam.view;
     const hy = cam.horizonY;
+    const pal = this._ascii ? (ASCII_PAL[M.weather.type] || ASCII_PAL.SOL) : null;
     const g = ctx.createLinearGradient(0, v.y, 0, hy);
-    g.addColorStop(0, sky[0]); g.addColorStop(1, sky[1]);
+    g.addColorStop(0, pal ? pal[0] : sky[0]); g.addColorStop(1, pal ? pal[1] : sky[1]);
     ctx.fillStyle = g;
     ctx.fillRect(v.x, v.y, v.w, Math.max(0, hy - v.y) + 2);
     // silueta del pueblo en el horizonte: dos capas de bloques (la de
@@ -155,7 +172,7 @@ export class PerspectiveCourt {
     for (const layer of [0, 1]) {
       const rnd = mulberry32((M.city && M.city.name ? M.city.name.length * 131 : 7) + 11 + layer * 57);
       const par = -cam.l * unit * (layer ? 0.5 : 0.25);
-      const base = layer ? blend(shade(sky[1], 0.35), '#140f0a', 0.35) : blend(shade(sky[1], 0.7), sky[0], 0.35);
+      const base = pal ? (layer ? pal[2] : pal[3]) : layer ? blend(shade(sky[1], 0.35), '#140f0a', 0.35) : blend(shade(sky[1], 0.7), sky[0], 0.35);
       let x = v.x - unit * 12 + (par % (unit * 6));
       while (x < v.x + v.w + unit * 12) {
         const w = unit * (2 + Math.floor(rnd() * 5));
@@ -165,7 +182,7 @@ export class PerspectiveCourt {
         ctx.fillRect(Math.round(x), Math.round(hy - h), Math.ceil(w), Math.ceil(h + 1));
         if (tall) { ctx.fillRect(Math.round(x + w / 2 - unit * 0.3), Math.round(hy - h - unit * 1.5), Math.ceil(unit * 0.6), Math.ceil(unit * 1.5)); }
         if (layer) {
-          ctx.fillStyle = 'rgba(255,214,140,0.55)';
+          ctx.fillStyle = pal ? '#ffb040' : 'rgba(255,214,140,0.55)';
           for (let wy = hy - h + unit; wy < hy - unit * 0.5; wy += unit * 1.3) {
             for (let wx = x + unit * 0.5; wx < x + w - unit * 0.4; wx += unit * 1.2) {
               if (rnd() < 0.3) ctx.fillRect(Math.round(wx), Math.round(wy), Math.max(1, Math.round(unit * 0.35)), Math.max(1, Math.round(unit * 0.45)));
@@ -191,8 +208,9 @@ export class PerspectiveCourt {
   _drawGround(ctx, cam, sky, M) {
     const v = cam.view;
     const hy = cam.horizonY;
+    const pal = this._ascii ? (ASCII_PAL[M.weather.type] || ASCII_PAL.SOL) : null;
     const og = ctx.createLinearGradient(0, hy, 0, v.y + v.h);
-    og.addColorStop(0, shade(sky[2], 0.5)); og.addColorStop(1, shade('#3a3a22', sky[3]));
+    og.addColorStop(0, pal ? pal[4] : shade(sky[2], 0.5)); og.addColorStop(1, pal ? pal[5] : shade('#3a3a22', sky[3]));
     ctx.fillStyle = og;
     ctx.fillRect(v.x, hy, v.w, v.y + v.h - hy);
 
@@ -210,7 +228,10 @@ export class PerspectiveCourt {
       const fog = Math.min(1, ((a + b) / 2 - cam.x) / 180);
       // franjas alternas (se nota la profundidad en píxeles); en ASCII no,
       // que el conversor las convierte en rayas
-      ctx.fillStyle = blend(shade(col, (0.62 + (this._ascii ? 0.015 : (i % 2) * 0.03)) * sky[3]), sky[2], fog * 0.55);
+      // en ASCII: albero de la paleta (cerca → lejos), sin franjas ni el
+      // gris del terreno por celda, que el conversor convertía en rayas
+      ctx.fillStyle = pal ? blend(shade(pal[6], 1), pal[7], Math.min(1, fog * 1.6))
+        : blend(shade(col, (0.62 + (i % 2) * 0.03) * sky[3]), sky[2], fog * 0.55);
       ctx.beginPath();
       ctx.moveTo(pa[0].sx, pa[0].sy); ctx.lineTo(pa[1].sx, pa[1].sy);
       // solape entre franjas; en ASCII el lienzo es pequeño y medio píxel
@@ -490,9 +511,11 @@ export class PerspectiveCourt {
   _drawFog(ctx, cam, sky, M) {
     const v = cam.view;
     const hy = cam.horizonY;
-    const dens = M.weather.type === 'NIEBLA' ? 0.75 : isRainy(M.weather.type) || M.weather.type === 'TORMENTA' ? 0.4 : 0.18;
+    let dens = M.weather.type === 'NIEBLA' ? 0.75 : isRainy(M.weather.type) || M.weather.type === 'TORMENTA' ? 0.4 : 0.18;
+    // en ASCII más suave: que no aplane las cuatro zonas de la paleta
+    if (this._ascii) dens *= 0.5;
     const g = ctx.createLinearGradient(0, hy - v.h * 0.05, 0, hy + v.h * 0.35);
-    const fc = sky[2];
+    const fc = this._ascii ? (ASCII_PAL[M.weather.type] || ASCII_PAL.SOL)[8] : sky[2];
     g.addColorStop(0, hexA(fc, dens)); g.addColorStop(1, hexA(fc, 0));
     ctx.fillStyle = g;
     ctx.fillRect(v.x, hy - v.h * 0.05, v.w, v.h * 0.4);

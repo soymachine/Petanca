@@ -9,9 +9,10 @@
 - **Rama de trabajo:** `claude/petanca-rules-comparison-jb587u` (reiniciada
   desde `main` en `46bc963`). `main` queda estable mientras dura el
   rediseño; se fusiona cuando el usuario lo pida.
-- **Fase en curso:** Fase 6b — ajustes del partido ASCII pedidos por el
-  usuario (colores, parábola, altura con la rueda, cámara fija).
-- **SIGUIENTE PASO CONCRETO:** ver casillas de "Fase 6b" más abajo.
+- **Fase en curso:** Fase 6b terminada; a la espera de impresiones.
+- **SIGUIENTE PASO CONCRETO:** enseñar la Fase 6b al usuario. Pendientes
+  opcionales: reactivar planos de cámara (`Camera.fixed = false`),
+  repetición a cámara lenta.
 - **Último commit relevante:** (se rellena en cada commit)
 
 ## Visión
@@ -481,7 +482,13 @@ coordenadas de pantalla (apuntar con el ratón no cambia).
       una segunda pasada al lado para darle cuerpo; sombra del recorrido en
       el suelo `.`; vértice `^`; caída `(o)` siempre visible al apuntar y
       `>X<` dorado/rojo con la barra. Sigue cortada por la guía (Maña).
-- [ ] 4. Paleta de contraste: cielo / skyline / terreno exterior / pista.
+- [x] 4. Paleta de contraste (`PerspectiveCourt.ASCII_PAL`, solo en el
+      fondo ASCII; la clásica no cambia): por clima, cielo (azul noche →
+      violeta), pueblo en silueta oscura con ventanas ámbar, terreno
+      exterior verde, pista albero claro y cálido (hielo en HELADA) con
+      degradado de cerca a lejos y sin el gris por celda del terreno (hacía
+      rayas); niebla de distancia a la mitad en ASCII; líneas de cal
+      blancas.
 
 ## Registro de commits
 
