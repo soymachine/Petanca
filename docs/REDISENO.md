@@ -477,9 +477,9 @@ coordenadas de pantalla (apuntar con el ratón no cambia).
 | 2026-09-28 | 9063187 | Fase 5: audio sintetizado |
 | 2026-09-28 | f1b7134 | Fase 5: fondo 3D cacheado con la cámara quieta |
 | 2026-09-28 | 569e2c6 | Fase 5: contraste, build demo revisada, shots con puerto al azar |
-| 2026-09-28 | (este) | Fase 5: fin de temporada y Game Over |
+| 2026-09-28 | 06558ac | Fase 5: fin de temporada y Game Over |
 | 2026-09-29 | eb4afe3 | Fase 6: el partido se ve en ASCII |
-| 2026-09-29 | (este) | Fase 6: rendimiento del ASCII, etiquetas, escenas de clima |
+| 2026-09-29 | 9ff5d54 | Fase 6: rendimiento del ASCII, etiquetas, escenas de clima |
 
 ## Problemas conocidos / notas
 
