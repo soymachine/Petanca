@@ -33,6 +33,9 @@ export class Camera {
     this.speed = 3; // velocidad de acercamiento al plano objetivo (1/s)
     this.shot = 'aim';
     this.view = { x: 0, y: 0, w: 1, h: 1 };
+    // Fase 6b: cámara fija en el plano de tiro (el director de planos de
+    // abajo queda desactivado por ahora; fixed = false lo recupera)
+    this.fixed = true;
   }
 
   // rectángulo de la vista en píxeles de dispositivo
@@ -65,6 +68,7 @@ export class Camera {
 
   // el "director": elige plano según lo que pasa en el partido
   direct(M) {
+    if (this.fixed) { this.target = { ...SHOTS.aim }; this.speed = 2.6; this.shot = 'aim'; return; }
     const ph = M.phase;
     const lead = M.lastThrown && M.lastThrown.moving ? M.lastThrown : null;
     let t;

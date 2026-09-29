@@ -9,11 +9,9 @@
 - **Rama de trabajo:** `claude/petanca-rules-comparison-jb587u` (reiniciada
   desde `main` en `46bc963`). `main` queda estable mientras dura el
   rediseño; se fusiona cuando el usuario lo pida.
-- **Fase en curso:** Fase 6 (partido en ASCII) terminada; a la espera de
-  impresiones del usuario.
-- **SIGUIENTE PASO CONCRETO:** Fase 6 hecha. Enseñársela al usuario y
-  recoger impresiones (¿densidad, color, contraste de las bolas?). Mejoras
-  opcionales anotadas en Fase 6 y en las anteriores.
+- **Fase en curso:** Fase 6b — ajustes del partido ASCII pedidos por el
+  usuario (colores, parábola, altura con la rueda, cámara fija).
+- **SIGUIENTE PASO CONCRETO:** ver casillas de "Fase 6b" más abajo.
 - **Último commit relevante:** (se rellena en cada commit)
 
 ## Visión
@@ -39,6 +37,17 @@ dinámico sin perder profundidad**.
    abuelo hace vibrar el gesto; teclado sigue siendo alternativa completa.
 4. **Avisos:** (heredado) Copa de Europa ya se juega ronda a ronda — no
    tocar esa lógica en el rediseño.
+5. **Fase 6 — partido en ASCII:** la escena 3D es solo la **capa lógica**
+   y se ve **en ASCII** (emparejamiento de forma, dithering, doble color,
+   sprites y vectores ASCII). Densidad doble, color de la escena
+   cuantizado, **solo ASCII** (la 3D en píxeles no se ve; F7 = ASCII ↔
+   clásica). **Sin figura humana del lanzador.**
+6. **Fase 6b** (tras ver el ASCII): más contraste de color entre pista,
+   terreno exterior y skyline; parábola de previsualización muy visible;
+   **sin EFECTO** (spin 0 siempre en la vista ASCII, se pierde el RETRO) y
+   **sin fichas de tipo de tiro** (ni ARRIMAR/MEDIA/BOMBEO ni TIRAR/
+   BLOQUEAR): la **rueda del ratón cambia la altura** de forma continua y
+   el rol se deduce de ella (tenso → tirar); **cámara fija** por ahora.
 
 ## Reglas de trabajo
 
@@ -454,6 +463,15 @@ coordenadas de pantalla (apuntar con el ratón no cambia).
       y la luz la lleva el color; `o0&@` solo salen por forma), rampa media
       más gráfica, y las franjas del suelo se solapan en modo ASCII (las
       costuras de medio píxel salían como rayas).
+
+### Fase 6b — Ajustes del partido ASCII
+- [x] 1. Cámara fija (`Camera.fixed = true`: `direct()` devuelve siempre
+      el plano de tiro; el director de planos queda en el código, apagado).
+- [ ] 2. Altura con la rueda (W/S), sin efecto ni tipos de tiro; deck con
+      medidor ALTURA y perfil lateral de la parábola; tutorial ② = altura.
+- [ ] 3. Parábola muy visible (trazo continuo con fondo propio, sombra en
+      el suelo, vértice, punto de caída siempre visible).
+- [ ] 4. Paleta de contraste: cielo / skyline / terreno exterior / pista.
 
 ## Registro de commits
 
