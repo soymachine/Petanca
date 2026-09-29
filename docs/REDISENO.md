@@ -9,16 +9,10 @@
 - **Rama de trabajo:** `claude/petanca-rules-comparison-jb587u` (reiniciada
   desde `main` en `46bc963`). `main` queda estable mientras dura el
   rediseño; se fusiona cuando el usuario lo pida.
-- **Fase en curso:** plan completo (Fases 0-5 hechas). Quedan mejoras
-  opcionales listadas en el siguiente paso.
-- **SIGUIENTE PASO CONCRETO:** el plan de 5 fases está completo. Opcional,
-  por orden de impacto: (1) repetición a cámara lenta de la mano decisiva
-  (Fase 3, `M.trail`/`M.decisive` ya existen); (2) llevar el sonido y el
-  "juice" también a la vista clásica cenital (`screens/MatchScreen.js`);
-  (3) Hemeroteca a los widgets (ya tiene su cabecera de periódico).
-  Pedir al usuario que lo pruebe en su
-  máquina (run-full.command) y recoger sus impresiones antes de fusionar
-  con main.
+- **Fase en curso:** Fase 6 — el partido renderizado en ASCII (petición
+  nueva del usuario tras probar las Fases 0-5).
+- **SIGUIENTE PASO CONCRETO:** Fase 6, paso 1 — núcleo
+  `match/view/AsciiRaster.js` (ver sección "Fase 6" más abajo).
 - **Último commit relevante:** (se rellena en cada commit)
 
 ## Visión
@@ -391,6 +385,26 @@ dinámico sin perder profundidad**.
       descenso), premios de la peña como tarjetas con el glifo y color de
       su stat, confeti al celebrar, balance en panel y botón grande.
       Escenas `season-end` y `gameover`.
+
+### Fase 6 — El partido en ASCII
+Tubería: `Match` → `Camera` → `PerspectiveCourt` pinta SOLO el fondo en un
+lienzo lógico pequeño (≈3×6 px por celda ASCII) → `AsciiRaster` lo
+convierte a un buffer de caracteres (glifo + color de glifo + fondo) →
+encima capas vectoriales (líneas, círculo, marcas, retícula, guía), sprites
+ASCII analíticos (bolas, boliche, sombras, estela, chispas) y clima ASCII →
+se pinta en la capa 'under' solo en celdas cambiadas. La cámara sigue en
+coordenadas de pantalla (apuntar con el ratón no cambia).
+- [ ] 1. Núcleo `match/view/AsciiRaster.js` (puro, probado en verify):
+      glifos + máscaras de forma, Sobel, Bayer 4×4, paleta, AsciiBuffer,
+      primitivas line/ellipse/text/disc; salida con caché de glifos.
+- [ ] 2. Tubería en `ArcadeView.draw` (fondo → ASCII), fuera `_drawThrower`
+      y la 3D visible.
+- [ ] 3. Vectores ASCII: líneas de cal, círculo, marcas, retícula, guía.
+- [ ] 4. Sprites ASCII: bolas/boliche sombreados, sombras, altura, estela,
+      chispas.
+- [ ] 5. Clima, minimapa y viento en ASCII.
+- [ ] 6. Rendimiento (caché con cámara quieta, densidad adaptativa),
+      etiquetas F7/AJUSTES/Ayuda, verify + bench + demo.
 
 ## Registro de commits
 
